@@ -1,0 +1,81 @@
+name: luma
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: luma
+      POSTGRES_USER: luma_user
+      POSTGRES_PASSWORD: ${LUMA_DB_PASS}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./src/scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U luma_user -d luma"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  redis:
+    image: redis:7-alpine
+    restart: unless-stopped
+    command: redis-server --save 60 1 --loglevel warning
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    networks:
+      - internal
+
+  haven:
+    image: yourname/haven:latest
+    restart: unless-stopped
+    environment:
+      HAVEN_DB_HOST: postgres
+      HAVEN_DB_PASS: ${HAVEN_DB_PASS}
+      HAVEN_REDIS_ADDR: redis:6379
+      HAVEN_JWT_SIGNING_KEY: ${HAVEN_JWT_SIGNING_KEY}
+      HAVEN_PORT: 8080
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - internal
+
+  luma:
+    build:
+      context: ./src
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      LUMA_DB_URL: postgres://luma_user:${LUMA_DB_PASS}@postgres:5432/luma?sslmode=disable&search_path=luma
+      LUMA_REDIS_URL: redis://redis:6379
+      LUMA_HAVEN_URL: http://haven:8080
+      LUMA_PUBLIC_URL: ${LUMA_PUBLIC_URL:-https://luma.local}
+      LUMA_PORT: 8002
+    ports:
+      - "8002:8002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      haven:
+        condition: service_started
+    networks:
+      - internal
+
+volumes:
+  pgdata:
+  redisdata:
+
+networks:
+  internal:

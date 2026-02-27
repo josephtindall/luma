@@ -1,0 +1,21 @@
+# Ignore everything by default — only the file types listed below are tracked.
+*
+
+# Allow traversal into all directories
+!*/
+.idea/
+.vscode/
+
+# ── Tracked ───────────────────────────────────────────────────────────────────
+!.gitignore
+!*.go
+!*.md
+!*.yml
+!*.yaml
+!*.sql
+!*.mod
+!go.sum
+!*.example
+!Dockerfile*
+!*.toml
+!.github/
