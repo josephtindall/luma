@@ -73,13 +73,13 @@ luma/
 HOME LAN
   │
   └─ Caddy :443 (only port exposed to LAN)
-       ├─ /api/haven/*  → Haven container :8001
+       ├─ /api/haven/*  → Haven container :8080
        ├─ /api/luma/*   → Luma container  :8002
        ├─ /ws           → Luma WebSocket  :8002
        └─ /             → Flutter web build (static)
 
 Docker internal network (not reachable from LAN):
-  haven     :8001   — IAM, auth, RBAC, audit
+  haven     :8080   — IAM, auth, RBAC, audit
   luma      :8002   — pages, tasks, flows, vaults
   postgres  :5432   — shared instance, separate schemas per service
   redis     :6379   — sessions, rate limiting, notification queue, search cache
@@ -252,7 +252,7 @@ These apply to every file in this repo:
 # Required
 LUMA_DB_URL=postgres://luma_user:${LUMA_DB_PASS}@postgres:5432/luma
 LUMA_REDIS_URL=redis://redis:6379
-LUMA_HAVEN_URL=http://haven:8001        # internal Docker network URL
+LUMA_HAVEN_URL=http://haven:8080        # internal Docker network URL
 LUMA_PUBLIC_URL=https://luma.local
 
 # Optional
