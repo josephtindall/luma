@@ -25,54 +25,60 @@ Read the relevant document before writing any code for a feature. These are auth
 
 ```
 luma/
-  cmd/server/main.go           # wire deps, start server — zero business logic
-  internal/
-    pages/
-      model.go, service.go, repository.go, handler.go
-      postgres/repository.go
-    tasks/
-      model.go, service.go, repository.go, handler.go
-      postgres/repository.go
-    flows/
-      model.go, service.go, repository.go, handler.go
-      postgres/repository.go
-    vaults/
-      model.go, service.go, repository.go, handler.go
-      postgres/repository.go
-    mentions/
-      registry.go              # shared mention registry
-      service.go
-    notifications/
-      model.go, service.go, dispatcher.go
-    search/
-      service.go               # cross-feature Cmd+K search
-    haven/
-      client.go                # HTTP client for all Haven API calls
-      middleware.go            # validates Bearer token via Haven on every request
-  pkg/
-    authz/
-      authz.go                 # calls Haven /api/haven/authz/check
-    shortid/
-      shortid.go               # YouTube-style short ID generation
-    editor/
-      blocks.dart              # block type definitions — shared across features
-    errors/errors.go
-    config/config.go
   docs/                        # all ten design documents
-  migrations/
-    0001_vaults.sql
-    0002_short_ids.sql
-    0003_pages.sql
-    0004_tasks.sql
-    0005_flows.sql
-    0006_mentions.sql
-    0007_notifications.sql
-    0008_watches.sql
+  src/
+    cmd/server/main.go         # wire deps, start server — zero business logic
+    internal/
+      pages/
+        model.go, service.go, repository.go, handler.go
+        postgres/repository.go
+      tasks/
+        model.go, service.go, repository.go, handler.go
+        postgres/repository.go
+      flows/
+        model.go, service.go, repository.go, handler.go
+        postgres/repository.go
+      vaults/
+        model.go, service.go, repository.go, handler.go
+        postgres/repository.go
+      mentions/
+        registry.go            # shared mention registry
+        service.go
+      notifications/
+        model.go, service.go, dispatcher.go
+      search/
+        service.go             # cross-feature Cmd+K search
+      haven/
+        client.go              # HTTP client for all Haven API calls
+        middleware.go          # validates Bearer token via Haven on every request
+    pkg/
+      authz/
+        authz.go               # calls Haven /api/haven/authz/check
+      shortid/
+        shortid.go             # YouTube-style short ID generation
+      editor/
+        blocks.dart            # block type definitions — shared across features
+      errors/errors.go
+      config/config.go
+    migrations/
+      0001_vaults.sql
+      0002_short_ids.sql
+      0003_pages.sql
+      0004_tasks.sql
+      0005_flows.sql
+      0006_mentions.sql
+      0007_notifications.sql
+      0008_watches.sql
+    scripts/
+    go.mod
+    go.sum
+    Dockerfile
+    Dockerfile.dev
+    .air.toml
   luma-web/                    # Flutter web application
   luma-mobile/                 # Flutter iOS + Android
   docker-compose.yml
   docker-compose.dev.yml
-  Dockerfile
   .env.example
 ```
 
@@ -214,7 +220,7 @@ docker compose up
 docker compose -f docker-compose.dev.yml up
 
 # Run Go tests (always use race detector)
-go test -race ./...
+cd src && go test -race ./...
 
 # Run Flutter web
 cd luma-web && flutter run -d chrome
@@ -226,16 +232,16 @@ cd luma-mobile && flutter run
 cd luma-web && flutter test
 
 # Apply migrations
-go run ./cmd/migrate up
+cd src && go run ./cmd/migrate up
 
 # Lint Go
-golangci-lint run ./...
+cd src && golangci-lint run ./...
 
 # Lint Flutter
 cd luma-web && flutter analyze
 
 # Build Docker image
-docker build -t luma:dev .
+docker build -t luma:dev ./src
 ```
 
 ## Offline Behavior

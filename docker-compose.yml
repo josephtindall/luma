@@ -10,7 +10,7 @@ services:
       POSTGRES_PASSWORD: ${LUMA_DB_PASS}
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+      - ./src/scripts/init-db.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U luma_user -d luma"]
       interval: 5s
@@ -51,7 +51,9 @@ services:
       - internal
 
   luma:
-    build: .
+    build:
+      context: ./src
+      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
       LUMA_DB_URL: postgres://luma_user:${LUMA_DB_PASS}@postgres:5432/luma?sslmode=disable&search_path=luma
