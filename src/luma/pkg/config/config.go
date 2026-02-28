@@ -15,6 +15,8 @@ type Config struct {
 	Port        int
 	LogLevel    string
 	MaxUploadMB int
+	DevMode     bool   // LUMA_DEV_MODE=true — enables verbose logging
+	StaticDir   string // LUMA_STATIC_DIR — path to luma-web/build/web/, empty means no static serving
 }
 
 // Load reads configuration from environment variables and validates required values.
@@ -27,6 +29,8 @@ func Load() (*Config, error) {
 		LogLevel:    envOr("LUMA_LOG_LEVEL", "info"),
 		MaxUploadMB: envIntOr("LUMA_MAX_UPLOAD_MB", 100),
 		Port:        envIntOr("LUMA_PORT", 8002),
+		DevMode:     os.Getenv("LUMA_DEV_MODE") == "true",
+		StaticDir:   os.Getenv("LUMA_STATIC_DIR"),
 	}
 
 	if cfg.DBUrl == "" {
