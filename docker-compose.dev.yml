@@ -14,7 +14,7 @@ services:
     ports:
       - "5432:5432"
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U luma_user -d luma"]
+      test: [ "CMD-SHELL", "pg_isready -U luma_user -d luma" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -30,7 +30,7 @@ services:
     ports:
       - "6379:6379"
     healthcheck:
-      test: ["CMD", "redis-cli", "ping"]
+      test: [ "CMD", "redis-cli", "ping" ]
       interval: 5s
       timeout: 5s
       retries: 10
@@ -38,7 +38,7 @@ services:
       - internal
 
   haven:
-    image: yourname/haven:latest
+    image: josephtindall/haven:latest
     restart: unless-stopped
     environment:
       HAVEN_DB_HOST: postgres
@@ -67,10 +67,13 @@ services:
       LUMA_HAVEN_URL: http://haven:8080
       LUMA_PUBLIC_URL: ${LUMA_PUBLIC_URL:-http://localhost:8002}
       LUMA_PORT: 8002
+      LUMA_DEV_MODE: "true"
+      LUMA_STATIC_DIR: ${LUMA_STATIC_DIR:-}
     ports:
       - "8002:8002"
     volumes:
       - ./src/luma:/src
+      - ./artifacts/web:/artifacts/web:ro
     depends_on:
       postgres:
         condition: service_healthy
@@ -84,6 +87,7 @@ services:
 volumes:
   pgdata-dev:
   redisdata-dev:
+
 
 networks:
   internal:
