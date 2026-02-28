@@ -6,16 +6,27 @@
 .idea/
 .vscode/
 
+# ── Flutter build & tool directories (re-ignored after !*/ above) ─────────────
+src/luma-web/build/
+src/luma-web/.dart_tool/
+
 # ── Tracked ───────────────────────────────────────────────────────────────────
 !.gitignore
+# Go
 !*.go
+!*.mod
+!go.sum
+!*.toml
+# Config & docs
 !*.md
 !*.yml
 !*.yaml
 !*.sql
-!*.mod
-!go.sum
 !*.example
 !Dockerfile*
-!*.toml
 !.github/
+# Flutter / Dart
+!*.dart
+!pubspec.lock
+!*.arb
+!analysis_options.yaml

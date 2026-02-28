@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/jackc/pgx/v5/pgxpool"
 
+	"github.com/josephtindall/luma/internal/auth"
 	"github.com/josephtindall/luma/internal/haven"
 	"github.com/josephtindall/luma/internal/migrate"
 	vaultsPkg "github.com/josephtindall/luma/internal/vaults"
@@ -107,12 +109,28 @@ func run() error {
 		},
 	)
 
+	// Auth proxy — unauthenticated, outside the protected group
+	authHTTPClient := &http.Client{Timeout: 10 * time.Second}
+	authHandler := auth.NewHandler(authHTTPClient, cfg.HavenUrl)
+
+	r.Route("/api/luma/setup", func(r chi.Router) { r.Mount("/", authHandler.SetupRoutes()) })
+	r.Route("/api/luma/auth", func(r chi.Router) { r.Mount("/", authHandler.AuthRoutes()) })
+
 	// Protected routes
 	r.Route("/api/luma", func(r chi.Router) {
 		r.Use(havenMiddleware.Authenticate)
 		r.Use(ensureVaultMw)
 		r.Mount("/vaults", vaultHandler.Routes())
 	})
+
+	// Static file serving — Flutter web SPA (when LUMA_STATIC_DIR is set)
+	if cfg.StaticDir != "" {
+		fs := http.FileServer(http.Dir(cfg.StaticDir))
+		r.Handle("/*", http.StripPrefix("/", fs))
+		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
+			http.ServeFile(w, r, filepath.Join(cfg.StaticDir, "index.html"))
+		})
+	}
 
 	// Server
 	addr := fmt.Sprintf(":%d", cfg.Port)
