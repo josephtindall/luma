@@ -1,4 +1,4 @@
-# publish.ps1 — Tag and push the Luma Docker image to a container registry.
+# publish.ps1 -- Tag and push the Luma Docker image to a container registry.
 #
 # USAGE (run from the repo root):
 #   .\tools\win\publish.ps1 -Registry ghcr.io/yourname                  # push as latest
@@ -15,7 +15,7 @@
 #      into artifacts/ so they can be attached to a GitHub release or deployed
 #      separately (e.g. web app to S3/CDN, binary to a VM).
 #
-# IMPORTANT — WEB APP IN PRODUCTION:
+# IMPORTANT -- WEB APP IN PRODUCTION:
 #   The production Docker image contains only the Go binary and database migrations.
 #   The Flutter web app (artifacts/web/) is deployed separately. Options:
 #     a) Serve from nginx/Caddy reverse proxy alongside the Go container.
@@ -55,13 +55,13 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$RepoRoot     = Resolve-Path (Join-Path $PSScriptRoot ".." "..")
-$SrcGoDir     = Join-Path $RepoRoot "src" "luma"
-$SrcWebDir    = Join-Path $RepoRoot "src" "luma-web"
+$RepoRoot     = Resolve-Path (Join-Path (Join-Path $PSScriptRoot "..") "..")
+$SrcGoDir     = Join-Path (Join-Path $RepoRoot "src") "luma"
+$SrcWebDir    = Join-Path (Join-Path $RepoRoot "src") "luma-web"
 $ArtifactsDir = Join-Path $RepoRoot "artifacts"
 $WebOutDir    = Join-Path $ArtifactsDir "web"
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# -- Helpers ------------------------------------------------------------------
 
 function Write-Step($msg) { Write-Host "`n>> $msg" -ForegroundColor Cyan }
 function Write-Ok($msg)   { Write-Host "   $msg" -ForegroundColor Green }
@@ -76,12 +76,12 @@ function Assert-Tool($name) {
 
 Assert-Tool "docker"
 
-# Normalise registry — strip trailing slash.
+# Normalise registry -- strip trailing slash.
 $Registry = $Registry.TrimEnd("/")
 $FullTag   = "$Registry/luma:$Tag"
 $LatestTag = "$Registry/luma:latest"
 
-# ── Build ─────────────────────────────────────────────────────────────────────
+# -- Build ---------------------------------------------------------------------
 
 if (-not $SkipBuild) {
     Write-Step "Building production Docker image (luma:latest)"
@@ -100,7 +100,7 @@ else {
     Write-Info "Using existing luma:latest image."
 }
 
-# ── Tag ───────────────────────────────────────────────────────────────────────
+# -- Tag -----------------------------------------------------------------------
 
 Write-Step "Tagging image"
 
@@ -116,7 +116,7 @@ if ($pushLatest) {
     Write-Ok "Tagged as $LatestTag"
 }
 
-# ── Push ──────────────────────────────────────────────────────────────────────
+# -- Push ----------------------------------------------------------------------
 
 Write-Step "Pushing to $Registry"
 
@@ -133,7 +133,7 @@ if ($pushLatest) {
     Write-Ok "Pushed $LatestTag"
 }
 
-# ── Export assets into artifacts/ (optional) ──────────────────────────────────
+# -- Export assets into artifacts/ (optional) ----------------------------------
 
 if ($WithAssets) {
     Write-Step "Exporting release assets into artifacts/"
@@ -142,7 +142,7 @@ if ($WithAssets) {
         New-Item -ItemType Directory -Path $ArtifactsDir | Out-Null
     }
 
-    # ── Static Linux binary — extracted from the published image.
+    # -- Static Linux binary -- extracted from the published image.
     # This avoids requiring Go to be installed on the release machine.
     Write-Info "Extracting Go binary from image..."
     $container = & docker create luma:latest
@@ -157,20 +157,20 @@ if ($WithAssets) {
         docker rm $container | Out-Null
     }
 
-    # ── Flutter web build — copy from src/luma-web/build/web/ if present,
+    # -- Flutter web build -- copy from src/luma-web/build/web/ if present,
     # otherwise check if artifacts/web/ already exists from a prior build run.
-    $flutterSrc  = Join-Path $SrcWebDir "build" "web"
+    $flutterSrc  = Join-Path (Join-Path $SrcWebDir "build") "web"
     $webReady    = Test-Path (Join-Path $WebOutDir "index.html")
     $flutterDone = Test-Path (Join-Path $flutterSrc "index.html")
 
     if ($webReady) {
-        Write-Ok "artifacts/web/  (Flutter web app — already present)"
+        Write-Ok "artifacts/web/  (Flutter web app -- already present)"
     }
     elseif ($flutterDone) {
         if (Test-Path $WebOutDir) { Remove-Item -Recurse -Force $WebOutDir }
         New-Item -ItemType Directory -Path $WebOutDir | Out-Null
         Copy-Item -Recurse -Path (Join-Path $flutterSrc "*") -Destination $WebOutDir
-        Write-Ok "artifacts/web/  (Flutter web app — copied from src/luma-web/build/web/)"
+        Write-Ok "artifacts/web/  (Flutter web app -- copied from src/luma-web/build/web/)"
     }
     else {
         Write-Warn "Flutter web app not found in artifacts/web/ or src/luma-web/build/web/."
@@ -179,11 +179,11 @@ if ($WithAssets) {
 
     Write-Host ""
     Write-Info "Release assets:"
-    Write-Info "  artifacts/luma     — attach to GitHub release as a Linux binary"
-    Write-Info "  artifacts/web/     — upload to S3, CDN, or serve from nginx"
+    Write-Info "  artifacts/luma     -- attach to GitHub release as a Linux binary"
+    Write-Info "  artifacts/web/     -- upload to S3, CDN, or serve from nginx"
 }
 
-# ── Summary ───────────────────────────────────────────────────────────────────
+# -- Summary -------------------------------------------------------------------
 
 Write-Host "`nPublish complete." -ForegroundColor Green
 Write-Info "Image : $FullTag"
@@ -191,6 +191,6 @@ if ($pushLatest)  { Write-Info "Image : $LatestTag" }
 if ($WithAssets)  { Write-Info "Assets: artifacts/" }
 Write-Host ""
 Write-Host "Next steps:" -ForegroundColor DarkGray
-Write-Info "  Update the Haven image reference in docker-compose.yml, then:"
+Write-Info "  Update the luma image reference in docker-compose.yml, then:"
 Write-Info "  docker compose pull && docker compose up -d"
 Write-Host ""

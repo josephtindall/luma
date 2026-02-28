@@ -34,13 +34,14 @@ services:
       - internal
 
   haven:
-    image: josephtindall/haven:latest
+    image: haven:latest
     restart: unless-stopped
     environment:
       HAVEN_DB_HOST: postgres
       HAVEN_DB_PASS: ${HAVEN_DB_PASS}
       HAVEN_REDIS_ADDR: redis:6379
       HAVEN_JWT_SIGNING_KEY: ${HAVEN_JWT_SIGNING_KEY}
+      HAVEN_BASE_URL: ${HAVEN_BASE_URL}
       HAVEN_PORT: 8080
     depends_on:
       postgres:

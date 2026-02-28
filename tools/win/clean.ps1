@@ -1,11 +1,11 @@
-# clean.ps1 — Remove Luma build artifacts, containers, and volumes.
+# clean.ps1 -- Remove Luma build artifacts, containers, and volumes.
 #
 # USAGE (run from the repo root):
 #   .\tools\win\clean.ps1              # stop containers + delete artifacts + clear caches
 #   .\tools\win\clean.ps1 -Data        # also delete database and Redis volumes
 #   .\tools\win\clean.ps1 -Images      # also remove luma:latest and luma:dev Docker images
 #   .\tools\win\clean.ps1 -Full        # everything above (complete reset)
-#   .\tools\win\clean.ps1 -WhatIf      # preview what would be deleted — nothing is changed
+#   .\tools\win\clean.ps1 -WhatIf      # preview what would be deleted -- nothing is changed
 #
 # WHAT THIS DOES:
 #   Default (no flags):
@@ -17,7 +17,7 @@
 #
 #   -Data:
 #     Everything above, PLUS deletes the Docker volumes (PostgreSQL data, Redis
-#     data). This destroys your local database — Haven resets to UNCLAIMED on
+#     data). This destroys your local database -- Haven resets to UNCLAIMED on
 #     the next start. Use this when you want a completely fresh setup wizard run.
 #     Equivalent to: .\tools\win\run.ps1 -Fresh (but without immediately restarting).
 #
@@ -45,19 +45,19 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$RepoRoot     = Resolve-Path (Join-Path $PSScriptRoot ".." "..")
+$RepoRoot     = Resolve-Path (Join-Path (Join-Path $PSScriptRoot "..") "..")
 $ArtifactsDir = Join-Path $RepoRoot "artifacts"
-$AirTmpDir    = Join-Path $RepoRoot "src" "luma" "tmp"
-$FlutterBuild = Join-Path $RepoRoot "src" "luma-web" "build"
+$AirTmpDir    = Join-Path (Join-Path (Join-Path $RepoRoot "src") "luma") "tmp"
+$FlutterBuild = Join-Path (Join-Path (Join-Path $RepoRoot "src") "luma-web") "build"
 
 $removeData   = $Data -or $Full
 $removeImages = $Images -or $Full
 
-# ── Helpers ──────────────────────────────────────────────────────────────────
+# -- Helpers ------------------------------------------------------------------
 
 function Write-Step($msg) { Write-Host "`n>> $msg" -ForegroundColor Cyan }
 function Write-Ok($msg)   { Write-Host "   $msg" -ForegroundColor Green }
-function Write-Skip($msg) { Write-Host "   $msg  (not found — skipped)" -ForegroundColor DarkGray }
+function Write-Skip($msg) { Write-Host "   $msg  (not found -- skipped)" -ForegroundColor DarkGray }
 function Write-Warn($msg) { Write-Host "   $msg" -ForegroundColor Yellow }
 
 function Remove-IfExists($path, $label) {
@@ -75,7 +75,7 @@ function Remove-IfExists($path, $label) {
     }
 }
 
-# ── Stop containers ───────────────────────────────────────────────────────────
+# -- Stop containers -----------------------------------------------------------
 
 Write-Step "Stopping Luma containers"
 
@@ -83,15 +83,16 @@ Push-Location $RepoRoot
 try {
     foreach ($file in @("docker-compose.dev.yml", "docker-compose.yml")) {
         if (Test-Path (Join-Path $RepoRoot $file)) {
-            $downArgs = [System.Collections.Generic.List[string]]::new()
-            $downArgs.AddRange([string[]]@("compose", "-f", $file, "down"))
-            if ($removeData) { $downArgs.Add("-v") }
+            $downArgs = @("compose", "-f", $file, "down")
+            if ($removeData) { $downArgs += "-v" }
 
             if ($WhatIf) {
                 Write-Host "   [WhatIf] docker $($downArgs -join ' ')" -ForegroundColor Yellow
             }
             else {
-                & docker @downArgs 2>$null
+                $ErrorActionPreference = "Continue"
+                & docker @downArgs 2>&1 | Out-Null
+                $ErrorActionPreference = "Stop"
                 $suffix = if ($removeData) { " (volumes removed)" } else { "" }
                 Write-Ok "Stopped containers from $file$suffix"
             }
@@ -102,14 +103,14 @@ finally {
     Pop-Location
 }
 
-# ── Remove build artifacts ────────────────────────────────────────────────────
+# -- Remove build artifacts ----------------------------------------------------
 
 Write-Step "Removing build artifacts"
 Remove-IfExists $ArtifactsDir    "artifacts/          (Flutter web build + Go binary)"
 Remove-IfExists $AirTmpDir       "src/luma/tmp/       (Air live-reload cache)"
 Remove-IfExists $FlutterBuild    "src/luma-web/build/ (Flutter build cache)"
 
-# ── Remove Docker images ──────────────────────────────────────────────────────
+# -- Remove Docker images ------------------------------------------------------
 
 if ($removeImages) {
     Write-Step "Removing Luma Docker images"
@@ -131,18 +132,18 @@ if ($removeImages) {
     }
 }
 
-# ── Summary ───────────────────────────────────────────────────────────────────
+# -- Summary -------------------------------------------------------------------
 
 Write-Host ""
 if ($WhatIf) {
-    Write-Host "Dry run complete — nothing was deleted." -ForegroundColor Yellow
+    Write-Host "Dry run complete -- nothing was deleted." -ForegroundColor Yellow
     Write-Host "Re-run without -WhatIf to apply these changes." -ForegroundColor DarkGray
 }
 else {
     Write-Host "Clean complete." -ForegroundColor Green
     if ($removeData) {
         Write-Warn "Database volumes were deleted."
-        Write-Warn "Haven will be UNCLAIMED on next start — run '.\tools\win\run.ps1 -Fresh' or just run.ps1."
+        Write-Warn "Haven will be UNCLAIMED on next start -- run '.\tools\win\run.ps1 -Fresh' or just run.ps1."
     }
     if ($removeImages) {
         Write-Host "   Docker images removed. Run '.\tools\win\build.ps1' to rebuild." -ForegroundColor DarkGray
