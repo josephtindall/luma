@@ -1,6 +1,27 @@
 import 'dart:convert';
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
+/// Detects the browser name from the user agent string.
+///
+/// Check order matters — Brave and Edge include "Chrome" in their UA.
+String detectBrowserName() {
+  try {
+    final nav = globalContext['navigator'] as JSObject?;
+    if (nav == null) return 'Browser';
+    final ua = (nav['userAgent'] as JSString?)?.toDart ?? '';
+    if (ua.contains('Brave')) return 'Brave';
+    if (ua.contains('Edg/')) return 'Edge';
+    if (ua.contains('Chrome/')) return 'Chrome';
+    if (ua.contains('Firefox/')) return 'Firefox';
+    if (ua.contains('Safari/')) return 'Safari';
+    return 'Browser';
+  } catch (_) {
+    return 'Browser';
+  }
+}
 
 /// Manages authentication state for the Luma web app.
 ///
@@ -65,7 +86,7 @@ class AuthService extends ChangeNotifier {
         'email': email,
         'password': password,
         'platform': 'web',
-        'device_name': 'Browser',
+        'device_name': detectBrowserName(),
       }),
     );
 

@@ -38,7 +38,7 @@ func (h *Handler) SetupRoutes() chi.Router {
 	r.Get("/status", h.status)
 	r.Post("/verify-token", h.proxySetup("POST", "/api/setup/verify-token"))
 	r.Post("/configure", h.proxySetup("POST", "/api/setup/instance"))
-	r.Post("/owner", h.proxySetup("POST", "/api/setup/owner"))
+	r.Post("/owner", h.createOwner)
 	return r
 }
 
@@ -193,6 +193,49 @@ func (h *Handler) proxySetup(method, authPath string) http.HandlerFunc {
 		w.WriteHeader(resp.StatusCode)
 		io.Copy(w, resp.Body) //nolint:errcheck
 	}
+}
+
+// createOwner forwards the owner creation request to auth service, rewrites the
+// refresh cookie Path (like login does), and returns the access token to the browser.
+func (h *Handler) createOwner(w http.ResponseWriter, r *http.Request) {
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.authURL+"/api/setup/owner", r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+
+	resp, err := h.client.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
+		return
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "invalid auth response"})
+		return
+	}
+
+	rewriteCookies(w, resp, "/api/auth/refresh", "/api/luma/auth/refresh")
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write(body) //nolint:errcheck
 }
 
 // login forwards credentials to auth service, rewrites the refresh cookie Path, and

@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
 import '../../services/auth_service.dart';
+import '../../services/user_service.dart';
 
 const _baseUrl = String.fromEnvironment(
   'API_URL',
@@ -31,8 +32,9 @@ String? _detectBrowserTimezone() {
 /// Three-step setup wizard: token → instance config → owner account.
 class SetupWizardScreen extends StatefulWidget {
   final AuthService auth;
+  final UserService userService;
 
-  const SetupWizardScreen({super.key, required this.auth});
+  const SetupWizardScreen({super.key, required this.auth, required this.userService});
 
   @override
   State<SetupWizardScreen> createState() => _SetupWizardScreenState();
@@ -204,6 +206,8 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
           'email': _emailCtrl.text.trim(),
           'password': _passwordCtrl.text,
           'confirmed': true,
+          'device_name': detectBrowserName(),
+          'platform': 'web',
         }),
       );
 
@@ -215,12 +219,16 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
           // Show success screen, then navigate.
           _setStep(3);
           _successCtrl.forward();
-          Future.delayed(const Duration(seconds: 2), () {
-            if (mounted) {
-              widget.auth.activateSession(token);
-              context.go('/home');
-            }
-          });
+          widget.auth.activateSession(token);
+          // Load profile in background so it's ready when home screen renders.
+          await Future.wait([
+            widget.userService.loadProfile(),
+            widget.userService.loadPreferences(),
+          ]);
+          await Future.delayed(const Duration(seconds: 2));
+          if (mounted) {
+            context.go('/home');
+          }
         } else {
           setState(() => _error = 'Owner created but no token returned. Please log in.');
         }

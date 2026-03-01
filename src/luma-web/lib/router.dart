@@ -41,7 +41,7 @@ GoRouter buildRouter(
       ),
       GoRoute(
         path: '/setup',
-        builder: (_, __) => SetupWizardScreen(auth: authService),
+        builder: (_, __) => SetupWizardScreen(auth: authService, userService: userService),
       ),
       GoRoute(
         path: '/login',
