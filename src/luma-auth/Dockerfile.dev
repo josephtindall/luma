@@ -1,0 +1,13 @@
+# Development image — Go toolchain + Air for live reload.
+# Built once; source is bind-mounted at /app by docker-compose.dev.yml.
+FROM golang:1.26-alpine
+
+RUN go install github.com/air-verse/air@latest
+
+WORKDIR /app
+
+# Pre-download dependencies so the first Air build is faster.
+COPY go.mod go.sum ./
+RUN go mod download
+
+ENTRYPOINT ["air", "-c", ".air.toml"]

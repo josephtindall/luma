@@ -33,8 +33,10 @@ services:
     networks:
       - internal
 
-  haven:
-    image: haven:latest
+  auth:
+    build:
+      context: ./src/luma-auth
+      dockerfile: Dockerfile
     restart: unless-stopped
     environment:
       HAVEN_DB_HOST: postgres
@@ -59,7 +61,7 @@ services:
     environment:
       LUMA_DB_URL: postgres://luma_user:${LUMA_DB_PASS}@postgres:5432/luma?sslmode=disable&search_path=luma
       LUMA_REDIS_URL: redis://redis:6379
-      LUMA_HAVEN_URL: http://haven:8080
+      LUMA_HAVEN_URL: http://auth:8080
       LUMA_PUBLIC_URL: ${LUMA_PUBLIC_URL:-https://luma.local}
       LUMA_PORT: 8002
     ports:
@@ -69,7 +71,7 @@ services:
         condition: service_healthy
       redis:
         condition: service_healthy
-      haven:
+      auth:
         condition: service_started
     networks:
       - internal

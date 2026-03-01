@@ -56,7 +56,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
   final _fullNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
-  final _confirmPasswordCtrl = TextEditingController();
   bool _acknowledged = false;
 
   bool _loading = false;
@@ -91,7 +90,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
     _fullNameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
-    _confirmPasswordCtrl.dispose();
     super.dispose();
   }
 
@@ -271,7 +269,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
           fullNameCtrl: _fullNameCtrl,
           emailCtrl: _emailCtrl,
           passwordCtrl: _passwordCtrl,
-          confirmPasswordCtrl: _confirmPasswordCtrl,
           acknowledged: _acknowledged,
           onAcknowledgedChanged: (v) =>
               setState(() => _acknowledged = v ?? false),
@@ -570,7 +567,7 @@ class _Step0State extends State<_Step0> {
         ),
         const SizedBox(height: 8),
         Text(
-          'Paste the 8-character code from startup logs',
+          'Paste the setup code found in console to begin.',
           style: theme.textTheme.bodyMedium?.copyWith(
             color: colors.onSurfaceVariant,
           ),
@@ -792,7 +789,6 @@ class _Step2 extends StatelessWidget {
   final TextEditingController fullNameCtrl;
   final TextEditingController emailCtrl;
   final TextEditingController passwordCtrl;
-  final TextEditingController confirmPasswordCtrl;
   final bool acknowledged;
   final ValueChanged<bool?> onAcknowledgedChanged;
   final bool loading;
@@ -805,7 +801,6 @@ class _Step2 extends StatelessWidget {
     required this.fullNameCtrl,
     required this.emailCtrl,
     required this.passwordCtrl,
-    required this.confirmPasswordCtrl,
     required this.acknowledged,
     required this.onAcknowledgedChanged,
     required this.loading,
@@ -862,20 +857,6 @@ class _Step2 extends StatelessWidget {
           ),
           const SizedBox(height: 16),
           _PasswordField(ctrl: passwordCtrl),
-          const SizedBox(height: 16),
-          TextFormField(
-            controller: confirmPasswordCtrl,
-            obscureText: true,
-            decoration: const InputDecoration(
-              labelText: 'Confirm password',
-              border: OutlineInputBorder(),
-            ),
-            validator: (v) {
-              if (v == null || v.isEmpty) return 'Please confirm your password.';
-              if (v != passwordCtrl.text) return 'Passwords do not match.';
-              return null;
-            },
-          ),
           const SizedBox(height: 20),
           CheckboxListTile(
             value: acknowledged,
@@ -1022,15 +1003,15 @@ class _PasswordFieldState extends State<_PasswordField> {
           decoration: InputDecoration(
             labelText: 'Password',
             border: const OutlineInputBorder(),
-            helperText: '$length characters (min 12)',
+            helperText: '$length characters (min 8)',
             suffixIcon: IconButton(
               icon: Icon(_obscure ? Icons.visibility : Icons.visibility_off),
               onPressed: () => setState(() => _obscure = !_obscure),
             ),
           ),
           validator: (v) {
-            if (v == null || v.length < 12) {
-              return 'Password must be at least 12 characters.';
+            if (v == null || v.length < 8) {
+              return 'Password must be at least 8 characters.';
             }
             return null;
           },
