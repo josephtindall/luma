@@ -5,9 +5,9 @@ import (
 	"time"
 )
 
-// State represents the bootstrap lifecycle of the Haven instance.
+// State represents the bootstrap lifecycle of the auth service instance.
 // Enforced simultaneously at three independent layers:
-//   - DB column (haven.instance.setup_state)
+//   - DB column (auth.instance.setup_state)
 //   - HTTP middleware (BootstrapGate)
 //   - Handler (explicit State check inside each setup handler)
 type State string
@@ -18,7 +18,7 @@ const (
 	StateActive    State = "active"
 )
 
-// InstanceState is the runtime representation of the haven.instance row.
+// InstanceState is the runtime representation of the auth.instance row.
 type InstanceState struct {
 	ID                  string
 	Name                string
@@ -44,12 +44,12 @@ type CreateOwnerParams struct {
 }
 
 // StateRepository is the persistence interface for bootstrap state.
-// All write methods operate on the single haven.instance row.
+// All write methods operate on the single auth.instance row.
 type StateRepository interface {
 	// Get returns the current instance state.
 	Get(ctx context.Context) (*InstanceState, error)
 
-	// EnsureRow inserts the haven.instance row with defaults if it doesn't exist.
+	// EnsureRow inserts the auth.instance row with defaults if it doesn't exist.
 	// Safe to call on every startup — idempotent.
 	EnsureRow(ctx context.Context) error
 
@@ -73,9 +73,9 @@ type StateRepository interface {
 	ConfigureInstance(ctx context.Context, name, locale, timezone string) error
 
 	// CreateOwnerAtomic runs a single DB transaction that:
-	//   1. INSERTs haven.users with role builtin:instance-owner
-	//   2. INSERTs haven.user_preferences with defaults
-	//   3. UPDATEs haven.instance: state=active, activated_at=NOW(), token cleared
+	//   1. INSERTs auth.users with role builtin:instance-owner
+	//   2. INSERTs auth.user_preferences with defaults
+	//   3. UPDATEs auth.instance: state=active, activated_at=NOW(), token cleared
 	// Returns the new user's UUID on success.
 	CreateOwnerAtomic(ctx context.Context, params CreateOwnerParams) (userID string, err error)
 }

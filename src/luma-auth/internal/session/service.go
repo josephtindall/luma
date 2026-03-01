@@ -160,7 +160,7 @@ func (s *Service) Register(ctx context.Context, params SessionRegisterParams) (*
 		return nil, pkgerrors.ErrTokenInvalid
 	}
 
-	if len(params.Password) < 12 {
+	if len(params.Password) < 8 {
 		return nil, pkgerrors.ErrPasswordTooShort
 	}
 

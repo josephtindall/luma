@@ -13,7 +13,7 @@ import (
 // Handler serves invitation endpoints.
 type Handler struct {
 	svc     *Service
-	baseURL string // HAVEN_BASE_URL — used to build join links, e.g. https://haven.example.com
+	baseURL string // AUTH_BASE_URL — used to build join links, e.g. https://auth.example.com
 }
 
 // NewHandler constructs the invitation handler.
@@ -21,7 +21,7 @@ func NewHandler(svc *Service, baseURL string) *Handler {
 	return &Handler{svc: svc, baseURL: baseURL}
 }
 
-// Create handles POST /api/haven/invitations — owner only.
+// Create handles POST /api/auth/invitations — owner only.
 func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
@@ -55,12 +55,12 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	// The join URL encodes the raw token — clients show a QR code and copyable link.
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{
 		"id":         inv.ID,
-		"join_url":   h.baseURL + "/api/haven/join?token=" + rawToken,
+		"join_url":   h.baseURL + "/api/auth/join?token=" + rawToken,
 		"expires_at": inv.ExpiresAt,
 	})
 }
 
-// List handles GET /api/haven/invitations — owner only.
+// List handles GET /api/auth/invitations — owner only.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
@@ -79,7 +79,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, invs)
 }
 
-// Revoke handles DELETE /api/haven/invitations/{id} — owner only.
+// Revoke handles DELETE /api/auth/invitations/{id} — owner only.
 func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
@@ -98,7 +98,7 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Join handles GET /api/haven/join — renders the invitation landing page data.
+// Join handles GET /api/auth/join — renders the invitation landing page data.
 func (h *Handler) Join(w http.ResponseWriter, r *http.Request) {
 	rawToken := r.URL.Query().Get("token")
 	if rawToken == "" {

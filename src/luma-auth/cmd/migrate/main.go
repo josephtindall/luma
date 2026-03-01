@@ -1,4 +1,4 @@
-// haven migrate — standalone migration CLI.
+// luma-auth migrate — standalone migration CLI.
 // Usage:
 //
 //	go run ./cmd/migrate up      Apply all pending migrations

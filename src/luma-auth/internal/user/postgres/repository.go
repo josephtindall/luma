@@ -28,7 +28,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*user.User, error)
 		SELECT id, email, display_name, password_hash, instance_role_id,
 		       COALESCE(avatar_seed, ''), failed_login_attempts, locked_at,
 		       COALESCE(locked_reason, ''), created_at, updated_at
-		FROM haven.users
+		FROM auth.users
 		WHERE id = $1`
 
 	u, err := scanUser(r.db.QueryRow(ctx, q, id))
@@ -46,7 +46,7 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (*user.User, 
 		SELECT id, email, display_name, password_hash, instance_role_id,
 		       COALESCE(avatar_seed, ''), failed_login_attempts, locked_at,
 		       COALESCE(locked_reason, ''), created_at, updated_at
-		FROM haven.users
+		FROM auth.users
 		WHERE email = $1`
 
 	u, err := scanUser(r.db.QueryRow(ctx, q, email))
@@ -63,7 +63,7 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (*user.User, 
 
 func (r *Repository) Create(ctx context.Context, u *user.User) error {
 	const q = `
-		INSERT INTO haven.users
+		INSERT INTO auth.users
 		    (id, email, display_name, password_hash, instance_role_id, avatar_seed)
 		VALUES ($1, $2, $3, $4, $5, $6)`
 
@@ -81,7 +81,7 @@ func (r *Repository) Create(ctx context.Context, u *user.User) error {
 
 func (r *Repository) UpdateProfile(ctx context.Context, id string, params user.UpdateProfileParams) error {
 	const q = `
-		UPDATE haven.users
+		UPDATE auth.users
 		SET display_name = COALESCE(NULLIF($2, ''), display_name),
 		    email        = COALESCE(NULLIF($3, ''), email),
 		    updated_at   = NOW()
@@ -95,7 +95,7 @@ func (r *Repository) UpdateProfile(ctx context.Context, id string, params user.U
 }
 
 func (r *Repository) UpdatePassword(ctx context.Context, id, passwordHash string) error {
-	const q = `UPDATE haven.users SET password_hash = $2, updated_at = NOW() WHERE id = $1`
+	const q = `UPDATE auth.users SET password_hash = $2, updated_at = NOW() WHERE id = $1`
 	_, err := r.db.Exec(ctx, q, id, passwordHash)
 	if err != nil {
 		return fmt.Errorf("user.postgres.UpdatePassword: %w", err)
@@ -105,7 +105,7 @@ func (r *Repository) UpdatePassword(ctx context.Context, id, passwordHash string
 
 func (r *Repository) IncrementFailedLogins(ctx context.Context, id string) (int, error) {
 	const q = `
-		UPDATE haven.users
+		UPDATE auth.users
 		SET failed_login_attempts = failed_login_attempts + 1, updated_at = NOW()
 		WHERE id = $1
 		RETURNING failed_login_attempts`
@@ -120,7 +120,7 @@ func (r *Repository) IncrementFailedLogins(ctx context.Context, id string) (int,
 
 func (r *Repository) ResetFailedLogins(ctx context.Context, id string) error {
 	const q = `
-		UPDATE haven.users
+		UPDATE auth.users
 		SET failed_login_attempts = 0, updated_at = NOW()
 		WHERE id = $1`
 	_, err := r.db.Exec(ctx, q, id)
@@ -132,7 +132,7 @@ func (r *Repository) ResetFailedLogins(ctx context.Context, id string) error {
 
 func (r *Repository) LockAccount(ctx context.Context, id, reason string) error {
 	const q = `
-		UPDATE haven.users
+		UPDATE auth.users
 		SET locked_at = NOW(), locked_reason = $2, updated_at = NOW()
 		WHERE id = $1`
 	_, err := r.db.Exec(ctx, q, id, reason)
@@ -144,7 +144,7 @@ func (r *Repository) LockAccount(ctx context.Context, id, reason string) error {
 
 func (r *Repository) UnlockAccount(ctx context.Context, id string) error {
 	const q = `
-		UPDATE haven.users
+		UPDATE auth.users
 		SET locked_at = NULL, locked_reason = NULL,
 		    failed_login_attempts = 0, updated_at = NOW()
 		WHERE id = $1`
@@ -165,7 +165,7 @@ func (r *Repository) RegisterAtomic(ctx context.Context, params user.RegisterPar
 	defer tx.Rollback(ctx) //nolint:errcheck
 
 	const insertUser = `
-		INSERT INTO haven.users (email, display_name, password_hash, instance_role_id)
+		INSERT INTO auth.users (email, display_name, password_hash, instance_role_id)
 		VALUES ($1, $2, $3, 'builtin:instance-member')
 		RETURNING id`
 
@@ -179,13 +179,13 @@ func (r *Repository) RegisterAtomic(ctx context.Context, params user.RegisterPar
 		return "", fmt.Errorf("user.postgres.RegisterAtomic insert user: %w", err)
 	}
 
-	const insertPrefs = `INSERT INTO haven.user_preferences (user_id) VALUES ($1)`
+	const insertPrefs = `INSERT INTO auth.user_preferences (user_id) VALUES ($1)`
 	if _, err := tx.Exec(ctx, insertPrefs, userID); err != nil {
 		return "", fmt.Errorf("user.postgres.RegisterAtomic insert prefs: %w", err)
 	}
 
 	const acceptInv = `
-		UPDATE haven.invitations
+		UPDATE auth.invitations
 		SET status = 'accepted', accepted_at = NOW()
 		WHERE id = $1 AND status = 'pending'`
 	tag, err := tx.Exec(ctx, acceptInv, params.InvitationID)
@@ -202,7 +202,7 @@ func (r *Repository) RegisterAtomic(ctx context.Context, params user.RegisterPar
 	return userID, nil
 }
 
-// scanUser reads a haven.users row from a pgx.Row.
+// scanUser reads a auth.users row from a pgx.Row.
 func scanUser(row pgx.Row) (*user.User, error) {
 	u := &user.User{}
 	err := row.Scan(

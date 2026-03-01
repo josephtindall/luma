@@ -16,7 +16,6 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/josephtindall/luma/internal/auth"
-	"github.com/josephtindall/luma/internal/haven"
 	"github.com/josephtindall/luma/internal/migrate"
 	vaultsPkg "github.com/josephtindall/luma/internal/vaults"
 	vaultsPostgres "github.com/josephtindall/luma/internal/vaults/postgres"
@@ -58,14 +57,14 @@ func run() error {
 		return fmt.Errorf("running migrations: %w", err)
 	}
 
-	// Haven client
-	havenClient := haven.NewClient(cfg.HavenUrl)
-	havenMiddleware := haven.NewMiddleware(havenClient)
+	// Auth client
+	authClient := auth.NewClient(cfg.AuthURL)
+	authMiddleware := auth.NewMiddleware(authClient)
 
-	// Authz — uses Haven client as the permission checker.
-	// The user ID extractor bridges pkg/authz → internal/haven without a direct import.
-	authorizer := authz.NewAuthorizer(havenClient, func(ctx context.Context) string {
-		id := haven.IdentityFromContext(ctx)
+	// Authz — uses auth client as the permission checker.
+	// The user ID extractor bridges pkg/authz → internal/auth without a direct import.
+	authorizer := authz.NewAuthorizer(authClient, func(ctx context.Context) string {
+		id := auth.IdentityFromContext(ctx)
 		if id == nil {
 			return ""
 		}
@@ -94,14 +93,14 @@ func run() error {
 	ensureVaultMw := vaultsPkg.EnsurePersonalVaultMiddleware(
 		vaultService,
 		func(ctx context.Context) string {
-			id := haven.IdentityFromContext(ctx)
+			id := auth.IdentityFromContext(ctx)
 			if id == nil {
 				return ""
 			}
 			return id.UserID
 		},
 		func(ctx context.Context, userID string) (string, error) {
-			user, err := havenClient.GetUser(ctx, userID)
+			user, err := authClient.GetUser(ctx, userID)
 			if err != nil {
 				return "", err
 			}
@@ -111,8 +110,8 @@ func run() error {
 
 	// Auth proxy — unauthenticated, outside the protected group
 	authHTTPClient := &http.Client{Timeout: 10 * time.Second}
-	authHandler := auth.NewHandler(authHTTPClient, cfg.HavenUrl, func(ctx context.Context) string {
-		id := haven.IdentityFromContext(ctx)
+	authHandler := auth.NewHandler(authHTTPClient, cfg.AuthURL, func(ctx context.Context) string {
+		id := auth.IdentityFromContext(ctx)
 		if id == nil {
 			return ""
 		}
@@ -124,7 +123,7 @@ func run() error {
 
 	// Protected routes
 	r.Route("/api/luma", func(r chi.Router) {
-		r.Use(havenMiddleware.Authenticate)
+		r.Use(authMiddleware.Authenticate)
 		r.Use(ensureVaultMw)
 		r.Mount("/vaults", vaultHandler.Routes())
 		r.Mount("/user", authHandler.UserRoutes())

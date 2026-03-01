@@ -9,7 +9,7 @@ import (
 // It wraps the entire router and allows or blocks paths based on current state.
 //
 // Enforcement layers (all three must pass — passing one is insufficient):
-//  1. DB column — setup_state in haven.instance
+//  1. DB column — setup_state in auth.instance
 //  2. This middleware — evaluated on every request
 //  3. Handler — explicit State check at the start of each setup handler
 type BootstrapGate struct {
@@ -63,11 +63,11 @@ func (g *BootstrapGate) Middleware(next http.Handler) http.Handler {
 }
 
 func isAllowedInUnclaimed(path string) bool {
-	return path == "/" || path == "/api/setup/verify-token" || path == "/api/haven/health"
+	return path == "/" || path == "/api/setup/verify-token" || path == "/api/auth/health"
 }
 
 func isAllowedInSetup(path string) bool {
-	return path == "/" || path == "/api/haven/health" || isSetupPath(path)
+	return path == "/" || path == "/api/auth/health" || isSetupPath(path)
 }
 
 func isSetupPath(path string) bool {

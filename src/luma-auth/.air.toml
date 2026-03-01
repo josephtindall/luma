@@ -1,4 +1,4 @@
-# Air live-reload configuration for Haven development.
+# Air live-reload configuration for luma-auth development.
 # https://github.com/air-verse/air
 
 root = "."

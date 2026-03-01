@@ -1,7 +1,7 @@
 // Package migrate runs numbered SQL migration files against PostgreSQL.
 // Migrations are applied in filename order. Each migration runs inside a
 // transaction — a partial failure rolls back the whole file.
-// Applied migrations are tracked in haven.schema_migrations.
+// Applied migrations are tracked in auth.schema_migrations.
 package migrate
 
 import (
@@ -18,7 +18,7 @@ import (
 )
 
 const createTrackingTable = `
-CREATE TABLE IF NOT EXISTS haven.schema_migrations (
+CREATE TABLE IF NOT EXISTS auth.schema_migrations (
     filename   TEXT        PRIMARY KEY,
     applied_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 )`
@@ -87,7 +87,7 @@ func Down(ctx context.Context, db *pgxpool.Pool, migrations fs.FS) error {
 	if _, err := tx.Exec(ctx, string(content)); err != nil {
 		return fmt.Errorf("migrate down exec %s: %w", downName, err)
 	}
-	if _, err := tx.Exec(ctx, `DELETE FROM haven.schema_migrations WHERE filename = $1`, last); err != nil {
+	if _, err := tx.Exec(ctx, `DELETE FROM auth.schema_migrations WHERE filename = $1`, last); err != nil {
 		return fmt.Errorf("migrate down unrecord %s: %w", last, err)
 	}
 	if err := tx.Commit(ctx); err != nil {
@@ -127,7 +127,7 @@ func Status(ctx context.Context, db *pgxpool.Pool, migrations fs.FS) error {
 // ── helpers ───────────────────────────────────────────────────────────────────
 
 func ensureSchema(ctx context.Context, db *pgxpool.Pool) error {
-	_, err := db.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS haven`)
+	_, err := db.Exec(ctx, `CREATE SCHEMA IF NOT EXISTS auth`)
 	if err != nil {
 		return fmt.Errorf("migrate: ensure schema: %w", err)
 	}
@@ -143,7 +143,7 @@ func ensureTrackingTable(ctx context.Context, db *pgxpool.Pool) error {
 }
 
 func appliedSet(ctx context.Context, db *pgxpool.Pool) (map[string]bool, error) {
-	rows, err := db.Query(ctx, `SELECT filename FROM haven.schema_migrations`)
+	rows, err := db.Query(ctx, `SELECT filename FROM auth.schema_migrations`)
 	if err != nil {
 		return nil, fmt.Errorf("migrate: list applied: %w", err)
 	}
@@ -163,7 +163,7 @@ func appliedSet(ctx context.Context, db *pgxpool.Pool) (map[string]bool, error) 
 func lastApplied(ctx context.Context, db *pgxpool.Pool) (string, error) {
 	var name string
 	err := db.QueryRow(ctx,
-		`SELECT filename FROM haven.schema_migrations ORDER BY applied_at DESC, filename DESC LIMIT 1`,
+		`SELECT filename FROM auth.schema_migrations ORDER BY applied_at DESC, filename DESC LIMIT 1`,
 	).Scan(&name)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", nil
@@ -208,7 +208,7 @@ func applyFile(ctx context.Context, db *pgxpool.Pool, migrations fs.FS, name str
 		return fmt.Errorf("exec: %w", err)
 	}
 	if _, err := tx.Exec(ctx,
-		`INSERT INTO haven.schema_migrations (filename) VALUES ($1)`, name,
+		`INSERT INTO auth.schema_migrations (filename) VALUES ($1)`, name,
 	); err != nil {
 		return fmt.Errorf("record: %w", err)
 	}

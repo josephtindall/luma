@@ -1,11 +1,11 @@
-package haven
+package auth
 
 import (
 	"net/http"
 	"strings"
 )
 
-// Middleware validates Bearer tokens via Haven on every protected request.
+// Middleware validates Bearer tokens via the auth service on every protected request.
 type Middleware struct {
 	client *Client
 }

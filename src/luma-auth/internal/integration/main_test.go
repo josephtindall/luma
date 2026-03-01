@@ -3,9 +3,9 @@
 //
 // Run with:
 //
-//	HAVEN_TEST_DB_URL=postgres://haven:haven@localhost:5432/haven_test go test -v -race ./internal/integration/
+//	AUTH_TEST_DB_URL=postgres://auth:auth@localhost:5432/auth_test go test -v -race ./internal/integration/
 //
-// If HAVEN_TEST_DB_URL is not set the entire suite is skipped (exit 0).
+// If AUTH_TEST_DB_URL is not set the entire suite is skipped (exit 0).
 package integration_test
 
 import (
@@ -29,9 +29,9 @@ import (
 var testDB *pgxpool.Pool
 
 func TestMain(m *testing.M) {
-	url := os.Getenv("HAVEN_TEST_DB_URL")
+	url := os.Getenv("AUTH_TEST_DB_URL")
 	if url == "" {
-		log.Println("HAVEN_TEST_DB_URL not set — integration tests skipped")
+		log.Println("AUTH_TEST_DB_URL not set — integration tests skipped")
 		os.Exit(0)
 	}
 
@@ -72,7 +72,7 @@ func randHex(n int) string {
 
 // uniqueEmail returns an email address guaranteed not to collide across tests.
 func uniqueEmail() string {
-	return fmt.Sprintf("test-%s@haven.invalid", randHex(8))
+	return fmt.Sprintf("test-%s@test.invalid", randHex(8))
 }
 
 // genUUID generates a UUID v4 via the test database.
@@ -85,13 +85,13 @@ func genUUID(t *testing.T) string {
 	return id
 }
 
-// insertUser inserts a minimal haven.users row and registers a cleanup that
+// insertUser inserts a minimal auth.users row and registers a cleanup that
 // cascades deletions to devices, refresh_tokens, and audit_log rows.
 func insertUser(t *testing.T, email string) string {
 	t.Helper()
 	var id string
 	err := testDB.QueryRow(bg(), `
-		INSERT INTO haven.users (email, display_name, password_hash, instance_role_id)
+		INSERT INTO auth.users (email, display_name, password_hash, instance_role_id)
 		VALUES ($1, 'Test User', '$argon2id$stub', 'builtin:instance-member')
 		RETURNING id::TEXT
 	`, email).Scan(&id)
@@ -99,7 +99,7 @@ func insertUser(t *testing.T, email string) string {
 		t.Fatalf("insertUser(%q): %v", email, err)
 	}
 	t.Cleanup(func() {
-		testDB.Exec(bg(), "DELETE FROM haven.users WHERE id = $1::UUID", id) //nolint:errcheck
+		testDB.Exec(bg(), "DELETE FROM auth.users WHERE id = $1::UUID", id) //nolint:errcheck
 	})
 	return id
 }
@@ -109,7 +109,7 @@ func insertOwnerUser(t *testing.T, email string) string {
 	t.Helper()
 	var id string
 	err := testDB.QueryRow(bg(), `
-		INSERT INTO haven.users (email, display_name, password_hash, instance_role_id)
+		INSERT INTO auth.users (email, display_name, password_hash, instance_role_id)
 		VALUES ($1, 'Owner', '$argon2id$stub', 'builtin:instance-owner')
 		RETURNING id::TEXT
 	`, email).Scan(&id)
@@ -117,17 +117,17 @@ func insertOwnerUser(t *testing.T, email string) string {
 		t.Fatalf("insertOwnerUser: %v", err)
 	}
 	t.Cleanup(func() {
-		testDB.Exec(bg(), "DELETE FROM haven.users WHERE id = $1::UUID", id) //nolint:errcheck
+		testDB.Exec(bg(), "DELETE FROM auth.users WHERE id = $1::UUID", id) //nolint:errcheck
 	})
 	return id
 }
 
-// insertDevice inserts a haven.devices row. Cascades from user on cleanup.
+// insertDevice inserts a auth.devices row. Cascades from user on cleanup.
 func insertDevice(t *testing.T, userID, fingerprint string) string {
 	t.Helper()
 	var id string
 	err := testDB.QueryRow(bg(), `
-		INSERT INTO haven.devices (user_id, name, platform, fingerprint)
+		INSERT INTO auth.devices (user_id, name, platform, fingerprint)
 		VALUES ($1::UUID, 'Test Device', 'web', $2)
 		RETURNING id::TEXT
 	`, userID, fingerprint).Scan(&id)
@@ -137,12 +137,12 @@ func insertDevice(t *testing.T, userID, fingerprint string) string {
 	return id
 }
 
-// insertRefreshToken inserts a haven.refresh_tokens row. Cascades from device.
+// insertRefreshToken inserts a auth.refresh_tokens row. Cascades from device.
 func insertRefreshToken(t *testing.T, deviceID, tokenHash string, expiresAt time.Time) string {
 	t.Helper()
 	var id string
 	err := testDB.QueryRow(bg(), `
-		INSERT INTO haven.refresh_tokens (device_id, token_hash, expires_at)
+		INSERT INTO auth.refresh_tokens (device_id, token_hash, expires_at)
 		VALUES ($1::UUID, $2, $3)
 		RETURNING id::TEXT
 	`, deviceID, tokenHash, expiresAt).Scan(&id)
@@ -158,7 +158,7 @@ func insertPendingInvitation(t *testing.T, inviterID string) (invID, tokenHash s
 	t.Helper()
 	tokenHash = randHex(32) // simulates a SHA-256 hex output
 	err := testDB.QueryRow(bg(), `
-		INSERT INTO haven.invitations (inviter_id, token_hash, status, expires_at)
+		INSERT INTO auth.invitations (inviter_id, token_hash, status, expires_at)
 		VALUES ($1::UUID, $2, 'pending', NOW() + INTERVAL '48 hours')
 		RETURNING id::TEXT
 	`, inviterID, tokenHash).Scan(&invID)
@@ -166,17 +166,17 @@ func insertPendingInvitation(t *testing.T, inviterID string) (invID, tokenHash s
 		t.Fatalf("insertPendingInvitation: %v", err)
 	}
 	t.Cleanup(func() {
-		testDB.Exec(bg(), "DELETE FROM haven.invitations WHERE id = $1::UUID", invID) //nolint:errcheck
+		testDB.Exec(bg(), "DELETE FROM auth.invitations WHERE id = $1::UUID", invID) //nolint:errcheck
 	})
 	return invID, tokenHash
 }
 
-// resetInstanceToUnclaimed resets the haven.instance row to a clean UNCLAIMED
+// resetInstanceToUnclaimed resets the auth.instance row to a clean UNCLAIMED
 // state. Call from t.Cleanup in any test that modifies bootstrap state.
 func resetInstanceToUnclaimed(t *testing.T) {
 	t.Helper()
 	_, err := testDB.Exec(bg(), `
-		UPDATE haven.instance
+		UPDATE auth.instance
 		SET setup_state            = 'unclaimed',
 		    setup_token_hash       = NULL,
 		    setup_token_expires_at = NULL,

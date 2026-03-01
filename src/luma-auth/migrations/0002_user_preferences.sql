@@ -1,10 +1,10 @@
 -- Migration 0002: user preferences
 -- One row per user, always created with defaults in the same transaction
--- as the haven.users row — it is never absent.
+-- as the auth.users row — it is never absent.
 
-CREATE TABLE haven.user_preferences
+CREATE TABLE auth.user_preferences
 (
-    user_id          UUID PRIMARY KEY REFERENCES haven.users (id) ON DELETE CASCADE,
+    user_id          UUID PRIMARY KEY REFERENCES auth.users (id) ON DELETE CASCADE,
     theme            TEXT        NOT NULL DEFAULT 'system', -- system | light | dark
     language         TEXT        NOT NULL DEFAULT 'en',     -- BCP-47
     timezone         TEXT        NOT NULL DEFAULT 'UTC',    -- IANA

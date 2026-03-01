@@ -24,7 +24,7 @@ func New(db *pgxpool.Pool) *Repository {
 
 func (r *Repository) Create(ctx context.Context, t *session.RefreshToken) error {
 	const q = `
-		INSERT INTO haven.refresh_tokens (device_id, token_hash, expires_at)
+		INSERT INTO auth.refresh_tokens (device_id, token_hash, expires_at)
 		VALUES ($1, $2, $3)
 		RETURNING id, created_at`
 
@@ -39,7 +39,7 @@ func (r *Repository) Create(ctx context.Context, t *session.RefreshToken) error 
 func (r *Repository) GetByHash(ctx context.Context, hash string) (*session.RefreshToken, error) {
 	const q = `
 		SELECT id, device_id, token_hash, expires_at, consumed_at, revoked_at, created_at
-		FROM haven.refresh_tokens
+		FROM auth.refresh_tokens
 		WHERE token_hash = $1`
 
 	t := &session.RefreshToken{}
@@ -58,7 +58,7 @@ func (r *Repository) GetByHash(ctx context.Context, hash string) (*session.Refre
 
 func (r *Repository) Consume(ctx context.Context, id string) error {
 	const q = `
-		UPDATE haven.refresh_tokens
+		UPDATE auth.refresh_tokens
 		SET consumed_at = NOW()
 		WHERE id = $1 AND consumed_at IS NULL AND revoked_at IS NULL`
 
@@ -74,9 +74,9 @@ func (r *Repository) Consume(ctx context.Context, id string) error {
 
 func (r *Repository) RevokeAllForUser(ctx context.Context, userID string) error {
 	const q = `
-		UPDATE haven.refresh_tokens rt
+		UPDATE auth.refresh_tokens rt
 		SET revoked_at = NOW()
-		FROM haven.devices d
+		FROM auth.devices d
 		WHERE rt.device_id = d.id
 		  AND d.user_id    = $1
 		  AND rt.revoked_at IS NULL`
@@ -90,7 +90,7 @@ func (r *Repository) RevokeAllForUser(ctx context.Context, userID string) error 
 
 func (r *Repository) RevokeAllForDevice(ctx context.Context, deviceID string) error {
 	const q = `
-		UPDATE haven.refresh_tokens
+		UPDATE auth.refresh_tokens
 		SET revoked_at = NOW()
 		WHERE device_id = $1 AND revoked_at IS NULL`
 

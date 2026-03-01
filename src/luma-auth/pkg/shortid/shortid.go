@@ -1,5 +1,5 @@
 // Package shortid provides short, URL-safe, random identifiers.
-// Haven does not use short IDs internally — this package is included for
+// The auth service does not use short IDs internally — this package is included for
 // Luma consumers that need human-friendly IDs for pages, tasks, and flows.
 package shortid
 

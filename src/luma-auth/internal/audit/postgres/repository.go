@@ -22,7 +22,7 @@ func New(db *pgxpool.Pool) *Repository {
 
 func (r *Repository) Insert(ctx context.Context, e audit.Event) error {
 	const q = `
-		INSERT INTO haven.audit_log
+		INSERT INTO auth.audit_log
 		    (user_id, device_id, event, ip_address, user_agent, metadata)
 		VALUES (
 		    NULLIF($1, '')::UUID,
@@ -50,7 +50,7 @@ func (r *Repository) Insert(ctx context.Context, e audit.Event) error {
 func (r *Repository) ListForUser(ctx context.Context, userID string, limit, offset int) ([]*audit.Row, error) {
 	const q = `
 		SELECT id, user_id, device_id, event, ip_address::TEXT, user_agent, metadata, occurred_at
-		FROM haven.audit_log
+		FROM auth.audit_log
 		WHERE user_id = $1
 		ORDER BY occurred_at DESC
 		LIMIT $2 OFFSET $3`
@@ -61,7 +61,7 @@ func (r *Repository) ListForUser(ctx context.Context, userID string, limit, offs
 func (r *Repository) ListAll(ctx context.Context, limit, offset int) ([]*audit.Row, error) {
 	const q = `
 		SELECT id, user_id, device_id, event, ip_address::TEXT, user_agent, metadata, occurred_at
-		FROM haven.audit_log
+		FROM auth.audit_log
 		ORDER BY occurred_at DESC
 		LIMIT $1 OFFSET $2`
 

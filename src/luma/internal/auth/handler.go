@@ -12,22 +12,22 @@ import (
 	"github.com/go-chi/chi/v5"
 )
 
-// Handler is a transparent proxy for Haven auth and setup endpoints.
+// Handler is a transparent proxy for auth service endpoints.
 // It does not decode request bodies (except login/refresh to extract the access token)
 // and does not attach context-held tokens.
 type Handler struct {
 	client     *http.Client
-	havenURL   string
+	authURL    string
 	userIDFunc func(context.Context) string
 }
 
 // NewHandler creates an auth proxy handler. httpClient must not be nil.
-// userIDFunc extracts the authenticated user ID from context (set by Haven
+// userIDFunc extracts the authenticated user ID from context (set by auth
 // middleware). It is used by UserRoutes to resolve /me to a real user ID.
-func NewHandler(httpClient *http.Client, havenURL string, userIDFunc func(context.Context) string) *Handler {
+func NewHandler(httpClient *http.Client, authURL string, userIDFunc func(context.Context) string) *Handler {
 	return &Handler{
 		client:     httpClient,
-		havenURL:   strings.TrimRight(havenURL, "/"),
+		authURL:    strings.TrimRight(authURL, "/"),
 		userIDFunc: userIDFunc,
 	}
 }
@@ -52,42 +52,42 @@ func (h *Handler) AuthRoutes() chi.Router {
 }
 
 // UserRoutes returns a router for /api/luma/user/* endpoints.
-// These proxy to Haven's /users/me and related endpoints. Haven enforces
-// ownership on /users/me paths, so no authz.RequireCan() is needed.
+// These proxy to the auth service's /users/me and related endpoints. The auth
+// service enforces ownership on /users/me paths, so no authz.RequireCan() is needed.
 func (h *Handler) UserRoutes() chi.Router {
 	r := chi.NewRouter()
-	// GET /me needs special handling: Haven has GET /api/haven/users/{id}
-	// but no GET /api/haven/users/me, so we resolve the real user ID from
-	// the auth context and proxy to /api/haven/users/{id}.
+	// GET /me needs special handling: the auth service has GET /api/auth/users/{id}
+	// but no GET /api/auth/users/me, so we resolve the real user ID from
+	// the auth context and proxy to /api/auth/users/{id}.
 	r.Get("/me", h.getMe)
-	r.Put("/me/profile", h.proxyAuth("PUT", "/api/haven/users/me/profile"))
-	r.Post("/me/password", h.proxyAuth("POST", "/api/haven/users/me/password"))
-	r.Get("/me/preferences", h.proxyAuth("GET", "/api/haven/users/me/preferences"))
-	r.Patch("/me/preferences", h.proxyAuth("PATCH", "/api/haven/users/me/preferences"))
-	r.Get("/me/devices", h.proxyAuth("GET", "/api/haven/devices"))
-	r.Delete("/me/devices/{id}", h.proxyAuthWithParam("DELETE", "/api/haven/devices/", "id"))
-	r.Get("/me/audit", h.proxyAuth("GET", "/api/haven/audit/me"))
+	r.Put("/me/profile", h.proxyAuth("PUT", "/api/auth/users/me/profile"))
+	r.Post("/me/password", h.proxyAuth("POST", "/api/auth/users/me/password"))
+	r.Get("/me/preferences", h.proxyAuth("GET", "/api/auth/users/me/preferences"))
+	r.Patch("/me/preferences", h.proxyAuth("PATCH", "/api/auth/users/me/preferences"))
+	r.Get("/me/devices", h.proxyAuth("GET", "/api/auth/devices"))
+	r.Delete("/me/devices/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/devices/", "id"))
+	r.Get("/me/audit", h.proxyAuth("GET", "/api/auth/audit/me"))
 	return r
 }
 
-// getMe resolves the authenticated user's ID and proxies to Haven's
-// GET /api/haven/users/{id} endpoint.
+// getMe resolves the authenticated user's ID and proxies to auth service's
+// GET /api/auth/users/{id} endpoint.
 func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
 	userID := h.userIDFunc(r.Context())
 	if userID == "" {
 		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
 		return
 	}
-	h.proxyAuth("GET", "/api/haven/users/"+userID)(w, r)
+	h.proxyAuth("GET", "/api/auth/users/"+userID)(w, r)
 }
 
-// status probes Haven state.
-// Haven 503 → {"state":"unclaimed"}
-// Haven 401 → {"state":"active"}
-// Connection error/timeout → HTTP 503 {"error":"haven unavailable"}
+// status probes auth service state.
+// auth service 503 → {"state":"unclaimed"}
+// auth service 401 → {"state":"active"}
+// Connection error/timeout → HTTP 503 {"error":"auth service unavailable"}
 // Unexpected status → HTTP 502
 func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, h.havenURL+"/api/haven/validate", nil)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodGet, h.authURL+"/api/auth/validate", nil)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
@@ -95,7 +95,7 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.client.Do(req)
 	if err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "haven unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -106,16 +106,16 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 	case http.StatusUnauthorized: // 401 — ACTIVE
 		writeJSON(w, http.StatusOK, map[string]string{"state": "active"})
 	default:
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("unexpected haven status: %d", resp.StatusCode)})
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("unexpected auth status: %d", resp.StatusCode)})
 	}
 }
 
-// proxyAuth returns a handler that forwards the request to Haven with the
-// caller's Authorization header. Used for /users/me endpoints where Haven
+// proxyAuth returns a handler that forwards the request to auth service with the
+// caller's Authorization header. Used for /users/me endpoints where auth service
 // enforces ownership.
-func (h *Handler) proxyAuth(method, havenPath string) http.HandlerFunc {
+func (h *Handler) proxyAuth(method, authPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		req, err := http.NewRequestWithContext(r.Context(), method, h.havenURL+havenPath, r.Body)
+		req, err := http.NewRequestWithContext(r.Context(), method, h.authURL+authPath, r.Body)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
@@ -127,7 +127,7 @@ func (h *Handler) proxyAuth(method, havenPath string) http.HandlerFunc {
 
 		resp, err := h.client.Do(req)
 		if err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "haven unavailable"})
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
 			return
 		}
 		defer resp.Body.Close()
@@ -139,8 +139,8 @@ func (h *Handler) proxyAuth(method, havenPath string) http.HandlerFunc {
 }
 
 // proxyAuthWithParam returns a handler that appends a chi URL param to the
-// Haven path and forwards the request with the caller's Authorization header.
-func (h *Handler) proxyAuthWithParam(method, havenPathPrefix, paramName string) http.HandlerFunc {
+// auth service path and forwards the request with the caller's Authorization header.
+func (h *Handler) proxyAuthWithParam(method, authPathPrefix, paramName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		paramVal := chi.URLParam(r, paramName)
 		if paramVal == "" {
@@ -148,7 +148,7 @@ func (h *Handler) proxyAuthWithParam(method, havenPathPrefix, paramName string) 
 			return
 		}
 
-		req, err := http.NewRequestWithContext(r.Context(), method, h.havenURL+havenPathPrefix+paramVal, r.Body)
+		req, err := http.NewRequestWithContext(r.Context(), method, h.authURL+authPathPrefix+paramVal, r.Body)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
@@ -160,7 +160,7 @@ func (h *Handler) proxyAuthWithParam(method, havenPathPrefix, paramName string) 
 
 		resp, err := h.client.Do(req)
 		if err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "haven unavailable"})
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
 			return
 		}
 		defer resp.Body.Close()
@@ -171,11 +171,11 @@ func (h *Handler) proxyAuthWithParam(method, havenPathPrefix, paramName string) 
 	}
 }
 
-// proxySetup returns a handler that pipes the request body verbatim to Haven and
-// forwards Haven's status code and response body verbatim.
-func (h *Handler) proxySetup(method, havenPath string) http.HandlerFunc {
+// proxySetup returns a handler that pipes the request body verbatim to auth service and
+// forwards auth service's status code and response body verbatim.
+func (h *Handler) proxySetup(method, authPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		req, err := http.NewRequestWithContext(r.Context(), method, h.havenURL+havenPath, r.Body)
+		req, err := http.NewRequestWithContext(r.Context(), method, h.authURL+authPath, r.Body)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return
@@ -184,7 +184,7 @@ func (h *Handler) proxySetup(method, havenPath string) http.HandlerFunc {
 
 		resp, err := h.client.Do(req)
 		if err != nil {
-			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "haven unavailable"})
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
 			return
 		}
 		defer resp.Body.Close()
@@ -195,10 +195,10 @@ func (h *Handler) proxySetup(method, havenPath string) http.HandlerFunc {
 	}
 }
 
-// login forwards credentials to Haven, rewrites the refresh cookie Path, and
+// login forwards credentials to auth service, rewrites the refresh cookie Path, and
 // returns {"access_token":"<value>"} to the browser.
 func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.havenURL+"/api/haven/auth/login", r.Body)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.authURL+"/api/auth/login", r.Body)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
@@ -207,7 +207,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.client.Do(req)
 	if err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "haven unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -226,35 +226,35 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 
 	var payload map[string]interface{}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "invalid haven response"})
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "invalid auth response"})
 		return
 	}
 
 	accessToken, _ := payload["access_token"].(string)
 
-	// Rewrite Set-Cookie path from Haven's path to Luma's refresh path.
-	rewriteCookies(w, resp, "/api/haven/refresh", "/api/luma/auth/refresh")
+	// Rewrite Set-Cookie path from auth service's path to Luma's refresh path.
+	rewriteCookies(w, resp, "/api/auth/refresh", "/api/luma/auth/refresh")
 
 	writeJSON(w, http.StatusOK, map[string]string{"access_token": accessToken})
 }
 
-// refresh forwards the browser's cookie to Haven, rewrites the Set-Cookie path,
+// refresh forwards the browser's cookie to auth service, rewrites the Set-Cookie path,
 // and returns a new access token.
 func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.havenURL+"/api/haven/auth/refresh", nil)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.authURL+"/api/auth/refresh", nil)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
 	}
 
-	// Forward the browser's cookie to Haven.
+	// Forward the browser's cookie to auth service.
 	if cookie := r.Header.Get("Cookie"); cookie != "" {
 		req.Header.Set("Cookie", cookie)
 	}
 
 	resp, err := h.client.Do(req)
 	if err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "haven unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
 		return
 	}
 	defer resp.Body.Close()
@@ -273,21 +273,21 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 
 	var payload map[string]interface{}
 	if err := json.Unmarshal(body, &payload); err != nil {
-		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "invalid haven response"})
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "invalid auth response"})
 		return
 	}
 
 	accessToken, _ := payload["access_token"].(string)
 
-	rewriteCookies(w, resp, "/api/haven/refresh", "/api/luma/auth/refresh")
+	rewriteCookies(w, resp, "/api/auth/refresh", "/api/luma/auth/refresh")
 
 	writeJSON(w, http.StatusOK, map[string]string{"access_token": accessToken})
 }
 
-// logout forwards the browser cookie to Haven and proxies its response status
-// and any Set-Cookie (which Haven uses to expire the cookie).
+// logout forwards the browser cookie to auth service and proxies its response status
+// and any Set-Cookie (which auth service uses to expire the cookie).
 func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
-	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.havenURL+"/api/haven/auth/logout", nil)
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.authURL+"/api/auth/logout", nil)
 	if err != nil {
 		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 		return
@@ -299,12 +299,12 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := h.client.Do(req)
 	if err != nil {
-		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "haven unavailable"})
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
 		return
 	}
 	defer resp.Body.Close()
 
-	// Forward any Set-Cookie headers (expiry cookies from Haven).
+	// Forward any Set-Cookie headers (expiry cookies from auth service).
 	for _, sc := range resp.Header["Set-Cookie"] {
 		w.Header().Add("Set-Cookie", sc)
 	}
@@ -313,7 +313,7 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	io.Copy(w, resp.Body) //nolint:errcheck
 }
 
-// rewriteCookies reads Set-Cookie headers from the Haven response via resp.Cookies(),
+// rewriteCookies reads Set-Cookie headers from the auth service response via resp.Cookies(),
 // rewrites the Path attribute from oldPath to newPath, then sets them on the browser
 // response. Using resp.Cookies() + manual serialisation avoids string-replacement bugs.
 func rewriteCookies(w http.ResponseWriter, resp *http.Response, oldPath, newPath string) {

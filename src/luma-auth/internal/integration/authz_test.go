@@ -103,12 +103,12 @@ func TestAuthz_GetResourcePermission_ReturnsRow(t *testing.T) {
 
 	// Insert a resource permission directly.
 	testDB.Exec(bg(), `
-		INSERT INTO haven.resource_permissions
+		INSERT INTO auth.resource_permissions
 		    (resource_type, resource_id, subject_type, subject_id, effect, actions, granted_by)
 		VALUES ('page', $1, 'user', $2, 'allow', ARRAY['page:edit','page:read'], $3::UUID)
 	`, resourceID, userID, grantedBy) //nolint:errcheck
 	t.Cleanup(func() {
-		testDB.Exec(bg(), "DELETE FROM haven.resource_permissions WHERE resource_id = $1", resourceID) //nolint:errcheck
+		testDB.Exec(bg(), "DELETE FROM auth.resource_permissions WHERE resource_id = $1", resourceID) //nolint:errcheck
 	})
 
 	rp, err := repo.GetResourcePermission(bg(), userID, "page", resourceID)
@@ -135,12 +135,12 @@ func TestAuthz_GetResourcePermission_Expired_ReturnsNil(t *testing.T) {
 	resourceID := "page-" + randHex(4)
 
 	testDB.Exec(bg(), `
-		INSERT INTO haven.resource_permissions
+		INSERT INTO auth.resource_permissions
 		    (resource_type, resource_id, subject_type, subject_id, effect, actions, granted_by, expires_at)
 		VALUES ('page', $1, 'user', $2, 'allow', ARRAY['page:edit'], $3::UUID, NOW() - INTERVAL '1 hour')
 	`, resourceID, userID, grantedBy) //nolint:errcheck
 	t.Cleanup(func() {
-		testDB.Exec(bg(), "DELETE FROM haven.resource_permissions WHERE resource_id = $1", resourceID) //nolint:errcheck
+		testDB.Exec(bg(), "DELETE FROM auth.resource_permissions WHERE resource_id = $1", resourceID) //nolint:errcheck
 	})
 
 	rp, err := repo.GetResourcePermission(bg(), userID, "page", resourceID)
@@ -169,9 +169,9 @@ func TestAuthz_IsFeatureEnabled_ExplicitFalse(t *testing.T) {
 	repo := authzpg.New(testDB)
 
 	// Write a disabled feature directly to the instance row.
-	testDB.Exec(bg(), `UPDATE haven.instance SET features = features || '{"test_flag": false}'::jsonb`) //nolint:errcheck
+	testDB.Exec(bg(), `UPDATE auth.instance SET features = features || '{"test_flag": false}'::jsonb`) //nolint:errcheck
 	t.Cleanup(func() {
-		testDB.Exec(bg(), `UPDATE haven.instance SET features = features - 'test_flag'`) //nolint:errcheck
+		testDB.Exec(bg(), `UPDATE auth.instance SET features = features - 'test_flag'`) //nolint:errcheck
 	})
 
 	enabled, err := repo.IsFeatureEnabled(bg(), "test_flag")
@@ -187,9 +187,9 @@ func TestAuthz_IsFeatureEnabled_ExplicitFalse(t *testing.T) {
 func TestAuthz_IsFeatureEnabled_ExplicitTrue(t *testing.T) {
 	repo := authzpg.New(testDB)
 
-	testDB.Exec(bg(), `UPDATE haven.instance SET features = features || '{"test_flag2": true}'::jsonb`) //nolint:errcheck
+	testDB.Exec(bg(), `UPDATE auth.instance SET features = features || '{"test_flag2": true}'::jsonb`) //nolint:errcheck
 	t.Cleanup(func() {
-		testDB.Exec(bg(), `UPDATE haven.instance SET features = features - 'test_flag2'`) //nolint:errcheck
+		testDB.Exec(bg(), `UPDATE auth.instance SET features = features - 'test_flag2'`) //nolint:errcheck
 	})
 
 	enabled, err := repo.IsFeatureEnabled(bg(), "test_flag2")

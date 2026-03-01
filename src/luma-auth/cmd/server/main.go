@@ -1,4 +1,4 @@
-// Haven IAM server — dependency wiring and startup.
+// luma-auth server — dependency wiring and startup.
 // This file contains zero business logic. All logic lives in internal/.
 package main
 
@@ -142,7 +142,7 @@ func run() error {
 	r.Use(bootstrapGate.Middleware) // enforced on every request
 
 	// ── Health (always reachable, all bootstrap states) ───────────────────────
-	r.Get("/api/haven/health", func(w http.ResponseWriter, r *http.Request) {
+	r.Get("/api/auth/health", func(w http.ResponseWriter, r *http.Request) {
 		state, err := bootstrapRepo.Get(r.Context())
 		if err != nil {
 			httputil.WriteJSON(w, http.StatusServiceUnavailable, map[string]string{
@@ -165,13 +165,13 @@ func run() error {
 	// ── Auth (rate-limited on sensitive paths) ────────────────────────────────
 	r.Group(func(r chi.Router) {
 		r.Use(pkgmiddleware.IPRateLimit(rdb))
-		r.Post("/api/haven/auth/login", sessionHandler.Login)
-		r.Post("/api/haven/auth/refresh", sessionHandler.Refresh)
-		r.Post("/api/haven/auth/register", sessionHandler.Register)
+		r.Post("/api/auth/login", sessionHandler.Login)
+		r.Post("/api/auth/refresh", sessionHandler.Refresh)
+		r.Post("/api/auth/register", sessionHandler.Register)
 	})
 
 	// ── Invitation join (unauthenticated — accessed before account creation) ──
-	r.Get("/api/haven/join", invHandler.Join)
+	r.Get("/api/auth/join", invHandler.Join)
 
 	// ── Protected routes (Bearer token required) ──────────────────────────────
 	authMiddleware := pkgmiddleware.RequireAuth(cfg.JWTSigningKey, cfg.JWTSigningKeyPrev)
@@ -179,32 +179,32 @@ func run() error {
 	r.Group(func(r chi.Router) {
 		r.Use(authMiddleware)
 
-		r.Get("/api/haven/validate", sessionHandler.Validate)
+		r.Get("/api/auth/validate", sessionHandler.Validate)
 
-		r.Post("/api/haven/auth/logout", sessionHandler.Logout)
-		r.Post("/api/haven/auth/logout-all", sessionHandler.LogoutAll)
+		r.Post("/api/auth/logout", sessionHandler.Logout)
+		r.Post("/api/auth/logout-all", sessionHandler.LogoutAll)
 
-		r.Get("/api/haven/users/{id}", userHandler.GetUser)
-		r.Put("/api/haven/users/me/profile", userHandler.UpdateProfile)
-		r.Post("/api/haven/users/me/password", userHandler.ChangePassword)
-		r.Get("/api/haven/users/me/preferences", prefHandler.Get)
-		r.Patch("/api/haven/users/me/preferences", prefHandler.Update)
+		r.Get("/api/auth/users/{id}", userHandler.GetUser)
+		r.Put("/api/auth/users/me/profile", userHandler.UpdateProfile)
+		r.Post("/api/auth/users/me/password", userHandler.ChangePassword)
+		r.Get("/api/auth/users/me/preferences", prefHandler.Get)
+		r.Patch("/api/auth/users/me/preferences", prefHandler.Update)
 
-		r.Get("/api/haven/devices", deviceHandler.List)
-		r.Delete("/api/haven/devices/{id}", deviceHandler.Revoke)
+		r.Get("/api/auth/devices", deviceHandler.List)
+		r.Delete("/api/auth/devices/{id}", deviceHandler.Revoke)
 
-		r.Get("/api/haven/audit/me", auditHandler(auditRepo, false))
-		r.Get("/api/haven/audit", auditHandler(auditRepo, true))
+		r.Get("/api/auth/audit/me", auditHandler(auditRepo, false))
+		r.Get("/api/auth/audit", auditHandler(auditRepo, true))
 
-		r.Post("/api/haven/authz/check", authzHandler.Check)
+		r.Post("/api/auth/authz/check", authzHandler.Check)
 
-		r.Post("/api/haven/invitations", invHandler.Create)
-		r.Get("/api/haven/invitations", invHandler.List)
-		r.Delete("/api/haven/invitations/{id}", invHandler.Revoke)
+		r.Post("/api/auth/invitations", invHandler.Create)
+		r.Get("/api/auth/invitations", invHandler.List)
+		r.Delete("/api/auth/invitations/{id}", invHandler.Revoke)
 
-		r.Post("/api/haven/admin/users/{id}/lock", userHandler.LockUser)
-		r.Delete("/api/haven/admin/users/{id}/lock", userHandler.UnlockUser)
-		r.Delete("/api/haven/admin/users/{id}/sessions", sessionHandler.RevokeUserSessions)
+		r.Post("/api/auth/admin/users/{id}/lock", userHandler.LockUser)
+		r.Delete("/api/auth/admin/users/{id}/lock", userHandler.UnlockUser)
+		r.Delete("/api/auth/admin/users/{id}/sessions", sessionHandler.RevokeUserSessions)
 	})
 
 	// ── 10. Start server + graceful shutdown ──────────────────────────────────

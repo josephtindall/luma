@@ -31,7 +31,7 @@ func TestBootstrap_EnsureRow_Idempotent(t *testing.T) {
 	}
 	// Verify still exactly one row.
 	var count int
-	testDB.QueryRow(bg(), "SELECT COUNT(*) FROM haven.instance").Scan(&count) //nolint:errcheck
+	testDB.QueryRow(bg(), "SELECT COUNT(*) FROM auth.instance").Scan(&count) //nolint:errcheck
 	if count != 1 {
 		t.Errorf("row count = %d, want 1", count)
 	}
@@ -79,7 +79,7 @@ func TestBootstrap_TransitionToSetup(t *testing.T) {
 
 func TestBootstrap_TransitionToSetup_WhenAlreadySetup_Fails(t *testing.T) {
 	repo := bootstrappg.New(testDB)
-	testDB.Exec(bg(), "UPDATE haven.instance SET setup_state = 'setup'") //nolint:errcheck
+	testDB.Exec(bg(), "UPDATE auth.instance SET setup_state = 'setup'") //nolint:errcheck
 	t.Cleanup(func() { resetInstanceToUnclaimed(t) })
 
 	err := repo.TransitionToSetup(bg(), time.Now().Add(30*time.Minute))
@@ -90,7 +90,7 @@ func TestBootstrap_TransitionToSetup_WhenAlreadySetup_Fails(t *testing.T) {
 
 func TestBootstrap_IncrementTokenFailures(t *testing.T) {
 	repo := bootstrappg.New(testDB)
-	testDB.Exec(bg(), "UPDATE haven.instance SET setup_token_failures = 0") //nolint:errcheck
+	testDB.Exec(bg(), "UPDATE auth.instance SET setup_token_failures = 0") //nolint:errcheck
 	t.Cleanup(func() { resetInstanceToUnclaimed(t) })
 
 	count, err := repo.IncrementTokenFailures(bg())
@@ -110,7 +110,7 @@ func TestBootstrap_IncrementTokenFailures(t *testing.T) {
 func TestBootstrap_ResetToUnclaimed(t *testing.T) {
 	repo := bootstrappg.New(testDB)
 	// Put in SETUP state first.
-	testDB.Exec(bg(), "UPDATE haven.instance SET setup_state = 'setup', setup_token_failures = 5") //nolint:errcheck
+	testDB.Exec(bg(), "UPDATE auth.instance SET setup_state = 'setup', setup_token_failures = 5") //nolint:errcheck
 	t.Cleanup(func() { resetInstanceToUnclaimed(t) })
 
 	newHash := randHex(32)
@@ -135,17 +135,17 @@ func TestBootstrap_ConfigureInstance(t *testing.T) {
 	repo := bootstrappg.New(testDB)
 	orig, _ := repo.Get(bg())
 	t.Cleanup(func() {
-		testDB.Exec(bg(), "UPDATE haven.instance SET name=$1, locale=$2, timezone=$3", //nolint:errcheck
+		testDB.Exec(bg(), "UPDATE auth.instance SET name=$1, locale=$2, timezone=$3", //nolint:errcheck
 			orig.Name, orig.Locale, orig.Timezone)
 	})
 
-	if err := repo.ConfigureInstance(bg(), "My Haven", "en-GB", "Europe/London"); err != nil {
+	if err := repo.ConfigureInstance(bg(), "My Luma", "en-GB", "Europe/London"); err != nil {
 		t.Fatalf("ConfigureInstance: %v", err)
 	}
 
 	state, _ := repo.Get(bg())
-	if state.Name != "My Haven" {
-		t.Errorf("Name = %q, want My Haven", state.Name)
+	if state.Name != "My Luma" {
+		t.Errorf("Name = %q, want My Luma", state.Name)
 	}
 	if state.Locale != "en-GB" {
 		t.Errorf("Locale = %q, want en-GB", state.Locale)
@@ -158,14 +158,14 @@ func TestBootstrap_ConfigureInstance(t *testing.T) {
 func TestBootstrap_CreateOwnerAtomic(t *testing.T) {
 	repo := bootstrappg.New(testDB)
 	// Force SETUP state so the atomic operation can proceed.
-	testDB.Exec(bg(), `UPDATE haven.instance SET setup_state = 'setup', setup_token_hash = 'testhash', setup_token_expires_at = NOW() + INTERVAL '30 minutes'`) //nolint:errcheck
+	testDB.Exec(bg(), `UPDATE auth.instance SET setup_state = 'setup', setup_token_hash = 'testhash', setup_token_expires_at = NOW() + INTERVAL '30 minutes'`) //nolint:errcheck
 	t.Cleanup(func() { resetInstanceToUnclaimed(t) })
 
 	params := bootstrap.CreateOwnerParams{
 		Email:        uniqueEmail(),
 		DisplayName:  "Test Owner",
 		PasswordHash: "$argon2id$stub",
-		InstanceName: "Integration Test Haven",
+		InstanceName: "Integration Test Luma",
 		Locale:       "en-US",
 		Timezone:     "UTC",
 	}
@@ -178,7 +178,7 @@ func TestBootstrap_CreateOwnerAtomic(t *testing.T) {
 		t.Error("expected non-empty userID")
 	}
 	t.Cleanup(func() {
-		testDB.Exec(bg(), "DELETE FROM haven.users WHERE id = $1::UUID", userID) //nolint:errcheck
+		testDB.Exec(bg(), "DELETE FROM auth.users WHERE id = $1::UUID", userID) //nolint:errcheck
 	})
 
 	// Instance must now be ACTIVE with token cleared.

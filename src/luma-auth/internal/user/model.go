@@ -24,7 +24,7 @@ func (u *User) IsLocked() bool {
 }
 
 // PublicUser is the API-safe projection of a user. No password hash, no lock
-// details. Returned on GET /api/haven/users/{id} and in token validation.
+// details. Returned on GET /api/auth/users/{id} and in token validation.
 type PublicUser struct {
 	ID             string    `json:"id"`
 	Email          string    `json:"email"`
@@ -46,13 +46,13 @@ func (u *User) ToPublic() *PublicUser {
 	}
 }
 
-// UpdateProfileParams holds validated fields for PUT /api/haven/users/me/profile.
+// UpdateProfileParams holds validated fields for PUT /api/auth/users/me/profile.
 type UpdateProfileParams struct {
 	DisplayName string
 	Email       string
 }
 
-// ChangePasswordParams holds validated fields for POST /api/haven/users/me/password.
+// ChangePasswordParams holds validated fields for POST /api/auth/users/me/password.
 type ChangePasswordParams struct {
 	CurrentPassword string
 	NewPassword     string

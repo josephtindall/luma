@@ -47,7 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
         widget.userService.loadPreferences(),
       ]);
     } on AuthException {
-      // Per Haven's security model: never distinguish "email not found" from
+      // Per the auth service's security model: never distinguish "email not found" from
       // "wrong password" — always show the same generic message.
       setState(() => _error = 'Invalid credentials');
     } catch (_) {

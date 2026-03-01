@@ -13,12 +13,12 @@ type Resource struct {
 	VaultID string // UUID of the owning vault
 }
 
-// PermissionChecker calls Haven to check a permission.
+// PermissionChecker calls the auth service to check a permission.
 type PermissionChecker interface {
 	CheckPermission(ctx context.Context, req CheckRequest) (bool, error)
 }
 
-// CheckRequest is the body sent to Haven's /authz/check endpoint.
+// CheckRequest is the body sent to the auth service's /authz/check endpoint.
 type CheckRequest struct {
 	UserID       string `json:"user_id"`
 	Action       string `json:"action"`

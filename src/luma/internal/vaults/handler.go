@@ -7,7 +7,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/josephtindall/luma/internal/haven"
+	"github.com/josephtindall/luma/internal/auth"
 	"github.com/josephtindall/luma/pkg/authz"
 	"github.com/josephtindall/luma/pkg/errors"
 )
@@ -45,7 +45,7 @@ func (h *Handler) Routes() chi.Router {
 // enforced by the vault_members JOIN in the repository query — a user can only
 // see vaults they have been explicitly added to, so no RequireCan call is needed.
 func (h *Handler) listVaults(w http.ResponseWriter, r *http.Request) {
-	identity := haven.IdentityFromContext(r.Context())
+	identity := auth.IdentityFromContext(r.Context())
 	if identity == nil {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
@@ -62,7 +62,7 @@ func (h *Handler) listVaults(w http.ResponseWriter, r *http.Request) {
 }
 
 func (h *Handler) createVault(w http.ResponseWriter, r *http.Request) {
-	identity := haven.IdentityFromContext(r.Context())
+	identity := auth.IdentityFromContext(r.Context())
 	if identity == nil {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
@@ -139,7 +139,7 @@ func (h *Handler) updateVault(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) archiveVault(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	identity := haven.IdentityFromContext(r.Context())
+	identity := auth.IdentityFromContext(r.Context())
 	if identity == nil {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
@@ -184,7 +184,7 @@ func (h *Handler) listMembers(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) addMember(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	identity := haven.IdentityFromContext(r.Context())
+	identity := auth.IdentityFromContext(r.Context())
 	if identity == nil {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return

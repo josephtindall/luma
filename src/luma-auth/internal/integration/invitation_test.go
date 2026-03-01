@@ -26,7 +26,7 @@ func TestInvitation_Create_And_GetByHash(t *testing.T) {
 		ExpiresAt: time.Now().Add(48 * time.Hour),
 	}
 	t.Cleanup(func() {
-		testDB.Exec(bg(), "DELETE FROM haven.invitations WHERE token_hash = $1", hash) //nolint:errcheck
+		testDB.Exec(bg(), "DELETE FROM auth.invitations WHERE token_hash = $1", hash) //nolint:errcheck
 	})
 
 	if err := repo.Create(bg(), inv); err != nil {
@@ -93,7 +93,7 @@ func TestInvitation_List_ReturnsPendingOnly(t *testing.T) {
 	insertPendingInvitation(t, inviterID)
 	insertPendingInvitation(t, inviterID)
 	invID3, _ := insertPendingInvitation(t, inviterID)
-	testDB.Exec(bg(), "UPDATE haven.invitations SET status = 'accepted' WHERE id = $1::UUID", invID3) //nolint:errcheck
+	testDB.Exec(bg(), "UPDATE auth.invitations SET status = 'accepted' WHERE id = $1::UUID", invID3) //nolint:errcheck
 
 	all, err := repo.List(bg())
 	if err != nil {
@@ -160,12 +160,12 @@ func TestInvitation_Expired_IsNotValid(t *testing.T) {
 	hash := randHex(32)
 	var invID string
 	testDB.QueryRow(bg(), `
-		INSERT INTO haven.invitations (inviter_id, token_hash, status, expires_at)
+		INSERT INTO auth.invitations (inviter_id, token_hash, status, expires_at)
 		VALUES ($1::UUID, $2, 'pending', NOW() - INTERVAL '1 hour')
 		RETURNING id::TEXT
 	`, inviterID, hash).Scan(&invID) //nolint:errcheck
 	t.Cleanup(func() {
-		testDB.Exec(bg(), "DELETE FROM haven.invitations WHERE id = $1::UUID", invID) //nolint:errcheck
+		testDB.Exec(bg(), "DELETE FROM auth.invitations WHERE id = $1::UUID", invID) //nolint:errcheck
 	})
 
 	got, err := repo.GetByID(bg(), invID)

@@ -9,7 +9,7 @@ import (
 	pkgmiddleware "github.com/josephtindall/luma-auth/pkg/middleware"
 )
 
-// Handler serves POST /api/haven/authz/check.
+// Handler serves POST /api/auth/authz/check.
 type Handler struct {
 	authz Authorizer
 	audit audit.Service
@@ -20,7 +20,7 @@ func NewHandler(authz Authorizer, auditSvc audit.Service) *Handler {
 	return &Handler{authz: authz, audit: auditSvc}
 }
 
-// Check handles POST /api/haven/authz/check.
+// Check handles POST /api/auth/authz/check.
 // Called by Luma before every protected action.
 func (h *Handler) Check(w http.ResponseWriter, r *http.Request) {
 	var req CheckRequest

@@ -1,13 +1,13 @@
 -- Migration 0001: core tables
--- All tables live in the haven schema.
+-- All tables live in the auth schema.
 -- The DB user has access only to this schema.
 
-CREATE SCHEMA IF NOT EXISTS haven;
+CREATE SCHEMA IF NOT EXISTS auth;
 
 -- ─── Instance ────────────────────────────────────────────────────────────────
 -- Exactly one row. setup_state drives the bootstrap state machine.
 
-CREATE TABLE haven.instance
+CREATE TABLE auth.instance
 (
     id                     UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
     name                   TEXT        NOT NULL,
@@ -26,7 +26,7 @@ CREATE TABLE haven.instance
 
 -- ─── Users ───────────────────────────────────────────────────────────────────
 
-CREATE TABLE haven.users
+CREATE TABLE auth.users
 (
     id                    UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
     email                 TEXT        NOT NULL UNIQUE,
@@ -43,10 +43,10 @@ CREATE TABLE haven.users
 
 -- ─── Devices ─────────────────────────────────────────────────────────────────
 
-CREATE TABLE haven.devices
+CREATE TABLE auth.devices
 (
     id           UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
-    user_id      UUID        NOT NULL REFERENCES haven.users (id) ON DELETE CASCADE,
+    user_id      UUID        NOT NULL REFERENCES auth.users (id) ON DELETE CASCADE,
     name         TEXT        NOT NULL,
     platform     TEXT        NOT NULL, -- web | ios | android | agent
     fingerprint  TEXT        NOT NULL,
@@ -57,16 +57,16 @@ CREATE TABLE haven.devices
     CONSTRAINT platform_values CHECK (platform IN ('web', 'ios', 'android', 'agent'))
 );
 
-CREATE INDEX idx_devices_user ON haven.devices (user_id);
+CREATE INDEX idx_devices_user ON auth.devices (user_id);
 
 -- ─── Refresh Tokens ──────────────────────────────────────────────────────────
 -- Raw token NEVER stored — only the SHA-256 hash.
 -- consumed_at + revoked_at support reuse detection and explicit revocation.
 
-CREATE TABLE haven.refresh_tokens
+CREATE TABLE auth.refresh_tokens
 (
     id          UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
-    device_id   UUID        NOT NULL REFERENCES haven.devices (id) ON DELETE CASCADE,
+    device_id   UUID        NOT NULL REFERENCES auth.devices (id) ON DELETE CASCADE,
     token_hash  TEXT        NOT NULL UNIQUE, -- SHA-256(raw_token), hex-encoded
     expires_at  TIMESTAMPTZ NOT NULL,
     consumed_at TIMESTAMPTZ,
@@ -74,17 +74,17 @@ CREATE TABLE haven.refresh_tokens
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_refresh_device ON haven.refresh_tokens (device_id);
+CREATE INDEX idx_refresh_device ON auth.refresh_tokens (device_id);
 
 -- ─── Audit Log ───────────────────────────────────────────────────────────────
 -- IMMUTABLE: the application DB user has INSERT + SELECT only.
 -- No UPDATE, no DELETE — ever. Enforced at the DB grant level below.
 
-CREATE TABLE haven.audit_log
+CREATE TABLE auth.audit_log
 (
     id          BIGSERIAL PRIMARY KEY,
-    user_id     UUID REFERENCES haven.users (id),
-    device_id   UUID REFERENCES haven.devices (id),
+    user_id     UUID REFERENCES auth.users (id),
+    device_id   UUID REFERENCES auth.devices (id),
     event       TEXT        NOT NULL,
     ip_address  INET,
     user_agent  TEXT,
@@ -92,21 +92,21 @@ CREATE TABLE haven.audit_log
     occurred_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE INDEX idx_audit_user ON haven.audit_log (user_id);
-CREATE INDEX idx_audit_occurred ON haven.audit_log (occurred_at DESC);
+CREATE INDEX idx_audit_user ON auth.audit_log (user_id);
+CREATE INDEX idx_audit_occurred ON auth.audit_log (occurred_at DESC);
 
 -- Grant INSERT + SELECT only — no UPDATE, no DELETE.
--- Replace 'haven_app' with the actual application DB role name.
+-- Replace 'auth_app' with the actual application DB role name.
 DO
 $$
 BEGIN
     IF
-EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'haven_app') THEN
+EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'auth_app') THEN
         GRANT
 SELECT,
 INSERT
-ON haven.audit_log TO haven_app;
-REVOKE UPDATE, DELETE ON haven.audit_log FROM haven_app;
+ON auth.audit_log TO auth_app;
+REVOKE UPDATE, DELETE ON auth.audit_log FROM auth_app;
 END IF;
 END
 $$;

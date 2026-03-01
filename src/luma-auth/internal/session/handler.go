@@ -14,7 +14,7 @@ import (
 
 // RefreshCookieName is the name of the HttpOnly cookie used to store
 // the refresh token. Shared with bootstrap/handler.go for initial token issuance.
-const RefreshCookieName = "haven_refresh"
+const RefreshCookieName = "auth_refresh"
 
 // Handler serves auth endpoints.
 type Handler struct {
@@ -27,7 +27,7 @@ func NewHandler(svc *Service, secureCookie bool) *Handler {
 	return &Handler{svc: svc, secureCookie: secureCookie}
 }
 
-// Register handles POST /api/haven/auth/register.
+// Register handles POST /api/auth/register.
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		InvitationID string `json:"invitation_id"`
@@ -70,7 +70,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Login handles POST /api/haven/auth/login.
+// Login handles POST /api/auth/login.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req struct {
 		Email       string `json:"email"`
@@ -104,7 +104,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Refresh handles POST /api/haven/auth/refresh.
+// Refresh handles POST /api/auth/refresh.
 // Reads the refresh token from the HttpOnly cookie (web) or Authorization header (mobile).
 func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	raw := refreshTokenFromRequest(r)
@@ -125,7 +125,7 @@ func (h *Handler) Refresh(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// Logout handles POST /api/haven/auth/logout.
+// Logout handles POST /api/auth/logout.
 func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
@@ -140,7 +140,7 @@ func (h *Handler) Logout(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// LogoutAll handles POST /api/haven/auth/logout-all.
+// LogoutAll handles POST /api/auth/logout-all.
 func (h *Handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
@@ -155,7 +155,7 @@ func (h *Handler) LogoutAll(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Validate handles GET /api/haven/validate — called by Luma on every request.
+// Validate handles GET /api/auth/validate — called by Luma on every request.
 func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
@@ -178,7 +178,7 @@ func (h *Handler) Validate(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// RevokeUserSessions handles DELETE /api/haven/admin/users/{id}/sessions — owner only.
+// RevokeUserSessions handles DELETE /api/auth/admin/users/{id}/sessions — owner only.
 func (h *Handler) RevokeUserSessions(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
@@ -202,7 +202,7 @@ func (h *Handler) setRefreshCookie(w http.ResponseWriter, raw string, expires ti
 	http.SetCookie(w, &http.Cookie{
 		Name:     RefreshCookieName,
 		Value:    raw,
-		Path:     "/api/haven/auth/refresh",
+		Path:     "/api/auth/refresh",
 		Expires:  expires,
 		MaxAge:   int(time.Until(expires).Seconds()),
 		HttpOnly: true,
@@ -215,7 +215,7 @@ func (h *Handler) clearRefreshCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     RefreshCookieName,
 		Value:    "",
-		Path:     "/api/haven/auth/refresh",
+		Path:     "/api/auth/refresh",
 		MaxAge:   -1,
 		HttpOnly: true,
 		Secure:   h.secureCookie,

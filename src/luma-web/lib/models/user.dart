@@ -90,7 +90,7 @@ class Device {
   });
 
   factory Device.fromJson(Map<String, dynamic> json) {
-    // Haven's Device struct has no json tags, so Go marshals with
+    // The auth service's Device struct has no json tags, so Go marshals with
     // PascalCase field names (Name, Platform, UserAgent, etc.).
     // We check both PascalCase and snake_case for robustness.
     return Device(
@@ -123,7 +123,7 @@ class AuditEvent {
   });
 
   factory AuditEvent.fromJson(Map<String, dynamic> json) {
-    // Haven's audit.Row struct has no json tags, so Go marshals with
+    // The auth service's audit.Row struct has no json tags, so Go marshals with
     // PascalCase field names (Event, IPAddress, OccurredAt, etc.).
     final meta = _get(json, 'Metadata', 'metadata');
     return AuditEvent(

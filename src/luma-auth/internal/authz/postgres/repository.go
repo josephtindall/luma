@@ -25,10 +25,10 @@ func New(db *pgxpool.Pool) *Repository {
 func (r *Repository) GetInstanceRole(ctx context.Context, userID string) ([]authz.PolicyStatement, error) {
 	const q = `
 		SELECT ps.effect, ps.actions, ps.resource_types
-		FROM haven.users u
-		JOIN haven.roles ro ON u.instance_role_id = ro.id
-		JOIN haven.role_policies rp ON ro.id = rp.role_id
-		JOIN haven.policy_statements ps ON rp.policy_id = ps.policy_id
+		FROM auth.users u
+		JOIN auth.roles ro ON u.instance_role_id = ro.id
+		JOIN auth.role_policies rp ON ro.id = rp.role_id
+		JOIN auth.policy_statements ps ON rp.policy_id = ps.policy_id
 		WHERE u.id = $1
 		ORDER BY ps.position`
 
@@ -63,7 +63,7 @@ func (r *Repository) GetVaultRole(ctx context.Context, userID, vaultID string) (
 func (r *Repository) GetResourcePermission(ctx context.Context, userID, resourceType, resourceID string) (*authz.ResourcePermission, error) {
 	const q = `
 		SELECT effect, actions
-		FROM haven.resource_permissions
+		FROM auth.resource_permissions
 		WHERE subject_type = 'user'
 		  AND subject_id   = $1
 		  AND resource_type = $2
@@ -87,7 +87,7 @@ func (r *Repository) GetResourcePermission(ctx context.Context, userID, resource
 func (r *Repository) IsFeatureEnabled(ctx context.Context, feature string) (bool, error) {
 	const q = `
 		SELECT COALESCE((features->>$1)::boolean, true)
-		FROM haven.instance
+		FROM auth.instance
 		LIMIT 1`
 
 	var enabled bool

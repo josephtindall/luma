@@ -19,7 +19,7 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-// Get handles GET /api/haven/users/me/preferences.
+// Get handles GET /api/auth/users/me/preferences.
 func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
@@ -34,7 +34,7 @@ func (h *Handler) Get(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, p)
 }
 
-// Update handles PATCH /api/haven/users/me/preferences.
+// Update handles PATCH /api/auth/users/me/preferences.
 func (h *Handler) Update(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {

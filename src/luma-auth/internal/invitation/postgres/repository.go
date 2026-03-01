@@ -25,7 +25,7 @@ func New(db *pgxpool.Pool) *Repository {
 
 func (r *Repository) Create(ctx context.Context, inv *invitation.Invitation) error {
 	const q = `
-		INSERT INTO haven.invitations
+		INSERT INTO auth.invitations
 		    (inviter_id, email, note, token_hash, status, expires_at)
 		VALUES ($1, NULLIF($2,''), NULLIF($3,''), $4, $5, $6)
 		RETURNING id, created_at`
@@ -44,7 +44,7 @@ func (r *Repository) GetByHash(ctx context.Context, tokenHash string) (*invitati
 	const q = `
 		SELECT id, inviter_id, email, note, token_hash, status,
 		       expires_at, accepted_at, revoked_at, created_at
-		FROM haven.invitations
+		FROM auth.invitations
 		WHERE token_hash = $1`
 
 	inv, err := scan(r.db.QueryRow(ctx, q, tokenHash))
@@ -61,7 +61,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*invitation.Invita
 	const q = `
 		SELECT id, inviter_id, email, note, token_hash, status,
 		       expires_at, accepted_at, revoked_at, created_at
-		FROM haven.invitations
+		FROM auth.invitations
 		WHERE id = $1`
 
 	inv, err := scan(r.db.QueryRow(ctx, q, id))
@@ -78,7 +78,7 @@ func (r *Repository) List(ctx context.Context) ([]*invitation.Invitation, error)
 	const q = `
 		SELECT id, inviter_id, email, note, token_hash, status,
 		       expires_at, accepted_at, revoked_at, created_at
-		FROM haven.invitations
+		FROM auth.invitations
 		WHERE status = 'pending'
 		ORDER BY created_at DESC`
 
@@ -101,7 +101,7 @@ func (r *Repository) List(ctx context.Context) ([]*invitation.Invitation, error)
 
 func (r *Repository) Accept(ctx context.Context, id string) error {
 	const q = `
-		UPDATE haven.invitations
+		UPDATE auth.invitations
 		SET status = 'accepted', accepted_at = NOW()
 		WHERE id = $1`
 	_, err := r.db.Exec(ctx, q, id)
@@ -110,7 +110,7 @@ func (r *Repository) Accept(ctx context.Context, id string) error {
 
 func (r *Repository) Revoke(ctx context.Context, id string) error {
 	const q = `
-		UPDATE haven.invitations
+		UPDATE auth.invitations
 		SET status = 'revoked', revoked_at = NOW()
 		WHERE id = $1`
 	_, err := r.db.Exec(ctx, q, id)

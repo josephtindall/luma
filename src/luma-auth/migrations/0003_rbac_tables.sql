@@ -5,20 +5,20 @@
 
 -- ─── Roles ───────────────────────────────────────────────────────────────────
 
-CREATE TABLE haven.roles
+CREATE TABLE auth.roles
 (
     id             TEXT PRIMARY KEY,     -- e.g. 'builtin:instance-owner'
     name           TEXT        NOT NULL,
     description    TEXT,
     scope          TEXT        NOT NULL, -- instance | vault
     is_builtin     BOOLEAN     NOT NULL DEFAULT false,
-    parent_role_id TEXT REFERENCES haven.roles (id),
+    parent_role_id TEXT REFERENCES auth.roles (id),
     created_by     UUID,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     CONSTRAINT role_scope_values CHECK (scope IN ('instance', 'vault'))
 );
 
-INSERT INTO haven.roles (id, name, scope, is_builtin)
+INSERT INTO auth.roles (id, name, scope, is_builtin)
 VALUES ('builtin:instance-owner', 'Owner', 'instance', true),
        ('builtin:instance-member', 'Member', 'instance', true),
        ('builtin:vault-admin', 'Vault Admin', 'vault', true),
@@ -27,7 +27,7 @@ VALUES ('builtin:instance-owner', 'Owner', 'instance', true),
 
 -- ─── Policies ────────────────────────────────────────────────────────────────
 
-CREATE TABLE haven.policies
+CREATE TABLE auth.policies
 (
     id          UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
     name        TEXT        NOT NULL UNIQUE,
@@ -43,10 +43,10 @@ CREATE TABLE haven.policies
 -- resource_types: e.g. '{page,task}'
 -- conditions: future extensibility (always '[]' for now)
 
-CREATE TABLE haven.policy_statements
+CREATE TABLE auth.policy_statements
 (
     id             UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-    policy_id      UUID    NOT NULL REFERENCES haven.policies (id) ON DELETE CASCADE,
+    policy_id      UUID    NOT NULL REFERENCES auth.policies (id) ON DELETE CASCADE,
     effect         TEXT    NOT NULL,
     actions        TEXT[]      NOT NULL,
     resource_types TEXT[]      NOT NULL,
@@ -57,10 +57,10 @@ CREATE TABLE haven.policy_statements
 
 -- ─── Role–Policy Bindings ─────────────────────────────────────────────────────
 
-CREATE TABLE haven.role_policies
+CREATE TABLE auth.role_policies
 (
-    role_id   TEXT NOT NULL REFERENCES haven.roles (id) ON DELETE CASCADE,
-    policy_id UUID NOT NULL REFERENCES haven.policies (id) ON DELETE CASCADE,
+    role_id   TEXT NOT NULL REFERENCES auth.roles (id) ON DELETE CASCADE,
+    policy_id UUID NOT NULL REFERENCES auth.policies (id) ON DELETE CASCADE,
     PRIMARY KEY (role_id, policy_id)
 );
 
@@ -68,7 +68,7 @@ CREATE TABLE haven.role_policies
 -- Most-specific dimension: overrides vault and instance role policies.
 -- subject_type: 'user' | 'role'
 
-CREATE TABLE haven.resource_permissions
+CREATE TABLE auth.resource_permissions
 (
     id            UUID PRIMARY KEY     DEFAULT gen_random_uuid(),
     resource_type TEXT        NOT NULL,
@@ -85,14 +85,14 @@ CREATE TABLE haven.resource_permissions
 );
 
 CREATE INDEX idx_resource_perms ON
-    haven.resource_permissions (resource_type, resource_id, subject_type, subject_id);
+    auth.resource_permissions (resource_type, resource_id, subject_type, subject_id);
 
 -- ─── Seed: built-in policies ─────────────────────────────────────────────────
 -- Owner: allow all actions on all resource types.
 -- Member: allow reading own audit log; own account management.
 -- Vault roles: scoped content actions — policies attached at vault-membership time.
 
-INSERT INTO haven.policies (id, name, description, is_builtin)
+INSERT INTO auth.policies (id, name, description, is_builtin)
 VALUES ('00000000-0000-0000-0000-000000000001', 'owner-all', 'Allows all actions on all resources', true),
        ('00000000-0000-0000-0000-000000000002', 'member-base', 'Base permissions for instance members', true),
        ('00000000-0000-0000-0000-000000000003', 'vault-admin-all', 'All content and membership actions in a vault',
@@ -100,7 +100,7 @@ VALUES ('00000000-0000-0000-0000-000000000001', 'owner-all', 'Allows all actions
        ('00000000-0000-0000-0000-000000000004', 'vault-editor', 'Create, edit, delete content in a vault', true),
        ('00000000-0000-0000-0000-000000000005', 'vault-viewer', 'Read-only access to vault content', true);
 
-INSERT INTO haven.policy_statements (policy_id, effect, actions, resource_types)
+INSERT INTO auth.policy_statements (policy_id, effect, actions, resource_types)
 VALUES
     -- owner-all: wildcard via explicit list of every canonical action
     ('00000000-0000-0000-0000-000000000001', 'allow',
@@ -152,7 +152,7 @@ VALUES
      ARRAY['page:read', 'task:read', 'flow:read', 'vault:read'],
      ARRAY['page', 'task', 'flow', 'vault']);
 
-INSERT INTO haven.role_policies (role_id, policy_id)
+INSERT INTO auth.role_policies (role_id, policy_id)
 VALUES ('builtin:instance-owner', '00000000-0000-0000-0000-000000000001'),
        ('builtin:instance-member', '00000000-0000-0000-0000-000000000002'),
        ('builtin:vault-admin', '00000000-0000-0000-0000-000000000003'),

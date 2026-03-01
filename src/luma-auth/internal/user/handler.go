@@ -28,7 +28,7 @@ func NewHandler(svc *Service, sessions SessionTerminator) *Handler {
 	return &Handler{svc: svc, sessions: sessions}
 }
 
-// GetUser handles GET /api/haven/users/{id}.
+// GetUser handles GET /api/auth/users/{id}.
 func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	u, err := h.svc.GetByID(r.Context(), id)
@@ -39,7 +39,7 @@ func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, u)
 }
 
-// UpdateProfile handles PUT /api/haven/users/me/profile.
+// UpdateProfile handles PUT /api/auth/users/me/profile.
 func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
@@ -67,7 +67,7 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// ChangePassword handles POST /api/haven/users/me/password.
+// ChangePassword handles POST /api/auth/users/me/password.
 func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
@@ -99,7 +99,7 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// LockUser handles POST /api/haven/admin/users/{id}/lock — owner only.
+// LockUser handles POST /api/auth/admin/users/{id}/lock — owner only.
 func (h *Handler) LockUser(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
@@ -122,7 +122,7 @@ func (h *Handler) LockUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// UnlockUser handles DELETE /api/haven/admin/users/{id}/lock — owner only.
+// UnlockUser handles DELETE /api/auth/admin/users/{id}/lock — owner only.
 func (h *Handler) UnlockUser(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {

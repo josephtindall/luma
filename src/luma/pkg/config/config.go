@@ -10,7 +10,7 @@ import (
 type Config struct {
 	DBUrl       string
 	RedisUrl    string
-	HavenUrl    string
+	AuthURL    string
 	PublicUrl   string
 	Port        int
 	LogLevel    string
@@ -24,7 +24,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		DBUrl:       os.Getenv("LUMA_DB_URL"),
 		RedisUrl:    os.Getenv("LUMA_REDIS_URL"),
-		HavenUrl:    os.Getenv("LUMA_HAVEN_URL"),
+		AuthURL:    os.Getenv("LUMA_AUTH_URL"),
 		PublicUrl:   os.Getenv("LUMA_PUBLIC_URL"),
 		LogLevel:    envOr("LUMA_LOG_LEVEL", "info"),
 		MaxUploadMB: envIntOr("LUMA_MAX_UPLOAD_MB", 100),
@@ -39,8 +39,8 @@ func Load() (*Config, error) {
 	if cfg.RedisUrl == "" {
 		return nil, fmt.Errorf("config: LUMA_REDIS_URL is required")
 	}
-	if cfg.HavenUrl == "" {
-		return nil, fmt.Errorf("config: LUMA_HAVEN_URL is required")
+	if cfg.AuthURL == "" {
+		return nil, fmt.Errorf("config: LUMA_AUTH_URL is required")
 	}
 	if cfg.PublicUrl == "" {
 		return nil, fmt.Errorf("config: LUMA_PUBLIC_URL is required")

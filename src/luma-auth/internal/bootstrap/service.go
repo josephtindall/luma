@@ -26,7 +26,7 @@ const (
 	setupTokenLifetime = 2 * time.Hour    // UNCLAIMED token validity
 	setupWindowTimeout = 30 * time.Minute // SETUP state window after token verified
 	maxTokenFailures   = 3
-	minPasswordLen     = 12
+	minPasswordLen     = 8
 )
 
 // Service handles all bootstrap business logic.

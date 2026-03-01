@@ -22,7 +22,7 @@ func TestUser_Create_And_GetByID(t *testing.T) {
 		InstanceRoleID: "builtin:instance-member",
 	}
 	t.Cleanup(func() {
-		testDB.Exec(bg(), "DELETE FROM haven.users WHERE id = $1::UUID", id) //nolint:errcheck
+		testDB.Exec(bg(), "DELETE FROM auth.users WHERE id = $1::UUID", id) //nolint:errcheck
 	})
 
 	if err := repo.Create(bg(), u); err != nil {
@@ -68,7 +68,7 @@ func TestUser_GetByEmail(t *testing.T) {
 
 func TestUser_GetByEmail_NotFound(t *testing.T) {
 	repo := userpg.New(testDB)
-	_, err := repo.GetByEmail(bg(), "nobody@haven.invalid")
+	_, err := repo.GetByEmail(bg(), "nobody@test.invalid")
 	if !errors.Is(err, pkgerrors.ErrUserNotFound) {
 		t.Errorf("expected ErrUserNotFound, got %v", err)
 	}
@@ -215,7 +215,7 @@ func TestUser_RegisterAtomic_CreatesUserAndAcceptsInvitation(t *testing.T) {
 		t.Error("expected non-empty userID")
 	}
 	t.Cleanup(func() {
-		testDB.Exec(bg(), "DELETE FROM haven.users WHERE id = $1::UUID", userID) //nolint:errcheck
+		testDB.Exec(bg(), "DELETE FROM auth.users WHERE id = $1::UUID", userID) //nolint:errcheck
 	})
 
 	// User must be retrievable.
@@ -232,14 +232,14 @@ func TestUser_RegisterAtomic_CreatesUserAndAcceptsInvitation(t *testing.T) {
 
 	// Invitation must be marked accepted.
 	var status string
-	testDB.QueryRow(bg(), "SELECT status FROM haven.invitations WHERE id = $1::UUID", invID).Scan(&status) //nolint:errcheck
+	testDB.QueryRow(bg(), "SELECT status FROM auth.invitations WHERE id = $1::UUID", invID).Scan(&status) //nolint:errcheck
 	if status != "accepted" {
 		t.Errorf("invitation status = %q, want accepted", status)
 	}
 
 	// user_preferences row must exist.
 	var prefCount int
-	testDB.QueryRow(bg(), "SELECT COUNT(*) FROM haven.user_preferences WHERE user_id = $1::UUID", userID).Scan(&prefCount) //nolint:errcheck
+	testDB.QueryRow(bg(), "SELECT COUNT(*) FROM auth.user_preferences WHERE user_id = $1::UUID", userID).Scan(&prefCount) //nolint:errcheck
 	if prefCount != 1 {
 		t.Errorf("user_preferences count = %d, want 1", prefCount)
 	}
@@ -251,7 +251,7 @@ func TestUser_RegisterAtomic_AlreadyAcceptedInvitation_ErrTokenInvalid(t *testin
 	invID, _ := insertPendingInvitation(t, inviterID)
 
 	// Pre-accept the invitation.
-	testDB.Exec(bg(), "UPDATE haven.invitations SET status = 'accepted' WHERE id = $1::UUID", invID) //nolint:errcheck
+	testDB.Exec(bg(), "UPDATE auth.invitations SET status = 'accepted' WHERE id = $1::UUID", invID) //nolint:errcheck
 
 	_, err := repo.RegisterAtomic(bg(), user.RegisterParams{
 		Email:        uniqueEmail(),

@@ -20,7 +20,7 @@ class AuthService extends ChangeNotifier {
   String get setupState => _setupState;
   bool get isInitialized => _isInitialized;
 
-  /// Called from main.dart before runApp. Probes Haven state and attempts
+  /// Called from main.dart before runApp. Probes auth service state and attempts
   /// silent token refresh if the instance is active.
   Future<void> initialize() async {
     try {

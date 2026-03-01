@@ -109,7 +109,7 @@ func TestSession_Consume_RevokedToken_ReturnsError(t *testing.T) {
 	repo.Create(bg(), tok) //nolint:errcheck
 
 	// Revoke the token first.
-	testDB.Exec(bg(), "UPDATE haven.refresh_tokens SET revoked_at = NOW() WHERE id = $1::UUID", tok.ID) //nolint:errcheck
+	testDB.Exec(bg(), "UPDATE auth.refresh_tokens SET revoked_at = NOW() WHERE id = $1::UUID", tok.ID) //nolint:errcheck
 
 	err := repo.Consume(bg(), tok.ID)
 	if !errors.Is(err, pkgerrors.ErrTokenInvalid) {

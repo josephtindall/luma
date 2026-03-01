@@ -1,4 +1,4 @@
-// haven-cli — operational and administrative CLI for Haven.
+// luma-auth-cli — operational and administrative CLI for luma-auth.
 // Provides unattended setup, secret generation, health checks, and factory reset.
 package main
 
@@ -54,8 +54,8 @@ func run(args []string) error {
 	}
 }
 
-// setupUnattended reads HAVEN_OWNER_* env vars and drives the three-step setup
-// API non-interactively. HAVEN_UNATTENDED=true must be set explicitly to guard
+// setupUnattended reads AUTH_OWNER_* env vars and drives the three-step setup
+// API non-interactively. AUTH_UNATTENDED=true must be set explicitly to guard
 // against accidental headless runs.
 func setupUnattended(args []string) error {
 	var envFile, addr string
@@ -74,43 +74,43 @@ func setupUnattended(args []string) error {
 		}
 	}
 
-	if os.Getenv("HAVEN_UNATTENDED") != "true" {
-		return fmt.Errorf("setup: HAVEN_UNATTENDED=true must be set to confirm unattended mode")
+	if os.Getenv("AUTH_UNATTENDED") != "true" {
+		return fmt.Errorf("setup: AUTH_UNATTENDED=true must be set to confirm unattended mode")
 	}
 
-	ownerEmail := os.Getenv("HAVEN_OWNER_EMAIL")
-	ownerName := os.Getenv("HAVEN_OWNER_NAME")
-	ownerPassword := os.Getenv("HAVEN_OWNER_PASSWORD")
-	instanceName := os.Getenv("HAVEN_INSTANCE_NAME")
-	setupToken := os.Getenv("HAVEN_SETUP_TOKEN")
+	ownerEmail := os.Getenv("AUTH_OWNER_EMAIL")
+	ownerName := os.Getenv("AUTH_OWNER_NAME")
+	ownerPassword := os.Getenv("AUTH_OWNER_PASSWORD")
+	instanceName := os.Getenv("AUTH_INSTANCE_NAME")
+	setupToken := os.Getenv("AUTH_SETUP_TOKEN")
 
 	var missing []string
 	if ownerEmail == "" {
-		missing = append(missing, "HAVEN_OWNER_EMAIL")
+		missing = append(missing, "AUTH_OWNER_EMAIL")
 	}
 	if ownerName == "" {
-		missing = append(missing, "HAVEN_OWNER_NAME")
+		missing = append(missing, "AUTH_OWNER_NAME")
 	}
 	if ownerPassword == "" {
-		missing = append(missing, "HAVEN_OWNER_PASSWORD")
+		missing = append(missing, "AUTH_OWNER_PASSWORD")
 	}
 	if instanceName == "" {
-		missing = append(missing, "HAVEN_INSTANCE_NAME")
+		missing = append(missing, "AUTH_INSTANCE_NAME")
 	}
 	if setupToken == "" {
-		missing = append(missing, "HAVEN_SETUP_TOKEN")
+		missing = append(missing, "AUTH_SETUP_TOKEN")
 	}
 	if len(missing) > 0 {
 		return fmt.Errorf("setup: missing required environment variables: %s", strings.Join(missing, ", "))
 	}
 
-	locale := getEnvOrDefault("HAVEN_INSTANCE_LOCALE", "en-US")
-	timezone := getEnvOrDefault("HAVEN_INSTANCE_TIMEZONE", "UTC")
+	locale := getEnvOrDefault("AUTH_INSTANCE_LOCALE", "en-US")
+	timezone := getEnvOrDefault("AUTH_INSTANCE_TIMEZONE", "UTC")
 	if addr == "" {
-		addr = getEnvOrDefault("HAVEN_ADDR", "http://127.0.0.1:8080")
+		addr = getEnvOrDefault("AUTH_ADDR", "http://127.0.0.1:8080")
 	}
 
-	fmt.Println("Haven unattended setup — starting...")
+	fmt.Println("Auth service unattended setup — starting...")
 
 	// Step 1: verify the setup token — transitions UNCLAIMED → SETUP.
 	fmt.Println("  [1/3] Verifying setup token...")
@@ -145,14 +145,14 @@ func setupUnattended(args []string) error {
 	}
 
 	fmt.Println()
-	fmt.Println("Haven setup complete.")
+	fmt.Println("Auth service setup complete.")
 	fmt.Printf("  Instance:    %s\n", instanceName)
 	fmt.Printf("  Owner email: %s\n", ownerEmail)
 	fmt.Printf("  User ID:     %s\n", ownerResp.UserID)
 	return nil
 }
 
-// factoryReset drops and recreates the haven schema, resetting the instance to
+// factoryReset drops and recreates the auth schema, resetting the instance to
 // UNCLAIMED state. The next server start re-applies all migrations automatically.
 func factoryReset(args []string) error {
 	confirmed := false
@@ -163,18 +163,18 @@ func factoryReset(args []string) error {
 	}
 	if !confirmed {
 		return fmt.Errorf("factory-reset: --confirm-destroy-all-data is required\n" +
-			"  This permanently deletes all Haven data. There is no undo.")
+			"  This permanently deletes all auth data. There is no undo.")
 	}
 
-	host := getEnvOrDefault("HAVEN_DB_HOST", "localhost")
-	port := getEnvOrDefault("HAVEN_DB_PORT", "5432")
-	user := getEnvOrDefault("HAVEN_DB_USER", "haven_app")
-	pass := os.Getenv("HAVEN_DB_PASS")
-	name := getEnvOrDefault("HAVEN_DB_NAME", "haven")
-	sslmode := getEnvOrDefault("HAVEN_DB_SSL_MODE", "prefer")
+	host := getEnvOrDefault("AUTH_DB_HOST", "localhost")
+	port := getEnvOrDefault("AUTH_DB_PORT", "5432")
+	user := getEnvOrDefault("AUTH_DB_USER", "auth_app")
+	pass := os.Getenv("LUMA_AUTH_DB_PASS")
+	name := getEnvOrDefault("AUTH_DB_NAME", "auth")
+	sslmode := getEnvOrDefault("AUTH_DB_SSL_MODE", "prefer")
 
 	if pass == "" {
-		return fmt.Errorf("factory-reset: HAVEN_DB_PASS is required")
+		return fmt.Errorf("factory-reset: LUMA_AUTH_DB_PASS is required")
 	}
 
 	dbURL := fmt.Sprintf("postgres://%s:%s@%s:%s/%s?sslmode=%s",
@@ -193,17 +193,17 @@ func factoryReset(args []string) error {
 	}
 	defer tx.Rollback(ctx) //nolint:errcheck
 
-	if _, err := tx.Exec(ctx, "DROP SCHEMA IF EXISTS haven CASCADE"); err != nil {
+	if _, err := tx.Exec(ctx, "DROP SCHEMA IF EXISTS auth CASCADE"); err != nil {
 		return fmt.Errorf("factory-reset: drop schema: %w", err)
 	}
-	if _, err := tx.Exec(ctx, "CREATE SCHEMA haven"); err != nil {
+	if _, err := tx.Exec(ctx, "CREATE SCHEMA auth"); err != nil {
 		return fmt.Errorf("factory-reset: create schema: %w", err)
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("factory-reset: commit: %w", err)
 	}
 
-	fmt.Println("Haven has been reset to factory state.")
+	fmt.Println("Auth service has been reset to factory state.")
 	fmt.Println("Run 'docker compose up' to re-run migrations and get a fresh setup token.")
 	return nil
 }
@@ -322,7 +322,7 @@ func healthcheck(args []string) error {
 		}
 	}
 
-	resp, err := http.Get(addr + "/api/haven/health") //nolint:gosec
+	resp, err := http.Get(addr + "/api/auth/health") //nolint:gosec
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "healthcheck: request failed: %v\n", err)
 		os.Exit(1)
@@ -349,8 +349,8 @@ func generateSecrets() error {
 
 	fmt.Printf("# Generated by: go run ./cmd/cli generate-secrets\n")
 	fmt.Printf("# Copy these into your .env file.\n\n")
-	fmt.Printf("HAVEN_JWT_SIGNING_KEY=%s\n", jwtKey)
-	fmt.Printf("HAVEN_DB_PASS=%s\n", dbPass)
+	fmt.Printf("LUMA_AUTH_JWT_SIGNING_KEY=%s\n", jwtKey)
+	fmt.Printf("LUMA_AUTH_DB_PASS=%s\n", dbPass)
 	return nil
 }
 
@@ -363,14 +363,14 @@ func randomHex(n int) (string, error) {
 }
 
 func printUsage() {
-	fmt.Println(`haven-cli — Haven IAM administration
+	fmt.Println(`luma-auth-cli — auth service administration
 
 Commands:
   setup [--env-file FILE] [--addr URL]
-                                    Unattended install — reads HAVEN_OWNER_* env vars.
-                                    Requires HAVEN_UNATTENDED=true, HAVEN_SETUP_TOKEN,
-                                    HAVEN_OWNER_EMAIL, HAVEN_OWNER_NAME,
-                                    HAVEN_OWNER_PASSWORD, HAVEN_INSTANCE_NAME.
+                                    Unattended install — reads AUTH_OWNER_* env vars.
+                                    Requires AUTH_UNATTENDED=true, AUTH_SETUP_TOKEN,
+                                    AUTH_OWNER_EMAIL, AUTH_OWNER_NAME,
+                                    AUTH_OWNER_PASSWORD, AUTH_INSTANCE_NAME.
   generate-secrets                  Print all required secrets as .env lines
   validate-config [--env-file FILE] Validate configuration before starting
   healthcheck [--addr URL]          Exit 0 if server is healthy (default: http://127.0.0.1:8080)

@@ -58,11 +58,11 @@ func TestGate_Unclaimed_AllowsVerifyToken(t *testing.T) {
 }
 
 func TestGate_Unclaimed_AllowsHealth(t *testing.T) {
-	assertStatus(t, gateFor(StateUnclaimed), "/api/haven/health", http.StatusOK)
+	assertStatus(t, gateFor(StateUnclaimed), "/api/auth/health", http.StatusOK)
 }
 
 func TestGate_Unclaimed_BlocksLogin(t *testing.T) {
-	assertStatus(t, gateFor(StateUnclaimed), "/api/haven/auth/login", http.StatusServiceUnavailable)
+	assertStatus(t, gateFor(StateUnclaimed), "/api/auth/login", http.StatusServiceUnavailable)
 }
 
 func TestGate_Unclaimed_BlocksSetupInstance(t *testing.T) {
@@ -71,7 +71,7 @@ func TestGate_Unclaimed_BlocksSetupInstance(t *testing.T) {
 }
 
 func TestGate_Unclaimed_BlocksAuthz(t *testing.T) {
-	assertStatus(t, gateFor(StateUnclaimed), "/api/haven/authz/check", http.StatusServiceUnavailable)
+	assertStatus(t, gateFor(StateUnclaimed), "/api/auth/authz/check", http.StatusServiceUnavailable)
 }
 
 // ── SETUP ─────────────────────────────────────────────────────────────────────
@@ -81,7 +81,7 @@ func TestGate_Setup_AllowsRoot(t *testing.T) {
 }
 
 func TestGate_Setup_AllowsHealth(t *testing.T) {
-	assertStatus(t, gateFor(StateSetup), "/api/haven/health", http.StatusOK)
+	assertStatus(t, gateFor(StateSetup), "/api/auth/health", http.StatusOK)
 }
 
 func TestGate_Setup_AllowsSetupPaths(t *testing.T) {
@@ -96,25 +96,25 @@ func TestGate_Setup_AllowsSetupPaths(t *testing.T) {
 }
 
 func TestGate_Setup_BlocksLogin(t *testing.T) {
-	assertStatus(t, gateFor(StateSetup), "/api/haven/auth/login", http.StatusServiceUnavailable)
+	assertStatus(t, gateFor(StateSetup), "/api/auth/login", http.StatusServiceUnavailable)
 }
 
 func TestGate_Setup_BlocksValidate(t *testing.T) {
-	assertStatus(t, gateFor(StateSetup), "/api/haven/validate", http.StatusServiceUnavailable)
+	assertStatus(t, gateFor(StateSetup), "/api/auth/validate", http.StatusServiceUnavailable)
 }
 
 // ── ACTIVE ────────────────────────────────────────────────────────────────────
 
 func TestGate_Active_AllowsLogin(t *testing.T) {
-	assertStatus(t, gateFor(StateActive), "/api/haven/auth/login", http.StatusOK)
+	assertStatus(t, gateFor(StateActive), "/api/auth/login", http.StatusOK)
 }
 
 func TestGate_Active_AllowsHealth(t *testing.T) {
-	assertStatus(t, gateFor(StateActive), "/api/haven/health", http.StatusOK)
+	assertStatus(t, gateFor(StateActive), "/api/auth/health", http.StatusOK)
 }
 
 func TestGate_Active_AllowsValidate(t *testing.T) {
-	assertStatus(t, gateFor(StateActive), "/api/haven/validate", http.StatusOK)
+	assertStatus(t, gateFor(StateActive), "/api/auth/validate", http.StatusOK)
 }
 
 func TestGate_Active_BlocksSetupVerifyToken(t *testing.T) {

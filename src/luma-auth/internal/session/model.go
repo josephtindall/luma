@@ -2,7 +2,7 @@ package session
 
 import "time"
 
-// RefreshToken represents a row in haven.refresh_tokens.
+// RefreshToken represents a row in auth.refresh_tokens.
 // The raw token is never stored here or in the database — only the hash.
 type RefreshToken struct {
 	ID         string

@@ -12,7 +12,7 @@ import (
 )
 
 // Repository implements bootstrap.StateRepository against PostgreSQL.
-// There is always exactly one row in haven.instance.
+// There is always exactly one row in auth.instance.
 type Repository struct {
 	db *pgxpool.Pool
 }
@@ -27,7 +27,7 @@ func (r *Repository) Get(ctx context.Context) (*bootstrap.InstanceState, error) 
 		SELECT id, name, locale, timezone, setup_state,
 		       setup_token_hash, setup_token_expires_at, setup_token_failures,
 		       activated_at, version
-		FROM haven.instance
+		FROM auth.instance
 		LIMIT 1`
 
 	s := &bootstrap.InstanceState{}
@@ -55,8 +55,8 @@ func (r *Repository) Get(ctx context.Context) (*bootstrap.InstanceState, error) 
 
 func (r *Repository) EnsureRow(ctx context.Context) error {
 	const q = `
-		INSERT INTO haven.instance (name)
-		VALUES ('Haven')
+		INSERT INTO auth.instance (name)
+		VALUES ('Luma')
 		ON CONFLICT DO NOTHING`
 
 	_, err := r.db.Exec(ctx, q)
@@ -68,7 +68,7 @@ func (r *Repository) EnsureRow(ctx context.Context) error {
 
 func (r *Repository) StoreSetupToken(ctx context.Context, tokenHash string, expiresAt time.Time) error {
 	const q = `
-		UPDATE haven.instance
+		UPDATE auth.instance
 		SET setup_token_hash       = $1,
 		    setup_token_expires_at = $2,
 		    setup_token_failures   = 0`
@@ -82,7 +82,7 @@ func (r *Repository) StoreSetupToken(ctx context.Context, tokenHash string, expi
 
 func (r *Repository) TransitionToSetup(ctx context.Context, setupWindowExpiresAt time.Time) error {
 	const q = `
-		UPDATE haven.instance
+		UPDATE auth.instance
 		SET setup_state            = 'setup',
 		    setup_token_expires_at = $1,
 		    setup_token_failures   = 0
@@ -100,7 +100,7 @@ func (r *Repository) TransitionToSetup(ctx context.Context, setupWindowExpiresAt
 
 func (r *Repository) IncrementTokenFailures(ctx context.Context) (int, error) {
 	const q = `
-		UPDATE haven.instance
+		UPDATE auth.instance
 		SET setup_token_failures = setup_token_failures + 1
 		RETURNING setup_token_failures`
 
@@ -114,7 +114,7 @@ func (r *Repository) IncrementTokenFailures(ctx context.Context) (int, error) {
 
 func (r *Repository) ResetToUnclaimed(ctx context.Context, newTokenHash string, newExpiresAt time.Time) error {
 	const q = `
-		UPDATE haven.instance
+		UPDATE auth.instance
 		SET setup_state            = 'unclaimed',
 		    setup_token_hash       = $1,
 		    setup_token_expires_at = $2,
@@ -129,7 +129,7 @@ func (r *Repository) ResetToUnclaimed(ctx context.Context, newTokenHash string, 
 
 func (r *Repository) ConfigureInstance(ctx context.Context, name, locale, timezone string) error {
 	const q = `
-		UPDATE haven.instance
+		UPDATE auth.instance
 		SET name     = $1,
 		    locale   = $2,
 		    timezone = $3`
@@ -142,9 +142,9 @@ func (r *Repository) ConfigureInstance(ctx context.Context, name, locale, timezo
 }
 
 // CreateOwnerAtomic runs a single transaction:
-//  1. INSERT haven.users (role = builtin:instance-owner)
-//  2. INSERT haven.user_preferences (all defaults)
-//  3. UPDATE haven.instance (state = active, token cleared)
+//  1. INSERT auth.users (role = builtin:instance-owner)
+//  2. INSERT auth.user_preferences (all defaults)
+//  3. UPDATE auth.instance (state = active, token cleared)
 //
 // Returns the new user UUID.
 func (r *Repository) CreateOwnerAtomic(ctx context.Context, params bootstrap.CreateOwnerParams) (string, error) {
@@ -156,7 +156,7 @@ func (r *Repository) CreateOwnerAtomic(ctx context.Context, params bootstrap.Cre
 
 	var userID string
 	const insertUser = `
-		INSERT INTO haven.users
+		INSERT INTO auth.users
 		    (email, display_name, password_hash, instance_role_id)
 		VALUES ($1, $2, $3, 'builtin:instance-owner')
 		RETURNING id`
@@ -170,13 +170,13 @@ func (r *Repository) CreateOwnerAtomic(ctx context.Context, params bootstrap.Cre
 		return "", fmt.Errorf("bootstrap.postgres.CreateOwnerAtomic insert user: %w", err)
 	}
 
-	const insertPrefs = `INSERT INTO haven.user_preferences (user_id) VALUES ($1)`
+	const insertPrefs = `INSERT INTO auth.user_preferences (user_id) VALUES ($1)`
 	if _, err := tx.Exec(ctx, insertPrefs, userID); err != nil {
 		return "", fmt.Errorf("bootstrap.postgres.CreateOwnerAtomic insert prefs: %w", err)
 	}
 
 	const activateInstance = `
-		UPDATE haven.instance
+		UPDATE auth.instance
 		SET setup_state            = 'active',
 		    name                   = CASE WHEN $1 <> '' THEN $1 ELSE name END,
 		    locale                 = CASE WHEN $2 <> '' THEN $2 ELSE locale END,

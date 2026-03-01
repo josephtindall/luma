@@ -6,17 +6,17 @@ import (
 	"net/http"
 )
 
-// DisplayNameResolver fetches a user's display name from Haven. Called only
+// DisplayNameResolver fetches a user's display name from the auth service. Called only
 // when a personal vault needs to be created — not on every request.
 type DisplayNameResolver func(ctx context.Context, userID string) (string, error)
 
 // EnsurePersonalVaultMiddleware returns HTTP middleware that lazily creates a
 // personal vault for the authenticated user on their first request. It should
-// be placed after the Haven auth middleware so that the identity is available
+// be placed after the the auth service auth middleware so that the identity is available
 // in context.
 //
 // userIDFunc extracts the user ID from the request context.
-// displayNameFunc resolves a user's display name via Haven — only called when
+// displayNameFunc resolves a user's display name via the auth service — only called when
 // a vault actually needs to be created.
 func EnsurePersonalVaultMiddleware(
 	service *Service,
@@ -42,7 +42,7 @@ func EnsurePersonalVaultMiddleware(
 				return
 			}
 
-			// Vault needs creation — resolve display name from Haven.
+			// Vault needs creation — resolve display name from the auth service.
 			displayName, err := displayNameFunc(r.Context(), userID)
 			if err != nil {
 				slog.ErrorContext(r.Context(), "resolving display name for personal vault", "user_id", userID, "error", err)

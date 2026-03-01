@@ -27,7 +27,7 @@ func NewHandler(svc *Service, sessions SessionRevoker) *Handler {
 	return &Handler{svc: svc, sessions: sessions}
 }
 
-// List handles GET /api/haven/devices.
+// List handles GET /api/auth/devices.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
@@ -43,7 +43,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, devices)
 }
 
-// Revoke handles DELETE /api/haven/devices/{id}.
+// Revoke handles DELETE /api/auth/devices/{id}.
 func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {

@@ -11,7 +11,7 @@ import (
 )
 
 const (
-	minPasswordLen  = 12
+	minPasswordLen  = 8
 	maxFailedLogins = 10
 )
 

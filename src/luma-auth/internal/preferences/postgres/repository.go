@@ -23,7 +23,7 @@ func (r *Repository) Get(ctx context.Context, userID string) (*preferences.Prefe
 	const q = `
 		SELECT user_id, theme, language, timezone, date_format, time_format,
 		       notify_on_login, notify_on_revoke, compact_mode, updated_at
-		FROM haven.user_preferences
+		FROM auth.user_preferences
 		WHERE user_id = $1`
 
 	p := &preferences.Preferences{}
@@ -42,7 +42,7 @@ func (r *Repository) Get(ctx context.Context, userID string) (*preferences.Prefe
 func (r *Repository) Update(ctx context.Context, userID string, params preferences.UpdateParams) error {
 	// Build a partial update using COALESCE — only overwrite non-nil fields.
 	const q = `
-		UPDATE haven.user_preferences SET
+		UPDATE auth.user_preferences SET
 		    theme           = COALESCE($2, theme),
 		    language        = COALESCE($3, language),
 		    timezone        = COALESCE($4, timezone),

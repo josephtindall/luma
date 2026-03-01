@@ -17,7 +17,7 @@ type Resource struct {
 	VaultID string
 }
 
-// CheckRequest is the body of POST /api/haven/authz/check.
+// CheckRequest is the body of POST /api/auth/authz/check.
 type CheckRequest struct {
 	UserID       string `json:"user_id"`
 	Action       string `json:"action"`        // e.g. "page:edit"

@@ -26,7 +26,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*device.Device, er
 	const q = `
 		SELECT id, user_id, name, platform, fingerprint,
 		       COALESCE(user_agent, ''), last_seen_at, revoked_at, created_at
-		FROM haven.devices
+		FROM auth.devices
 		WHERE id = $1`
 
 	d, err := scanDevice(r.db.QueryRow(ctx, q, id))
@@ -43,7 +43,7 @@ func (r *Repository) GetByFingerprint(ctx context.Context, userID, fingerprint s
 	const q = `
 		SELECT id, user_id, name, platform, fingerprint,
 		       COALESCE(user_agent, ''), last_seen_at, revoked_at, created_at
-		FROM haven.devices
+		FROM auth.devices
 		WHERE user_id = $1 AND fingerprint = $2`
 
 	d, err := scanDevice(r.db.QueryRow(ctx, q, userID, fingerprint))
@@ -60,7 +60,7 @@ func (r *Repository) ListForUser(ctx context.Context, userID string) ([]*device.
 	const q = `
 		SELECT id, user_id, name, platform, fingerprint,
 		       COALESCE(user_agent, ''), last_seen_at, revoked_at, created_at
-		FROM haven.devices
+		FROM auth.devices
 		WHERE user_id = $1 AND revoked_at IS NULL
 		ORDER BY created_at DESC`
 
@@ -83,7 +83,7 @@ func (r *Repository) ListForUser(ctx context.Context, userID string) ([]*device.
 
 func (r *Repository) Create(ctx context.Context, params device.RegisterParams) (*device.Device, error) {
 	const q = `
-		INSERT INTO haven.devices (user_id, name, platform, fingerprint, user_agent)
+		INSERT INTO auth.devices (user_id, name, platform, fingerprint, user_agent)
 		VALUES ($1, $2, $3, $4, $5)
 		RETURNING id, user_id, name, platform, fingerprint, user_agent,
 		          last_seen_at, revoked_at, created_at`
@@ -97,7 +97,7 @@ func (r *Repository) Create(ctx context.Context, params device.RegisterParams) (
 }
 
 func (r *Repository) UpdateLastSeen(ctx context.Context, id string) error {
-	const q = `UPDATE haven.devices SET last_seen_at = NOW() WHERE id = $1`
+	const q = `UPDATE auth.devices SET last_seen_at = NOW() WHERE id = $1`
 	_, err := r.db.Exec(ctx, q, id)
 	if err != nil {
 		return fmt.Errorf("device.postgres.UpdateLastSeen: %w", err)
@@ -106,7 +106,7 @@ func (r *Repository) UpdateLastSeen(ctx context.Context, id string) error {
 }
 
 func (r *Repository) Revoke(ctx context.Context, id string) error {
-	const q = `UPDATE haven.devices SET revoked_at = NOW() WHERE id = $1`
+	const q = `UPDATE auth.devices SET revoked_at = NOW() WHERE id = $1`
 	_, err := r.db.Exec(ctx, q, id)
 	if err != nil {
 		return fmt.Errorf("device.postgres.Revoke: %w", err)

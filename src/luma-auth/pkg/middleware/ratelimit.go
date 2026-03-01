@@ -64,7 +64,7 @@ func increment(ctx context.Context, rdb *redis.Client, key string, window time.D
 }
 
 // clientIP extracts the real client IP, trusting X-Forwarded-For when behind
-// the Caddy reverse proxy (which is the only topology Haven runs in).
+// the Caddy reverse proxy (which is the only topology the auth service runs in).
 func clientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		// Take the first (leftmost) address — the original client.

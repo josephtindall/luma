@@ -93,7 +93,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
     super.dispose();
   }
 
-  /// Parses an error message from a Haven JSON response body, falling back
+  /// Parses an error message from a auth service JSON response body, falling back
   /// to [fallback] if the body cannot be decoded.
   String _parseError(http.Response resp, String fallback) {
     try {
@@ -838,7 +838,7 @@ class _Step2 extends StatelessWidget {
           TextFormField(
             controller: fullNameCtrl,
             decoration: const InputDecoration(
-              labelText: 'Full name',
+              labelText: 'Name',
               border: OutlineInputBorder(),
             ),
             validator: (v) =>
@@ -862,7 +862,7 @@ class _Step2 extends StatelessWidget {
             value: acknowledged,
             onChanged: onAcknowledgedChanged,
             title: const Text(
-              'I acknowledge that this account is the instance owner.',
+              'I acknowledge that this account is the instance owner and will have full control permissions.',
             ),
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
