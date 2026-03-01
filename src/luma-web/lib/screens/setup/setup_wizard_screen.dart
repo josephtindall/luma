@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
@@ -41,6 +42,16 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
 
   bool _loading = false;
   String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    // Auto-detect timezone from the browser.
+    final detected = DateTime.now().timeZoneName;
+    if (_kTimezones.contains(detected)) {
+      _timezone = detected;
+    }
+  }
 
   @override
   void dispose() {
@@ -221,7 +232,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   }
 }
 
-class _Step0 extends StatelessWidget {
+class _Step0 extends StatefulWidget {
   final TextEditingController ctrl;
   final bool loading;
   final VoidCallback onContinue;
@@ -233,28 +244,153 @@ class _Step0 extends StatelessWidget {
   });
 
   @override
+  State<_Step0> createState() => _Step0State();
+}
+
+const _kCodeLength = 8;
+
+class _Step0State extends State<_Step0> {
+  final _inputCtrl = TextEditingController();
+  final _inputNode = FocusNode();
+  String _display = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _inputCtrl.addListener(_onInputChanged);
+  }
+
+  @override
+  void dispose() {
+    _inputCtrl.removeListener(_onInputChanged);
+    _inputCtrl.dispose();
+    _inputNode.dispose();
+    super.dispose();
+  }
+
+  void _onInputChanged() {
+    // Filter to alphanumeric, uppercase, clamp to 8 chars.
+    final raw = _inputCtrl.text
+        .toUpperCase()
+        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    final clamped = raw.length > _kCodeLength
+        ? raw.substring(0, _kCodeLength)
+        : raw;
+
+    // If filtering changed the text, rewrite without re-triggering.
+    if (clamped != _inputCtrl.text) {
+      _inputCtrl.value = TextEditingValue(
+        text: clamped,
+        selection: TextSelection.collapsed(offset: clamped.length),
+      );
+      return; // listener will re-fire with the clean value
+    }
+
+    setState(() => _display = clamped);
+    widget.ctrl.text = clamped;
+  }
+
+  @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    const half = _kCodeLength ~/ 2;
+
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text('Step 1 of 3 — Verify ownership',
             style: Theme.of(context).textTheme.titleMedium),
-        const SizedBox(height: 16),
-        TextField(
-          controller: ctrl,
-          decoration: const InputDecoration(
-            labelText: 'Setup token',
-            hintText: 'Paste the token from Haven\'s startup logs',
-            border: OutlineInputBorder(),
-          ),
-          autofocus: true,
-          onSubmitted: (_) => onContinue(),
+        const SizedBox(height: 8),
+        Text(
+          'Paste the 8-character code from Haven\'s startup logs',
+          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                color: colors.onSurfaceVariant,
+              ),
         ),
-        const SizedBox(height: 16),
+        const SizedBox(height: 24),
+        // Stack: visual boxes on the bottom, real transparent TextField on top
+        // so clicks land on the real input naturally.
+        Stack(
+          children: [
+            // Visual display layer.
+            ListenableBuilder(
+              listenable: _inputNode,
+              builder: (context, _) {
+                return Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    for (var i = 0; i < half; i++)
+                      Padding(
+                        padding:
+                            EdgeInsets.only(right: i < half - 1 ? 10 : 0),
+                        child: _buildCharBox(i, colors),
+                      ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      child: Text(
+                        '—',
+                        style: TextStyle(
+                          fontSize: 22,
+                          color: colors.outline,
+                          fontWeight: FontWeight.w300,
+                        ),
+                      ),
+                    ),
+                    for (var i = half; i < _kCodeLength; i++)
+                      Padding(
+                        padding: EdgeInsets.only(
+                            right: i < _kCodeLength - 1 ? 10 : 0),
+                        child: _buildCharBox(i, colors),
+                      ),
+                  ],
+                );
+              },
+            ),
+            // Invisible input layer — sits on top, same size, captures all
+            // clicks, keyboard input, and paste.
+            Positioned.fill(
+              child: Center(
+                child: SizedBox(
+                  width: 1,
+                  child: Opacity(
+                    opacity: 0,
+                    child: TextField(
+                      controller: _inputCtrl,
+                      focusNode: _inputNode,
+                      autofocus: true,
+                      maxLength: _kCodeLength,
+                      decoration: const InputDecoration(
+                        counterText: '',
+                        border: InputBorder.none,
+                      ),
+                      inputFormatters: [
+                        FilteringTextInputFormatter.allow(
+                            RegExp(r'[A-Za-z0-9]')),
+                      ],
+                      onSubmitted: (_) => widget.onContinue(),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            // Hit-target layer — transparent overlay with text cursor that
+            // forwards clicks to the real input.
+            Positioned.fill(
+              child: MouseRegion(
+                cursor: SystemMouseCursors.text,
+                child: GestureDetector(
+                  behavior: HitTestBehavior.translucent,
+                  onTap: _inputNode.requestFocus,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 24),
         FilledButton(
-          onPressed: loading ? null : onContinue,
-          child: loading
+          onPressed: widget.loading ? null : widget.onContinue,
+          child: widget.loading
               ? const SizedBox(
                   height: 20,
                   width: 20,
@@ -264,6 +400,49 @@ class _Step0 extends StatelessWidget {
               : const Text('Continue'),
         ),
       ],
+    );
+  }
+
+  Widget _buildCharBox(int index, ColorScheme colors) {
+    final char = index < _display.length ? _display[index] : '';
+    final isCursor = _inputNode.hasFocus && index == _display.length;
+    final isFilled = char.isNotEmpty;
+
+    final Color underlineColor;
+    if (isCursor) {
+      underlineColor = colors.primary;
+    } else if (isFilled) {
+      underlineColor = colors.onSurface;
+    } else {
+      underlineColor = colors.outlineVariant;
+    }
+
+    return SizedBox(
+      width: 48,
+      height: 52,
+      child: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          Text(
+            char,
+            style: TextStyle(
+              fontSize: 22,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 2,
+              color: colors.onSurface,
+            ),
+          ),
+          const SizedBox(height: 6),
+          AnimatedContainer(
+            duration: const Duration(milliseconds: 150),
+            height: isCursor ? 2.5 : 2,
+            decoration: BoxDecoration(
+              color: underlineColor,
+              borderRadius: BorderRadius.circular(1),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
