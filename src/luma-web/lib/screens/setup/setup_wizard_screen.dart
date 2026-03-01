@@ -1,9 +1,10 @@
 import 'dart:convert';
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
-import 'package:web/web.dart' as web;
 
 import '../../services/auth_service.dart';
 
@@ -11,6 +12,21 @@ const _baseUrl = String.fromEnvironment(
   'API_URL',
   defaultValue: 'http://localhost:8002',
 );
+
+/// Returns the browser's IANA timezone (e.g. "America/New_York") or null.
+String? _detectBrowserTimezone() {
+  try {
+    // Equivalent to: Intl.DateTimeFormat().resolvedOptions().timeZone
+    final intl = globalContext['Intl'] as JSObject?;
+    if (intl == null) return null;
+    final fmt = intl.callMethod('DateTimeFormat'.toJS) as JSObject;
+    final opts = fmt.callMethod('resolvedOptions'.toJS) as JSObject;
+    final tz = opts['timeZone'] as JSString?;
+    return tz?.toDart;
+  } catch (_) {
+    return null;
+  }
+}
 
 /// Three-step setup wizard: token → instance config → owner account.
 class SetupWizardScreen extends StatefulWidget {
@@ -22,8 +38,10 @@ class SetupWizardScreen extends StatefulWidget {
   State<SetupWizardScreen> createState() => _SetupWizardScreenState();
 }
 
-class _SetupWizardScreenState extends State<SetupWizardScreen> {
-  int _step = 0; // 0, 1, 2
+class _SetupWizardScreenState extends State<SetupWizardScreen>
+    with TickerProviderStateMixin {
+  int _step = 0; // 0, 1, 2, 3 (3 = success)
+  int _previousStep = 0;
 
   // Step 0
   final _tokenCtrl = TextEditingController();
@@ -44,63 +62,30 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   bool _loading = false;
   String? _error;
 
+  // Success screen animation
+  late final AnimationController _successCtrl;
+  late final Animation<double> _successScale;
+
   @override
   void initState() {
     super.initState();
 
-    // Auto-detect timezone from the browser.
-    final detected = DateTime.now().timeZoneName;
-    if (_kTimezones.contains(detected)) {
-      _timezone = detected;
-    }
+    _successCtrl = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 400),
+    );
+    _successScale = CurvedAnimation(
+      parent: _successCtrl,
+      curve: Curves.elasticOut,
+    );
 
-    // Restore step from sessionStorage on refresh.
-    _restoreFromSession();
-  }
-
-  void _restoreFromSession() {
-    try {
-      final storage = web.window.sessionStorage;
-      final savedStep = storage.getItem('luma_setup_step');
-      final savedToken = storage.getItem('luma_setup_token');
-      if (savedStep != null) {
-        final step = int.tryParse(savedStep);
-        if (step != null && step >= 0 && step <= 2) {
-          _step = step;
-          if (savedToken != null && savedToken.isNotEmpty) {
-            _tokenCtrl.text = savedToken;
-          }
-        }
-      }
-    } catch (_) {
-      // sessionStorage unavailable (e.g. SSR or restricted context) — ignore.
-    }
-  }
-
-  void _saveStepToSession(int step) {
-    try {
-      final storage = web.window.sessionStorage;
-      storage.setItem('luma_setup_step', step.toString());
-      if (_tokenCtrl.text.isNotEmpty) {
-        storage.setItem('luma_setup_token', _tokenCtrl.text);
-      }
-    } catch (_) {
-      // Ignore if sessionStorage is unavailable.
-    }
-  }
-
-  void _clearSession() {
-    try {
-      final storage = web.window.sessionStorage;
-      storage.removeItem('luma_setup_step');
-      storage.removeItem('luma_setup_token');
-    } catch (_) {
-      // Ignore.
-    }
+    // Auto-detect IANA timezone from the browser (falls back to 'UTC').
+    _timezone = _detectBrowserTimezone() ?? 'UTC';
   }
 
   @override
   void dispose() {
+    _successCtrl.dispose();
     _tokenCtrl.dispose();
     _instanceNameCtrl.dispose();
     _fullNameCtrl.dispose();
@@ -123,6 +108,14 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
     }
   }
 
+  void _setStep(int next) {
+    setState(() {
+      _previousStep = _step;
+      _step = next;
+      _error = null;
+    });
+  }
+
   Future<void> _verifyToken() async {
     final token = _tokenCtrl.text.trim();
     if (token.isEmpty) return;
@@ -140,14 +133,14 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
       );
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        setState(() => _step = 1);
-        _saveStepToSession(1);
+        _setStep(1);
+
       } else if (resp.statusCode == 429) {
         setState(() =>
             _error = 'Too many attempts \u2014 wait a moment and try again.');
       } else {
         setState(() => _error = _parseError(
-            resp, 'Invalid token \u2014 check Haven\'s startup logs.'));
+            resp, 'Invalid token \u2014 check startup logs.'));
       }
     } catch (_) {
       setState(() => _error = 'Could not reach the server. Try again.');
@@ -176,8 +169,8 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
       );
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        setState(() => _step = 2);
-        _saveStepToSession(2);
+        _setStep(2);
+
       } else if (resp.statusCode == 429) {
         setState(() =>
             _error = 'Too many attempts \u2014 wait a moment and try again.');
@@ -217,12 +210,19 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
       );
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        _clearSession();
+
         final data = json.decode(resp.body) as Map<String, dynamic>;
         final token = data['access_token'] as String?;
         if (token != null && token.isNotEmpty) {
-          widget.auth.activateSession(token);
-          if (mounted) context.go('/home');
+          // Show success screen, then navigate.
+          _setStep(3);
+          _successCtrl.forward();
+          Future.delayed(const Duration(seconds: 2), () {
+            if (mounted) {
+              widget.auth.activateSession(token);
+              context.go('/home');
+            }
+          });
         } else {
           setState(() => _error = 'Owner created but no token returned. Please log in.');
         }
@@ -236,74 +236,146 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
     } catch (_) {
       setState(() => _error = 'Could not reach the server. Try again.');
     } finally {
-      setState(() => _loading = false);
+      if (_step != 3) {
+        setState(() => _loading = false);
+      }
     }
   }
 
   void _goBack() {
-    setState(() {
-      _step -= 1;
-      _error = null;
-    });
-    _saveStepToSession(_step);
+    _setStep(_step - 1);
+
+  }
+
+  Widget _buildCurrentStep() {
+    switch (_step) {
+      case 0:
+        return _Step0(
+          key: const ValueKey(0),
+          ctrl: _tokenCtrl,
+          loading: _loading,
+          onContinue: _verifyToken,
+        );
+      case 1:
+        return _Step1(
+          key: const ValueKey(1),
+          formKey: _formKey1,
+          nameCtrl: _instanceNameCtrl,
+          loading: _loading,
+          onContinue: _configure,
+        );
+      case 2:
+        return _Step2(
+          key: const ValueKey(2),
+          formKey: _formKey2,
+          fullNameCtrl: _fullNameCtrl,
+          emailCtrl: _emailCtrl,
+          passwordCtrl: _passwordCtrl,
+          confirmPasswordCtrl: _confirmPasswordCtrl,
+          acknowledged: _acknowledged,
+          onAcknowledgedChanged: (v) =>
+              setState(() => _acknowledged = v ?? false),
+          loading: _loading,
+          onContinue: _createOwner,
+          onBack: _goBack,
+        );
+      case 3:
+        return _SuccessStep(
+          key: const ValueKey(3),
+          scaleAnimation: _successScale,
+        );
+      default:
+        return const SizedBox.shrink();
+    }
   }
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colors = theme.colorScheme;
+    final goingForward = _step >= _previousStep;
+
     return Scaffold(
       body: Center(
-        child: ConstrainedBox(
-          constraints: const BoxConstraints(maxWidth: 480),
-          child: Padding(
-            padding: const EdgeInsets.all(32),
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
             child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                Text(
-                  'Set up Luma',
-                  style: Theme.of(context).textTheme.headlineMedium,
+                // Branded header
+                Icon(
+                  Icons.light_mode_rounded,
+                  size: 40,
+                  color: colors.primary,
                 ),
                 const SizedBox(height: 8),
-                LinearProgressIndicator(value: (_step + 1) / 3),
-                const SizedBox(height: 24),
-                if (_error != null) ...[
-                  _ErrorBanner(
-                    message: _error!,
-                    onDismiss: () => setState(() => _error = null),
+                Text(
+                  'Luma',
+                  style: theme.textTheme.headlineMedium?.copyWith(
+                    fontWeight: FontWeight.w600,
+                    color: colors.primary,
                   ),
-                  const SizedBox(height: 16),
-                ],
-                IndexedStack(
-                  index: _step,
-                  children: [
-                    _Step0(
-                      ctrl: _tokenCtrl,
-                      loading: _loading,
-                      onContinue: _verifyToken,
+                ),
+                const SizedBox(height: 32),
+                // Main card
+                Card(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  clipBehavior: Clip.antiAlias,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 32,
+                      vertical: 40,
                     ),
-                    _Step1(
-                      formKey: _formKey1,
-                      nameCtrl: _instanceNameCtrl,
-                      timezone: _timezone,
-                      onTimezoneChanged: (v) => setState(() => _timezone = v),
-                      loading: _loading,
-                      onContinue: _configure,
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.stretch,
+                      children: [
+                        _StepIndicator(
+                          currentStep: _step.clamp(0, 3),
+                          labels: const ['Verify', 'Configure', 'Create'],
+                        ),
+                        const SizedBox(height: 32),
+                        if (_error != null) ...[
+                          _ErrorBanner(
+                            message: _error!,
+                            onDismiss: () => setState(() => _error = null),
+                          ),
+                          const SizedBox(height: 20),
+                        ],
+                        AnimatedSwitcher(
+                          duration: const Duration(milliseconds: 300),
+                          switchInCurve: Curves.easeOut,
+                          switchOutCurve: Curves.easeIn,
+                          transitionBuilder: (child, animation) {
+                            final offset = goingForward
+                                ? const Offset(1, 0)
+                                : const Offset(-1, 0);
+                            // The incoming child matches the current key.
+                            final isIncoming =
+                                child.key == ValueKey(_step);
+                            final slideOffset = isIncoming
+                                ? offset
+                                : Offset(-offset.dx, 0);
+                            return SlideTransition(
+                              position: Tween(
+                                begin: slideOffset,
+                                end: Offset.zero,
+                              ).animate(animation),
+                              child: FadeTransition(
+                                opacity: animation,
+                                child: child,
+                              ),
+                            );
+                          },
+                          child: _buildCurrentStep(),
+                        ),
+                      ],
                     ),
-                    _Step2(
-                      formKey: _formKey2,
-                      fullNameCtrl: _fullNameCtrl,
-                      emailCtrl: _emailCtrl,
-                      passwordCtrl: _passwordCtrl,
-                      confirmPasswordCtrl: _confirmPasswordCtrl,
-                      acknowledged: _acknowledged,
-                      onAcknowledgedChanged: (v) =>
-                          setState(() => _acknowledged = v ?? false),
-                      loading: _loading,
-                      onContinue: _createOwner,
-                      onBack: _goBack,
-                    ),
-                  ],
+                  ),
                 ),
               ],
             ),
@@ -314,12 +386,113 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// Step indicator
+// ---------------------------------------------------------------------------
+
+class _StepIndicator extends StatelessWidget {
+  final int currentStep; // 0–3 (3 = all complete)
+  final List<String> labels;
+
+  const _StepIndicator({
+    required this.currentStep,
+    required this.labels,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final textTheme = Theme.of(context).textTheme;
+
+    return Row(
+      children: [
+        for (var i = 0; i < labels.length; i++) ...[
+          if (i > 0)
+            Expanded(
+              child: Container(
+                height: 2,
+                color: i <= currentStep
+                    ? colors.primary
+                    : colors.outlineVariant,
+              ),
+            ),
+          Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                width: 28,
+                height: 28,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  color: i < currentStep
+                      ? colors.primary
+                      : i == currentStep && currentStep < 3
+                          ? colors.primary
+                          : currentStep >= 3
+                              ? colors.primary
+                              : Colors.transparent,
+                  border: Border.all(
+                    color: i <= currentStep || currentStep >= 3
+                        ? colors.primary
+                        : colors.outlineVariant,
+                    width: 2,
+                  ),
+                ),
+                child: Center(
+                  child: i < currentStep || currentStep >= 3
+                      ? Icon(
+                          Icons.check_rounded,
+                          size: 16,
+                          color: colors.onPrimary,
+                        )
+                      : i == currentStep
+                          ? Text(
+                              '${i + 1}',
+                              style: textTheme.labelSmall?.copyWith(
+                                color: colors.onPrimary,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            )
+                          : Text(
+                              '${i + 1}',
+                              style: textTheme.labelSmall?.copyWith(
+                                color: colors.outlineVariant,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                labels[i],
+                style: textTheme.labelSmall?.copyWith(
+                  color: i <= currentStep || currentStep >= 3
+                      ? colors.onSurface
+                      : colors.outlineVariant,
+                  fontWeight: i == currentStep
+                      ? FontWeight.w600
+                      : FontWeight.normal,
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step 0 — Verify token
+// ---------------------------------------------------------------------------
+
 class _Step0 extends StatefulWidget {
   final TextEditingController ctrl;
   final bool loading;
   final VoidCallback onContinue;
 
   const _Step0({
+    super.key,
     required this.ctrl,
     required this.loading,
     required this.onContinue,
@@ -381,20 +554,27 @@ class _Step0State extends State<_Step0> {
   @override
   Widget build(BuildContext context) {
     final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
     const half = _kCodeLength ~/ 2;
 
     return Column(
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Step 1 of 3 \u2014 Verify ownership',
-            style: Theme.of(context).textTheme.titleMedium),
+        Icon(Icons.vpn_key_rounded, size: 48, color: colors.primary),
+        const SizedBox(height: 16),
+        Text(
+          'Verify ownership',
+          style: theme.textTheme.titleLarge,
+          textAlign: TextAlign.center,
+        ),
         const SizedBox(height: 8),
         Text(
-          'Paste the 8-character code from Haven\'s startup logs',
-          style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                color: colors.onSurfaceVariant,
-              ),
+          'Paste the 8-character code from startup logs',
+          style: theme.textTheme.bodyMedium?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
+          textAlign: TextAlign.center,
         ),
         const SizedBox(height: 24),
         // Stack: visual boxes on the bottom, real transparent TextField on top
@@ -411,15 +591,15 @@ class _Step0State extends State<_Step0> {
                     for (var i = 0; i < half; i++)
                       Padding(
                         padding:
-                            EdgeInsets.only(right: i < half - 1 ? 10 : 0),
+                            EdgeInsets.only(right: i < half - 1 ? 6 : 0),
                         child: _buildCharBox(i, colors),
                       ),
                     Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 12),
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
                       child: Text(
                         '\u2014',
                         style: TextStyle(
-                          fontSize: 22,
+                          fontSize: 20,
                           color: colors.outline,
                           fontWeight: FontWeight.w300,
                         ),
@@ -428,7 +608,7 @@ class _Step0State extends State<_Step0> {
                     for (var i = half; i < _kCodeLength; i++)
                       Padding(
                         padding: EdgeInsets.only(
-                            right: i < _kCodeLength - 1 ? 10 : 0),
+                            right: i < _kCodeLength - 1 ? 6 : 0),
                         child: _buildCharBox(i, colors),
                       ),
                   ],
@@ -476,16 +656,10 @@ class _Step0State extends State<_Step0> {
           ],
         ),
         const SizedBox(height: 24),
-        FilledButton(
-          onPressed: widget.loading ? null : widget.onContinue,
-          child: widget.loading
-              ? const SizedBox(
-                  height: 20,
-                  width: 20,
-                  child: CircularProgressIndicator(
-                      strokeWidth: 2, color: Colors.white),
-                )
-              : const Text('Continue'),
+        _WizardButton(
+          loading: widget.loading,
+          onPressed: widget.onContinue,
+          label: 'Verify',
         ),
       ],
     );
@@ -506,17 +680,17 @@ class _Step0State extends State<_Step0> {
     }
 
     return SizedBox(
-      width: 48,
-      height: 52,
+      width: 40,
+      height: 48,
       child: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
           Text(
             char,
             style: TextStyle(
-              fontSize: 22,
+              fontSize: 20,
               fontWeight: FontWeight.w600,
-              letterSpacing: 2,
+              letterSpacing: 1,
               color: colors.onSurface,
             ),
           ),
@@ -535,73 +709,51 @@ class _Step0State extends State<_Step0> {
   }
 }
 
-// Common timezones — a practical subset of the IANA list.
-const _kTimezones = [
-  'UTC',
-  'America/New_York',
-  'America/Chicago',
-  'America/Denver',
-  'America/Los_Angeles',
-  'America/Anchorage',
-  'America/Honolulu',
-  'America/Sao_Paulo',
-  'America/Argentina/Buenos_Aires',
-  'America/Toronto',
-  'America/Vancouver',
-  'America/Mexico_City',
-  'Europe/London',
-  'Europe/Paris',
-  'Europe/Berlin',
-  'Europe/Madrid',
-  'Europe/Rome',
-  'Europe/Amsterdam',
-  'Europe/Stockholm',
-  'Europe/Moscow',
-  'Europe/Istanbul',
-  'Asia/Kolkata',
-  'Asia/Dhaka',
-  'Asia/Bangkok',
-  'Asia/Singapore',
-  'Asia/Shanghai',
-  'Asia/Tokyo',
-  'Asia/Seoul',
-  'Asia/Dubai',
-  'Australia/Sydney',
-  'Australia/Melbourne',
-  'Pacific/Auckland',
-  'Africa/Cairo',
-  'Africa/Nairobi',
-  'Africa/Johannesburg',
-];
+// ---------------------------------------------------------------------------
+// Step 1 — Configure instance
+// ---------------------------------------------------------------------------
 
 class _Step1 extends StatelessWidget {
   final GlobalKey<FormState> formKey;
   final TextEditingController nameCtrl;
-  final String timezone;
-  final ValueChanged<String> onTimezoneChanged;
   final bool loading;
   final VoidCallback onContinue;
 
   const _Step1({
+    super.key,
     required this.formKey,
     required this.nameCtrl,
-    required this.timezone,
-    required this.onTimezoneChanged,
     required this.loading,
     required this.onContinue,
   });
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
     return Form(
       key: formKey,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Step 2 of 3 \u2014 Name your instance',
-              style: Theme.of(context).textTheme.titleMedium),
+          Icon(Icons.tune_rounded, size: 48, color: colors.primary),
           const SizedBox(height: 16),
+          Text(
+            'Name your instance',
+            style: theme.textTheme.titleLarge,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'Give your workspace a friendly name',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
           TextFormField(
             controller: nameCtrl,
             decoration: const InputDecoration(
@@ -619,35 +771,21 @@ class _Step1 extends StatelessWidget {
               return null;
             },
           ),
-          const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: timezone,
-            decoration: const InputDecoration(
-              labelText: 'Timezone',
-              border: OutlineInputBorder(),
-            ),
-            items: _kTimezones
-                .map((tz) => DropdownMenuItem(value: tz, child: Text(tz)))
-                .toList(),
-            onChanged: (v) => onTimezoneChanged(v!),
-          ),
-          const SizedBox(height: 16),
-          FilledButton(
-            onPressed: loading ? null : onContinue,
-            child: loading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : const Text('Continue'),
+          const SizedBox(height: 24),
+          _WizardButton(
+            loading: loading,
+            onPressed: onContinue,
+            label: 'Continue',
           ),
         ],
       ),
     );
   }
 }
+
+// ---------------------------------------------------------------------------
+// Step 2 — Create owner
+// ---------------------------------------------------------------------------
 
 class _Step2 extends StatelessWidget {
   final GlobalKey<FormState> formKey;
@@ -662,6 +800,7 @@ class _Step2 extends StatelessWidget {
   final VoidCallback onBack;
 
   const _Step2({
+    super.key,
     required this.formKey,
     required this.fullNameCtrl,
     required this.emailCtrl,
@@ -676,15 +815,31 @@ class _Step2 extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
     return Form(
       key: formKey,
       child: Column(
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Step 3 of 3 \u2014 Create owner account',
-              style: Theme.of(context).textTheme.titleMedium),
+          Icon(Icons.person_add_rounded, size: 48, color: colors.primary),
           const SizedBox(height: 16),
+          Text(
+            'Create owner account',
+            style: theme.textTheme.titleLarge,
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 8),
+          Text(
+            'This account will have full control over the instance',
+            style: theme.textTheme.bodyMedium?.copyWith(
+              color: colors.onSurfaceVariant,
+            ),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 24),
           TextFormField(
             controller: fullNameCtrl,
             decoration: const InputDecoration(
@@ -694,7 +849,7 @@ class _Step2 extends StatelessWidget {
             validator: (v) =>
                 (v == null || v.trim().isEmpty) ? 'Required.' : null,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           TextFormField(
             controller: emailCtrl,
             keyboardType: TextInputType.emailAddress,
@@ -705,9 +860,9 @@ class _Step2 extends StatelessWidget {
             validator: (v) =>
                 (v == null || !v.contains('@')) ? 'Enter a valid email.' : null,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           _PasswordField(ctrl: passwordCtrl),
-          const SizedBox(height: 12),
+          const SizedBox(height: 16),
           TextFormField(
             controller: confirmPasswordCtrl,
             obscureText: true,
@@ -721,7 +876,7 @@ class _Step2 extends StatelessWidget {
               return null;
             },
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           CheckboxListTile(
             value: acknowledged,
             onChanged: onAcknowledgedChanged,
@@ -731,31 +886,114 @@ class _Step2 extends StatelessWidget {
             controlAffinity: ListTileControlAffinity.leading,
             contentPadding: EdgeInsets.zero,
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 20),
           Row(
             children: [
-              TextButton(
+              TextButton.icon(
                 onPressed: loading ? null : onBack,
-                child: const Text('Back'),
+                icon: const Icon(Icons.arrow_back_rounded, size: 18),
+                label: const Text('Back'),
               ),
               const SizedBox(width: 12),
               Expanded(
-                child: FilledButton(
-                  onPressed: loading ? null : onContinue,
-                  child: loading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text('Finish setup'),
+                child: _WizardButton(
+                  loading: loading,
+                  onPressed: onContinue,
+                  label: 'Finish setup',
                 ),
               ),
             ],
           ),
         ],
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Step 3 — Success
+// ---------------------------------------------------------------------------
+
+class _SuccessStep extends StatelessWidget {
+  final Animation<double> scaleAnimation;
+
+  const _SuccessStep({
+    super.key,
+    required this.scaleAnimation,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        const SizedBox(height: 24),
+        ScaleTransition(
+          scale: scaleAnimation,
+          child: Icon(
+            Icons.check_circle_rounded,
+            size: 72,
+            color: colors.primary,
+          ),
+        ),
+        const SizedBox(height: 24),
+        Text(
+          'You\'re all set!',
+          style: theme.textTheme.headlineSmall?.copyWith(
+            fontWeight: FontWeight.w600,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 8),
+        Text(
+          'Welcome to Luma',
+          style: theme.textTheme.bodyLarge?.copyWith(
+            color: colors.onSurfaceVariant,
+          ),
+          textAlign: TextAlign.center,
+        ),
+        const SizedBox(height: 24),
+      ],
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Shared widgets
+// ---------------------------------------------------------------------------
+
+class _WizardButton extends StatelessWidget {
+  final bool loading;
+  final VoidCallback onPressed;
+  final String label;
+
+  const _WizardButton({
+    required this.loading,
+    required this.onPressed,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return FilledButton(
+      onPressed: loading ? null : onPressed,
+      style: FilledButton.styleFrom(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(12),
+        ),
+      ),
+      child: loading
+          ? const SizedBox(
+              height: 20,
+              width: 20,
+              child: CircularProgressIndicator(
+                  strokeWidth: 2, color: Colors.white),
+            )
+          : Text(label),
     );
   }
 }
