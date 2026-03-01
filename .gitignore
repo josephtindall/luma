@@ -25,6 +25,8 @@ src/luma-web/.dart_tool/
 !*.example
 !Dockerfile*
 !.github/
+# Scripts
+!*.ps1
 # Flutter / Dart
 !*.dart
 !pubspec.lock

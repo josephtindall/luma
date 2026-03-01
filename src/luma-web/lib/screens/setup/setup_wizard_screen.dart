@@ -68,7 +68,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
         body: json.encode({'token': token}),
       );
 
-      if (resp.statusCode == 200) {
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
         setState(() => _step = 1);
       } else {
         setState(() => _error = 'Invalid token — check Haven\'s startup logs.');
@@ -93,18 +93,18 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
         Uri.parse('$_baseUrl/api/luma/setup/configure'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
-          'instance_name': _instanceNameCtrl.text.trim(),
+          'name': _instanceNameCtrl.text.trim(),
           'timezone': _timezone,
           'locale': _locale,
         }),
       );
 
-      if (resp.statusCode == 200) {
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
         setState(() => _step = 2);
       } else {
         final body = json.decode(resp.body) as Map<String, dynamic>?;
         setState(() => _error =
-            (body?['error'] as String?) ?? 'Configuration failed. Try again.');
+            (body?['error'] as String?) ?? (body?['message'] as String?) ?? 'Configuration failed. Try again.');
       }
     } catch (_) {
       setState(() => _error = 'Could not reach the server. Try again.');
@@ -130,13 +130,14 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
         Uri.parse('$_baseUrl/api/luma/setup/owner'),
         headers: {'Content-Type': 'application/json'},
         body: json.encode({
-          'full_name': _fullNameCtrl.text.trim(),
+          'display_name': _fullNameCtrl.text.trim(),
           'email': _emailCtrl.text.trim(),
           'password': _passwordCtrl.text,
+          'confirmed': true,
         }),
       );
 
-      if (resp.statusCode == 200 || resp.statusCode == 201) {
+      if (resp.statusCode >= 200 && resp.statusCode < 300) {
         // Log in immediately with the new owner credentials.
         await widget.auth.login(
           _emailCtrl.text.trim(),

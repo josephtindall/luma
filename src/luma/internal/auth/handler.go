@@ -32,7 +32,7 @@ func (h *Handler) SetupRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/status", h.status)
 	r.Post("/verify-token", h.proxySetup("POST", "/api/setup/verify-token"))
-	r.Post("/configure", h.proxySetup("POST", "/api/setup/configure"))
+	r.Post("/configure", h.proxySetup("POST", "/api/setup/instance"))
 	r.Post("/owner", h.proxySetup("POST", "/api/setup/owner"))
 	return r
 }

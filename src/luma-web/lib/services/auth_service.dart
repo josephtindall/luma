@@ -61,7 +61,12 @@ class AuthService extends ChangeNotifier {
     final resp = await http.post(
       Uri.parse('$_baseUrl/api/luma/auth/login'),
       headers: {'Content-Type': 'application/json'},
-      body: json.encode({'email': email, 'password': password}),
+      body: json.encode({
+        'email': email,
+        'password': password,
+        'platform': 'web',
+        'device_name': 'Browser',
+      }),
     );
 
     if (resp.statusCode != 200) {
