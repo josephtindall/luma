@@ -103,6 +103,14 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Sets the access token and marks the instance as active.
+  /// Used after setup completes — the owner endpoint already returns a token.
+  void activateSession(String accessToken) {
+    _accessToken = accessToken;
+    _setupState = 'active';
+    notifyListeners();
+  }
+
   /// Clears the in-memory token without calling the server.
   /// Called by ApiClient after a failed refresh.
   void clearSession() {

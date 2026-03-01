@@ -138,19 +138,19 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
       );
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-        // Log in immediately with the new owner credentials.
-        await widget.auth.login(
-          _emailCtrl.text.trim(),
-          _passwordCtrl.text,
-        );
-        if (mounted) context.go('/home');
+        final data = json.decode(resp.body) as Map<String, dynamic>;
+        final token = data['access_token'] as String?;
+        if (token != null && token.isNotEmpty) {
+          widget.auth.activateSession(token);
+          if (mounted) context.go('/home');
+        } else {
+          setState(() => _error = 'Owner created but no token returned. Please log in.');
+        }
       } else {
-        final body = json.decode(resp.body) as Map<String, dynamic>?;
+        final data = json.decode(resp.body) as Map<String, dynamic>?;
         setState(
-            () => _error = (body?['error'] as String?) ?? 'Setup failed. Try again.');
+            () => _error = (data?['error'] as String?) ?? (data?['message'] as String?) ?? 'Setup failed. Try again.');
       }
-    } on AuthException catch (e) {
-      setState(() => _error = 'Owner created but login failed: ${e.message}');
     } catch (_) {
       setState(() => _error = 'Could not reach the server. Try again.');
     } finally {
@@ -372,7 +372,7 @@ class _Step1 extends StatelessWidget {
             controller: nameCtrl,
             decoration: const InputDecoration(
               labelText: 'Instance name',
-              hintText: 'e.g. Acme Engineering',
+              hintText: 'e.g. My Home',
               border: OutlineInputBorder(),
             ),
             validator: (v) {
