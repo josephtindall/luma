@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
+import 'package:web/web.dart' as web;
 
 import '../../services/auth_service.dart';
 
@@ -31,13 +32,13 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   final _formKey1 = GlobalKey<FormState>();
   final _instanceNameCtrl = TextEditingController();
   String _timezone = 'UTC';
-  String _locale = 'en-US';
 
   // Step 2
   final _formKey2 = GlobalKey<FormState>();
   final _fullNameCtrl = TextEditingController();
   final _emailCtrl = TextEditingController();
   final _passwordCtrl = TextEditingController();
+  final _confirmPasswordCtrl = TextEditingController();
   bool _acknowledged = false;
 
   bool _loading = false;
@@ -46,10 +47,55 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
   @override
   void initState() {
     super.initState();
+
     // Auto-detect timezone from the browser.
     final detected = DateTime.now().timeZoneName;
     if (_kTimezones.contains(detected)) {
       _timezone = detected;
+    }
+
+    // Restore step from sessionStorage on refresh.
+    _restoreFromSession();
+  }
+
+  void _restoreFromSession() {
+    try {
+      final storage = web.window.sessionStorage;
+      final savedStep = storage.getItem('luma_setup_step');
+      final savedToken = storage.getItem('luma_setup_token');
+      if (savedStep != null) {
+        final step = int.tryParse(savedStep);
+        if (step != null && step >= 0 && step <= 2) {
+          _step = step;
+          if (savedToken != null && savedToken.isNotEmpty) {
+            _tokenCtrl.text = savedToken;
+          }
+        }
+      }
+    } catch (_) {
+      // sessionStorage unavailable (e.g. SSR or restricted context) — ignore.
+    }
+  }
+
+  void _saveStepToSession(int step) {
+    try {
+      final storage = web.window.sessionStorage;
+      storage.setItem('luma_setup_step', step.toString());
+      if (_tokenCtrl.text.isNotEmpty) {
+        storage.setItem('luma_setup_token', _tokenCtrl.text);
+      }
+    } catch (_) {
+      // Ignore if sessionStorage is unavailable.
+    }
+  }
+
+  void _clearSession() {
+    try {
+      final storage = web.window.sessionStorage;
+      storage.removeItem('luma_setup_step');
+      storage.removeItem('luma_setup_token');
+    } catch (_) {
+      // Ignore.
     }
   }
 
@@ -60,7 +106,21 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
     _fullNameCtrl.dispose();
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
+    _confirmPasswordCtrl.dispose();
     super.dispose();
+  }
+
+  /// Parses an error message from a Haven JSON response body, falling back
+  /// to [fallback] if the body cannot be decoded.
+  String _parseError(http.Response resp, String fallback) {
+    try {
+      final body = json.decode(resp.body) as Map<String, dynamic>?;
+      return (body?['error'] as String?) ??
+          (body?['message'] as String?) ??
+          fallback;
+    } catch (_) {
+      return fallback;
+    }
   }
 
   Future<void> _verifyToken() async {
@@ -81,8 +141,13 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         setState(() => _step = 1);
+        _saveStepToSession(1);
+      } else if (resp.statusCode == 429) {
+        setState(() =>
+            _error = 'Too many attempts \u2014 wait a moment and try again.');
       } else {
-        setState(() => _error = 'Invalid token — check Haven\'s startup logs.');
+        setState(() => _error = _parseError(
+            resp, 'Invalid token \u2014 check Haven\'s startup logs.'));
       }
     } catch (_) {
       setState(() => _error = 'Could not reach the server. Try again.');
@@ -106,16 +171,19 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
         body: json.encode({
           'name': _instanceNameCtrl.text.trim(),
           'timezone': _timezone,
-          'locale': _locale,
+          'locale': 'en-US',
         }),
       );
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         setState(() => _step = 2);
+        _saveStepToSession(2);
+      } else if (resp.statusCode == 429) {
+        setState(() =>
+            _error = 'Too many attempts \u2014 wait a moment and try again.');
       } else {
-        final body = json.decode(resp.body) as Map<String, dynamic>?;
-        setState(() => _error =
-            (body?['error'] as String?) ?? (body?['message'] as String?) ?? 'Configuration failed. Try again.');
+        setState(() =>
+            _error = _parseError(resp, 'Configuration failed. Try again.'));
       }
     } catch (_) {
       setState(() => _error = 'Could not reach the server. Try again.');
@@ -149,6 +217,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
       );
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
+        _clearSession();
         final data = json.decode(resp.body) as Map<String, dynamic>;
         final token = data['access_token'] as String?;
         if (token != null && token.isNotEmpty) {
@@ -157,16 +226,26 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
         } else {
           setState(() => _error = 'Owner created but no token returned. Please log in.');
         }
+      } else if (resp.statusCode == 429) {
+        setState(() =>
+            _error = 'Too many attempts \u2014 wait a moment and try again.');
       } else {
-        final data = json.decode(resp.body) as Map<String, dynamic>?;
-        setState(
-            () => _error = (data?['error'] as String?) ?? (data?['message'] as String?) ?? 'Setup failed. Try again.');
+        setState(() =>
+            _error = _parseError(resp, 'Setup failed. Try again.'));
       }
     } catch (_) {
       setState(() => _error = 'Could not reach the server. Try again.');
     } finally {
       setState(() => _loading = false);
     }
+  }
+
+  void _goBack() {
+    setState(() {
+      _step -= 1;
+      _error = null;
+    });
+    _saveStepToSession(_step);
   }
 
   @override
@@ -189,7 +268,10 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                 LinearProgressIndicator(value: (_step + 1) / 3),
                 const SizedBox(height: 24),
                 if (_error != null) ...[
-                  _ErrorBanner(message: _error!),
+                  _ErrorBanner(
+                    message: _error!,
+                    onDismiss: () => setState(() => _error = null),
+                  ),
                   const SizedBox(height: 16),
                 ],
                 IndexedStack(
@@ -204,9 +286,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                       formKey: _formKey1,
                       nameCtrl: _instanceNameCtrl,
                       timezone: _timezone,
-                      locale: _locale,
                       onTimezoneChanged: (v) => setState(() => _timezone = v),
-                      onLocaleChanged: (v) => setState(() => _locale = v),
                       loading: _loading,
                       onContinue: _configure,
                     ),
@@ -215,11 +295,13 @@ class _SetupWizardScreenState extends State<SetupWizardScreen> {
                       fullNameCtrl: _fullNameCtrl,
                       emailCtrl: _emailCtrl,
                       passwordCtrl: _passwordCtrl,
+                      confirmPasswordCtrl: _confirmPasswordCtrl,
                       acknowledged: _acknowledged,
                       onAcknowledgedChanged: (v) =>
                           setState(() => _acknowledged = v ?? false),
                       loading: _loading,
                       onContinue: _createOwner,
+                      onBack: _goBack,
                     ),
                   ],
                 ),
@@ -258,6 +340,12 @@ class _Step0State extends State<_Step0> {
   void initState() {
     super.initState();
     _inputCtrl.addListener(_onInputChanged);
+
+    // If the parent controller already has a value (restored from session),
+    // seed the local display.
+    if (widget.ctrl.text.isNotEmpty) {
+      _inputCtrl.text = widget.ctrl.text;
+    }
   }
 
   @override
@@ -299,7 +387,7 @@ class _Step0State extends State<_Step0> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        Text('Step 1 of 3 — Verify ownership',
+        Text('Step 1 of 3 \u2014 Verify ownership',
             style: Theme.of(context).textTheme.titleMedium),
         const SizedBox(height: 8),
         Text(
@@ -329,7 +417,7 @@ class _Step0State extends State<_Step0> {
                     Padding(
                       padding: const EdgeInsets.symmetric(horizontal: 12),
                       child: Text(
-                        '—',
+                        '\u2014',
                         style: TextStyle(
                           fontSize: 22,
                           color: colors.outline,
@@ -486,42 +574,11 @@ const _kTimezones = [
   'Africa/Johannesburg',
 ];
 
-const _kLocales = [
-  'en-US',
-  'en-GB',
-  'en-AU',
-  'en-CA',
-  'es-ES',
-  'es-MX',
-  'fr-FR',
-  'de-DE',
-  'it-IT',
-  'pt-BR',
-  'pt-PT',
-  'nl-NL',
-  'sv-SE',
-  'no-NO',
-  'da-DK',
-  'fi-FI',
-  'pl-PL',
-  'ru-RU',
-  'tr-TR',
-  'ar-SA',
-  'he-IL',
-  'hi-IN',
-  'ja-JP',
-  'ko-KR',
-  'zh-CN',
-  'zh-TW',
-];
-
 class _Step1 extends StatelessWidget {
   final GlobalKey<FormState> formKey;
   final TextEditingController nameCtrl;
   final String timezone;
-  final String locale;
   final ValueChanged<String> onTimezoneChanged;
-  final ValueChanged<String> onLocaleChanged;
   final bool loading;
   final VoidCallback onContinue;
 
@@ -529,9 +586,7 @@ class _Step1 extends StatelessWidget {
     required this.formKey,
     required this.nameCtrl,
     required this.timezone,
-    required this.locale,
     required this.onTimezoneChanged,
-    required this.onLocaleChanged,
     required this.loading,
     required this.onContinue,
   });
@@ -544,7 +599,7 @@ class _Step1 extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Step 2 of 3 — Name your instance',
+          Text('Step 2 of 3 \u2014 Name your instance',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           TextFormField(
@@ -577,18 +632,6 @@ class _Step1 extends StatelessWidget {
             onChanged: (v) => onTimezoneChanged(v!),
           ),
           const SizedBox(height: 16),
-          DropdownButtonFormField<String>(
-            initialValue: locale,
-            decoration: const InputDecoration(
-              labelText: 'Locale',
-              border: OutlineInputBorder(),
-            ),
-            items: _kLocales
-                .map((l) => DropdownMenuItem(value: l, child: Text(l)))
-                .toList(),
-            onChanged: (v) => onLocaleChanged(v!),
-          ),
-          const SizedBox(height: 16),
           FilledButton(
             onPressed: loading ? null : onContinue,
             child: loading
@@ -611,20 +654,24 @@ class _Step2 extends StatelessWidget {
   final TextEditingController fullNameCtrl;
   final TextEditingController emailCtrl;
   final TextEditingController passwordCtrl;
+  final TextEditingController confirmPasswordCtrl;
   final bool acknowledged;
   final ValueChanged<bool?> onAcknowledgedChanged;
   final bool loading;
   final VoidCallback onContinue;
+  final VoidCallback onBack;
 
   const _Step2({
     required this.formKey,
     required this.fullNameCtrl,
     required this.emailCtrl,
     required this.passwordCtrl,
+    required this.confirmPasswordCtrl,
     required this.acknowledged,
     required this.onAcknowledgedChanged,
     required this.loading,
     required this.onContinue,
+    required this.onBack,
   });
 
   @override
@@ -635,7 +682,7 @@ class _Step2 extends StatelessWidget {
         mainAxisSize: MainAxisSize.min,
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text('Step 3 of 3 — Create owner account',
+          Text('Step 3 of 3 \u2014 Create owner account',
               style: Theme.of(context).textTheme.titleMedium),
           const SizedBox(height: 16),
           TextFormField(
@@ -660,6 +707,20 @@ class _Step2 extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           _PasswordField(ctrl: passwordCtrl),
+          const SizedBox(height: 12),
+          TextFormField(
+            controller: confirmPasswordCtrl,
+            obscureText: true,
+            decoration: const InputDecoration(
+              labelText: 'Confirm password',
+              border: OutlineInputBorder(),
+            ),
+            validator: (v) {
+              if (v == null || v.isEmpty) return 'Please confirm your password.';
+              if (v != passwordCtrl.text) return 'Passwords do not match.';
+              return null;
+            },
+          ),
           const SizedBox(height: 16),
           CheckboxListTile(
             value: acknowledged,
@@ -671,16 +732,27 @@ class _Step2 extends StatelessWidget {
             contentPadding: EdgeInsets.zero,
           ),
           const SizedBox(height: 16),
-          FilledButton(
-            onPressed: loading ? null : onContinue,
-            child: loading
-                ? const SizedBox(
-                    height: 20,
-                    width: 20,
-                    child: CircularProgressIndicator(
-                        strokeWidth: 2, color: Colors.white),
-                  )
-                : const Text('Finish setup'),
+          Row(
+            children: [
+              TextButton(
+                onPressed: loading ? null : onBack,
+                child: const Text('Back'),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: FilledButton(
+                  onPressed: loading ? null : onContinue,
+                  child: loading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Finish setup'),
+                ),
+              ),
+            ],
           ),
         ],
       ),
@@ -732,22 +804,33 @@ class _PasswordFieldState extends State<_PasswordField> {
 
 class _ErrorBanner extends StatelessWidget {
   final String message;
+  final VoidCallback onDismiss;
 
-  const _ErrorBanner({required this.message});
+  const _ErrorBanner({required this.message, required this.onDismiss});
 
   @override
   Widget build(BuildContext context) {
+    final colors = Theme.of(context).colorScheme;
     return Container(
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4, right: 4),
       decoration: BoxDecoration(
-        color: Theme.of(context).colorScheme.errorContainer,
+        color: colors.errorContainer,
         borderRadius: BorderRadius.circular(8),
       ),
-      child: Text(
-        message,
-        style: TextStyle(
-          color: Theme.of(context).colorScheme.onErrorContainer,
-        ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              message,
+              style: TextStyle(color: colors.onErrorContainer),
+            ),
+          ),
+          IconButton(
+            icon: Icon(Icons.close, size: 18, color: colors.onErrorContainer),
+            onPressed: onDismiss,
+            tooltip: 'Dismiss',
+          ),
+        ],
       ),
     );
   }
