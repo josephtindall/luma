@@ -22,6 +22,8 @@ class ApiClient {
       _send('POST', path, body);
   Future<http.Response> put(String path, Map<String, dynamic> body) =>
       _send('PUT', path, body);
+  Future<http.Response> patch(String path, Map<String, dynamic> body) =>
+      _send('PATCH', path, body);
   Future<http.Response> delete(String path) => _send('DELETE', path, null);
 
   Future<http.Response> _send(
@@ -70,6 +72,9 @@ class ApiClient {
             body: body != null ? json.encode(body) : null);
       case 'PUT':
         return http.put(uri, headers: headers,
+            body: body != null ? json.encode(body) : null);
+      case 'PATCH':
+        return http.patch(uri, headers: headers,
             body: body != null ? json.encode(body) : null);
       case 'DELETE':
         return http.delete(uri, headers: headers);

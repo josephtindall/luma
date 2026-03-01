@@ -1,14 +1,23 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../services/api_client.dart';
 import '../../services/auth_service.dart';
+import '../../services/user_service.dart';
+import '../../widgets/user_avatar.dart';
 
 class HomeScreen extends StatelessWidget {
   final ApiClient api;
   final AuthService auth;
+  final UserService userService;
 
-  const HomeScreen({super.key, required this.api, required this.auth});
+  const HomeScreen({
+    super.key,
+    required this.api,
+    required this.auth,
+    required this.userService,
+  });
 
   @override
   Widget build(BuildContext context) {
@@ -17,7 +26,7 @@ class HomeScreen extends StatelessWidget {
         children: [
           SizedBox(
             width: 240,
-            child: _Sidebar(auth: auth),
+            child: _Sidebar(auth: auth, userService: userService),
           ),
           const VerticalDivider(width: 1),
           Expanded(
@@ -31,8 +40,9 @@ class HomeScreen extends StatelessWidget {
 
 class _Sidebar extends StatelessWidget {
   final AuthService auth;
+  final UserService userService;
 
-  const _Sidebar({required this.auth});
+  const _Sidebar({required this.auth, required this.userService});
 
   @override
   Widget build(BuildContext context) {
@@ -43,7 +53,7 @@ class _Sidebar extends StatelessWidget {
           child: _VaultNav(auth: auth),
         ),
         const Divider(height: 1),
-        _SidebarFooter(auth: auth),
+        _SidebarFooter(auth: auth, userService: userService),
       ],
     );
   }
@@ -129,33 +139,70 @@ class _PlaceholderVaultTile extends StatelessWidget {
 
 class _SidebarFooter extends StatelessWidget {
   final AuthService auth;
+  final UserService userService;
 
-  const _SidebarFooter({required this.auth});
+  const _SidebarFooter({required this.auth, required this.userService});
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
-          const Icon(Icons.account_circle_outlined, size: 20),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Text(
-              // Display name is not yet available from AuthService in this bare
-              // minimum; show a placeholder. A later iteration adds GET /api/haven/users/me.
-              'Account',
-              style: Theme.of(context).textTheme.bodySmall,
-              overflow: TextOverflow.ellipsis,
+    return ListenableBuilder(
+      listenable: userService,
+      builder: (context, _) {
+        final profile = userService.profile;
+        final name = profile?.displayName ?? 'Account';
+        final seed = profile?.avatarSeed ?? '';
+
+        return MenuAnchor(
+          menuChildren: [
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.settings_outlined),
+              child: const Text('Settings'),
+              onPressed: () => context.push('/settings'),
             ),
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout, size: 18),
-            tooltip: 'Sign out',
-            onPressed: () => auth.logout(),
-          ),
-        ],
-      ),
+            MenuItemButton(
+              leadingIcon: const Icon(Icons.logout),
+              child: const Text('Log out'),
+              onPressed: () {
+                userService.clear();
+                auth.logout();
+              },
+            ),
+          ],
+          builder: (context, controller, _) {
+            return InkWell(
+              borderRadius: BorderRadius.circular(8),
+              onTap: () {
+                if (controller.isOpen) {
+                  controller.close();
+                } else {
+                  controller.open();
+                }
+              },
+              child: Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    UserAvatar(
+                      avatarSeed: seed,
+                      displayName: name,
+                      size: 20,
+                    ),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        name,
+                        style: Theme.of(context).textTheme.bodySmall,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    const Icon(Icons.more_vert, size: 16),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
     );
   }
 }

@@ -111,7 +111,13 @@ func run() error {
 
 	// Auth proxy — unauthenticated, outside the protected group
 	authHTTPClient := &http.Client{Timeout: 10 * time.Second}
-	authHandler := auth.NewHandler(authHTTPClient, cfg.HavenUrl)
+	authHandler := auth.NewHandler(authHTTPClient, cfg.HavenUrl, func(ctx context.Context) string {
+		id := haven.IdentityFromContext(ctx)
+		if id == nil {
+			return ""
+		}
+		return id.UserID
+	})
 
 	r.Route("/api/luma/setup", func(r chi.Router) { r.Mount("/", authHandler.SetupRoutes()) })
 	r.Route("/api/luma/auth", func(r chi.Router) { r.Mount("/", authHandler.AuthRoutes()) })
@@ -121,6 +127,7 @@ func run() error {
 		r.Use(havenMiddleware.Authenticate)
 		r.Use(ensureVaultMw)
 		r.Mount("/vaults", vaultHandler.Routes())
+		r.Mount("/user", authHandler.UserRoutes())
 	})
 
 	// Static file serving — Flutter web SPA (when LUMA_STATIC_DIR is set)

@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -15,15 +16,19 @@ import (
 // It does not decode request bodies (except login/refresh to extract the access token)
 // and does not attach context-held tokens.
 type Handler struct {
-	client   *http.Client
-	havenURL string
+	client     *http.Client
+	havenURL   string
+	userIDFunc func(context.Context) string
 }
 
 // NewHandler creates an auth proxy handler. httpClient must not be nil.
-func NewHandler(httpClient *http.Client, havenURL string) *Handler {
+// userIDFunc extracts the authenticated user ID from context (set by Haven
+// middleware). It is used by UserRoutes to resolve /me to a real user ID.
+func NewHandler(httpClient *http.Client, havenURL string, userIDFunc func(context.Context) string) *Handler {
 	return &Handler{
-		client:   httpClient,
-		havenURL: strings.TrimRight(havenURL, "/"),
+		client:     httpClient,
+		havenURL:   strings.TrimRight(havenURL, "/"),
+		userIDFunc: userIDFunc,
 	}
 }
 
@@ -44,6 +49,36 @@ func (h *Handler) AuthRoutes() chi.Router {
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
 	return r
+}
+
+// UserRoutes returns a router for /api/luma/user/* endpoints.
+// These proxy to Haven's /users/me and related endpoints. Haven enforces
+// ownership on /users/me paths, so no authz.RequireCan() is needed.
+func (h *Handler) UserRoutes() chi.Router {
+	r := chi.NewRouter()
+	// GET /me needs special handling: Haven has GET /api/haven/users/{id}
+	// but no GET /api/haven/users/me, so we resolve the real user ID from
+	// the auth context and proxy to /api/haven/users/{id}.
+	r.Get("/me", h.getMe)
+	r.Put("/me/profile", h.proxyAuth("PUT", "/api/haven/users/me/profile"))
+	r.Post("/me/password", h.proxyAuth("POST", "/api/haven/users/me/password"))
+	r.Get("/me/preferences", h.proxyAuth("GET", "/api/haven/users/me/preferences"))
+	r.Patch("/me/preferences", h.proxyAuth("PATCH", "/api/haven/users/me/preferences"))
+	r.Get("/me/devices", h.proxyAuth("GET", "/api/haven/devices"))
+	r.Delete("/me/devices/{id}", h.proxyAuthWithParam("DELETE", "/api/haven/devices/", "id"))
+	r.Get("/me/audit", h.proxyAuth("GET", "/api/haven/audit/me"))
+	return r
+}
+
+// getMe resolves the authenticated user's ID and proxies to Haven's
+// GET /api/haven/users/{id} endpoint.
+func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
+	userID := h.userIDFunc(r.Context())
+	if userID == "" {
+		writeJSON(w, http.StatusUnauthorized, map[string]string{"error": "unauthorized"})
+		return
+	}
+	h.proxyAuth("GET", "/api/haven/users/"+userID)(w, r)
 }
 
 // status probes Haven state.
@@ -72,6 +107,67 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string]string{"state": "active"})
 	default:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("unexpected haven status: %d", resp.StatusCode)})
+	}
+}
+
+// proxyAuth returns a handler that forwards the request to Haven with the
+// caller's Authorization header. Used for /users/me endpoints where Haven
+// enforces ownership.
+func (h *Handler) proxyAuth(method, havenPath string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		req, err := http.NewRequestWithContext(r.Context(), method, h.havenURL+havenPath, r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+
+		resp, err := h.client.Do(req)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "haven unavailable"})
+			return
+		}
+		defer resp.Body.Close()
+
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
+	}
+}
+
+// proxyAuthWithParam returns a handler that appends a chi URL param to the
+// Haven path and forwards the request with the caller's Authorization header.
+func (h *Handler) proxyAuthWithParam(method, havenPathPrefix, paramName string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		paramVal := chi.URLParam(r, paramName)
+		if paramVal == "" {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing " + paramName})
+			return
+		}
+
+		req, err := http.NewRequestWithContext(r.Context(), method, h.havenURL+havenPathPrefix+paramVal, r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+
+		resp, err := h.client.Do(req)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "haven unavailable"})
+			return
+		}
+		defer resp.Body.Close()
+
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
 	}
 }
 
