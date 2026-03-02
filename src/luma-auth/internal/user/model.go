@@ -11,6 +11,7 @@ type User struct {
 	PasswordHash        string // Argon2id PHC string — never expose to callers
 	InstanceRoleID      string // e.g. "builtin:instance-owner", "builtin:instance-member"
 	AvatarSeed          string
+	MFAEnabled          bool
 	FailedLoginAttempts int
 	LockedAt            *time.Time
 	LockedReason        string
@@ -31,6 +32,7 @@ type PublicUser struct {
 	DisplayName    string    `json:"display_name"`
 	InstanceRoleID string    `json:"instance_role_id"`
 	AvatarSeed     string    `json:"avatar_seed,omitempty"`
+	MFAEnabled     bool      `json:"mfa_enabled"`
 	CreatedAt      time.Time `json:"created_at"`
 }
 
@@ -42,6 +44,7 @@ func (u *User) ToPublic() *PublicUser {
 		DisplayName:    u.DisplayName,
 		InstanceRoleID: u.InstanceRoleID,
 		AvatarSeed:     u.AvatarSeed,
+		MFAEnabled:     u.MFAEnabled,
 		CreatedAt:      u.CreatedAt,
 	}
 }

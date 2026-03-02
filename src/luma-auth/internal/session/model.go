@@ -36,3 +36,12 @@ type TokenPair struct {
 	RefreshToken string // raw — hand to client; never store
 	ExpiresAt    time.Time
 }
+
+// LoginResult is the outcome of a login attempt. Either Pair is set (no MFA)
+// or MFARequired is true and MFAToken/MFAMethods are set.
+type LoginResult struct {
+	Pair       *TokenPair
+	MFARequired bool
+	MFAToken    string   // raw opaque token — only set when MFARequired
+	MFAMethods  []string // e.g. ["totp", "passkey"]
+}

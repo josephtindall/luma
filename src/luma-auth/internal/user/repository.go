@@ -35,6 +35,9 @@ type Repository interface {
 	// UnlockAccount clears locked_at, locked_reason, and failed_login_attempts.
 	UnlockAccount(ctx context.Context, id string) error
 
+	// SetMFAEnabled updates the mfa_enabled flag on the user.
+	SetMFAEnabled(ctx context.Context, id string, enabled bool) error
+
 	// RegisterAtomic creates a new user, their preferences row, and marks the
 	// invitation as accepted — all inside a single transaction.
 	// Returns the new user's UUID.

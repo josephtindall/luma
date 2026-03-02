@@ -41,4 +41,11 @@ const (
 	EventProfileUpdated     = "profile_updated"
 	EventAuthzDenied        = "authz_denied"
 	EventUserRegistered     = "user_registered"
+	EventTOTPEnrolled       = "totp_enrolled"
+	EventTOTPRemoved        = "totp_removed"
+	EventMFAChallengeOK     = "mfa_challenge_success"
+	EventMFAChallengeFail   = "mfa_challenge_failed"
+	EventPasskeyRegistered  = "passkey_registered"
+	EventPasskeyLogin       = "passkey_login"
+	EventPasskeyRevoked     = "passkey_revoked"
 )

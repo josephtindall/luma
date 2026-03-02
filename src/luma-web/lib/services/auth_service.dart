@@ -34,12 +34,20 @@ class AuthService extends ChangeNotifier {
   String _setupState = 'unknown'; // "unknown" | "unclaimed" | "active"
   bool _isInitialized = false;
 
+  // MFA challenge state — set when login returns mfa_required.
+  String? _mfaToken;
+  List<String> _mfaMethods = [];
+
   AuthService(this._baseUrl);
 
   String? get accessToken => _accessToken;
   bool get isLoggedIn => _accessToken != null;
   String get setupState => _setupState;
   bool get isInitialized => _isInitialized;
+
+  /// True when login succeeded but a second factor is required.
+  bool get mfaPending => _mfaToken != null;
+  List<String> get mfaMethods => _mfaMethods;
 
   /// Called from main.dart before runApp. Probes auth service state and attempts
   /// silent token refresh if the instance is active.
@@ -76,7 +84,8 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Logs in with email + password. Stores the access token on success.
+  /// Logs in with email + password. On success, either stores the access token
+  /// or sets [mfaPending] if a second factor is required.
   /// Throws [AuthException] on failure.
   Future<void> login(String email, String password) async {
     final resp = await http.post(
@@ -95,7 +104,54 @@ class AuthService extends ChangeNotifier {
     }
 
     final data = json.decode(resp.body) as Map<String, dynamic>;
+
+    // MFA required — store the challenge token for the verification screen.
+    if (data['mfa_required'] == true) {
+      _mfaToken = data['mfa_token'] as String?;
+      final methods = data['methods'];
+      _mfaMethods = (methods is List) ? methods.cast<String>() : [];
+      notifyListeners();
+      return;
+    }
+
     _accessToken = data['access_token'] as String?;
+    _mfaToken = null;
+    _mfaMethods = [];
+    notifyListeners();
+  }
+
+  /// Verifies the MFA code against the pending challenge.
+  /// Called from the MFA verification screen after [mfaPending] is true.
+  /// Throws [AuthException] on failure.
+  Future<void> verifyMFA(String code) async {
+    if (_mfaToken == null) {
+      throw AuthException('No MFA challenge pending');
+    }
+
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/mfa/verify'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'mfa_token': _mfaToken,
+        'code': code,
+      }),
+    );
+
+    if (resp.statusCode != 200) {
+      throw AuthException('Invalid code');
+    }
+
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    _accessToken = data['access_token'] as String?;
+    _mfaToken = null;
+    _mfaMethods = [];
+    notifyListeners();
+  }
+
+  /// Clears the pending MFA challenge — returns to the login screen.
+  void cancelMFA() {
+    _mfaToken = null;
+    _mfaMethods = [];
     notifyListeners();
   }
 
@@ -136,6 +192,8 @@ class AuthService extends ChangeNotifier {
   /// Called by ApiClient after a failed refresh.
   void clearSession() {
     _accessToken = null;
+    _mfaToken = null;
+    _mfaMethods = [];
     notifyListeners();
   }
 }

@@ -4,10 +4,12 @@ import (
 	"context"
 	"fmt"
 	"log/slog"
+	"time"
 
 	"github.com/josephtindall/luma-auth/internal/audit"
 	"github.com/josephtindall/luma-auth/internal/device"
 	"github.com/josephtindall/luma-auth/internal/invitation"
+	"github.com/josephtindall/luma-auth/internal/mfa"
 	"github.com/josephtindall/luma-auth/internal/user"
 	"github.com/josephtindall/luma-auth/pkg/crypto"
 	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
@@ -44,6 +46,12 @@ type SessionRegisterParams struct {
 	IPAddress    string
 }
 
+// MFAChallengeCreator is a narrow interface satisfied by mfa.Service.
+// Defined here to avoid an import cycle.
+type MFAChallengeCreator interface {
+	CreateChallenge(ctx context.Context, userID, deviceID string) (*mfa.ChallengeResult, error)
+}
+
 // Service handles login, logout, and token refresh. It orchestrates the user,
 // device, session, and audit packages — all wired in cmd/server/main.go.
 type Service struct {
@@ -52,6 +60,7 @@ type Service struct {
 	tokens      Repository
 	audit       audit.Service
 	invitations invitation.Repository
+	mfa         MFAChallengeCreator
 	jwtKey      []byte
 }
 
@@ -62,6 +71,7 @@ func NewService(
 	tokens Repository,
 	audit audit.Service,
 	invitations invitation.Repository,
+	mfaSvc MFAChallengeCreator,
 	jwtKey []byte,
 ) *Service {
 	return &Service{
@@ -70,6 +80,7 @@ func NewService(
 		tokens:      tokens,
 		audit:       audit,
 		invitations: invitations,
+		mfa:         mfaSvc,
 		jwtKey:      jwtKey,
 	}
 }
@@ -81,7 +92,7 @@ func NewService(
 //   - Locked accounts return ErrAccountLocked (but ONLY after the credential check,
 //     so the error doesn't reveal that the account exists).
 //   - Device is registered or matched by fingerprint.
-func (s *Service) Login(ctx context.Context, params LoginParams) (*TokenPair, error) {
+func (s *Service) Login(ctx context.Context, params LoginParams) (*LoginResult, error) {
 	// Always look up by email. If not found, return ErrInvalidCredentials — not ErrUserNotFound.
 	u, err := s.users.GetByEmail(ctx, params.Email)
 	if err != nil {
@@ -135,6 +146,19 @@ func (s *Service) Login(ctx context.Context, params LoginParams) (*TokenPair, er
 
 	_ = s.devices.UpdateLastSeen(ctx, dev.ID)
 
+	// If MFA is enabled, return a challenge instead of tokens.
+	if u.MFAEnabled && s.mfa != nil {
+		challenge, err := s.mfa.CreateChallenge(ctx, u.ID, dev.ID)
+		if err != nil {
+			return nil, fmt.Errorf("session.Service.Login create mfa challenge: %w", err)
+		}
+		return &LoginResult{
+			MFARequired: true,
+			MFAToken:    challenge.MFAToken,
+			MFAMethods:  challenge.Methods,
+		}, nil
+	}
+
 	pair, err := s.issueTokenPair(ctx, u, dev)
 	if err != nil {
 		return nil, err
@@ -149,7 +173,7 @@ func (s *Service) Login(ctx context.Context, params LoginParams) (*TokenPair, er
 		Metadata:  map[string]any{"device_name": dev.Name},
 	})
 
-	return pair, nil
+	return &LoginResult{Pair: pair}, nil
 }
 
 // Register creates a new user via an invitation token and issues a token pair.
@@ -337,6 +361,41 @@ func (s *Service) Logout(ctx context.Context, userID, deviceID string) error {
 // handler to enrich the response with fields not carried in the JWT.
 func (s *Service) GetUser(ctx context.Context, id string) (*user.User, error) {
 	return s.users.GetByID(ctx, id)
+}
+
+// IssueForDevice issues a token pair for a known user+device combination.
+// Used after MFA verification and passkey login where the device is already identified.
+func (s *Service) IssueForDevice(ctx context.Context, userID, deviceID, ipAddress, userAgent string) (accessToken, refreshToken string, expiresAt time.Time, err error) {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return "", "", time.Time{}, fmt.Errorf("session.Service.IssueForDevice get user: %w", err)
+	}
+
+	dev, err := s.devices.GetByID(ctx, deviceID)
+	if err != nil {
+		return "", "", time.Time{}, fmt.Errorf("session.Service.IssueForDevice get device: %w", err)
+	}
+	if dev.IsRevoked() {
+		return "", "", time.Time{}, pkgerrors.ErrDeviceRevoked
+	}
+
+	_ = s.devices.UpdateLastSeen(ctx, dev.ID)
+
+	pair, err := s.issueTokenPair(ctx, u, dev)
+	if err != nil {
+		return "", "", time.Time{}, err
+	}
+
+	s.audit.WriteAsync(ctx, audit.Event{
+		UserID:    userID,
+		DeviceID:  deviceID,
+		Event:     audit.EventLoginSuccess,
+		IPAddress: ipAddress,
+		UserAgent: userAgent,
+		Metadata:  map[string]any{"via": "mfa"},
+	})
+
+	return pair.AccessToken, pair.RefreshToken, pair.ExpiresAt, nil
 }
 
 // LogoutAll revokes all sessions for a user across every device.

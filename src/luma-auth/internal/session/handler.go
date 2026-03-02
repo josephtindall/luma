@@ -84,7 +84,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	pair, err := h.svc.Login(r.Context(), LoginParams{
+	result, err := h.svc.Login(r.Context(), LoginParams{
 		Email:       req.Email,
 		Password:    req.Password,
 		DeviceName:  req.DeviceName,
@@ -98,9 +98,18 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	h.setRefreshCookie(w, pair.RefreshToken, pair.ExpiresAt)
+	if result.MFARequired {
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
+			"mfa_required": true,
+			"mfa_token":    result.MFAToken,
+			"methods":      result.MFAMethods,
+		})
+		return
+	}
+
+	h.setRefreshCookie(w, result.Pair.RefreshToken, result.Pair.ExpiresAt)
 	httputil.WriteJSON(w, http.StatusOK, map[string]string{
-		"access_token": pair.AccessToken,
+		"access_token": result.Pair.AccessToken,
 	})
 }
 

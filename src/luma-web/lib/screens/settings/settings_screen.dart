@@ -27,6 +27,10 @@ class SettingsScreen extends StatelessWidget {
                     const SizedBox(height: 24),
                     _PasswordSection(userService: userService),
                     const SizedBox(height: 24),
+                    _TOTPSection(userService: userService),
+                    const SizedBox(height: 24),
+                    _PasskeysSection(userService: userService),
+                    const SizedBox(height: 24),
                     _PreferencesSection(userService: userService),
                     const SizedBox(height: 24),
                     _DevicesSection(userService: userService),
@@ -279,6 +283,424 @@ class _PasswordSectionState extends State<_PasswordSection> {
         ),
       ),
     );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// TOTP (Two-Factor Authentication)
+// ---------------------------------------------------------------------------
+
+class _TOTPSection extends StatefulWidget {
+  final UserService userService;
+
+  const _TOTPSection({required this.userService});
+
+  @override
+  State<_TOTPSection> createState() => _TOTPSectionState();
+}
+
+class _TOTPSectionState extends State<_TOTPSection> {
+  late Future<List<TOTPApp>> _future;
+
+  // Enrollment state.
+  bool _enrolling = false;
+  String? _pendingId;
+  String? _secret;
+  final _nameCtrl = TextEditingController();
+  final _codeCtrl = TextEditingController();
+  final _passwordCtrl = TextEditingController();
+  bool _confirming = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.userService.loadTOTPApps();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    _codeCtrl.dispose();
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  void _refresh() {
+    setState(() {
+      _future = widget.userService.loadTOTPApps();
+    });
+  }
+
+  Future<void> _startSetup() async {
+    final name = _nameCtrl.text.trim();
+    setState(() => _enrolling = true);
+    try {
+      final result = await widget.userService.setupTOTP(name);
+      setState(() {
+        _pendingId = result['id'];
+        _secret = result['secret'];
+      });
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+      setState(() => _enrolling = false);
+    }
+  }
+
+  Future<void> _confirmCode() async {
+    final code = _codeCtrl.text.trim();
+    if (code.length != 6 || _pendingId == null) return;
+
+    setState(() => _confirming = true);
+    try {
+      await widget.userService.confirmTOTP(_pendingId!, code);
+      setState(() {
+        _enrolling = false;
+        _pendingId = null;
+        _secret = null;
+      });
+      _nameCtrl.clear();
+      _codeCtrl.clear();
+      _refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Authenticator app added')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _confirming = false);
+    }
+  }
+
+  void _cancelEnrollment() {
+    setState(() {
+      _enrolling = false;
+      _pendingId = null;
+      _secret = null;
+    });
+    _nameCtrl.clear();
+    _codeCtrl.clear();
+  }
+
+  Future<void> _remove(TOTPApp app) async {
+    _passwordCtrl.clear();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove authenticator app'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('Remove "${app.name}"? Enter your password to confirm.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passwordCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Password',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (confirmed != true || _passwordCtrl.text.isEmpty) {
+      _passwordCtrl.clear();
+      return;
+    }
+
+    try {
+      await widget.userService.removeTOTPApp(app.id, _passwordCtrl.text);
+      _passwordCtrl.clear();
+      _refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('"${app.name}" removed')),
+        );
+      }
+    } catch (e) {
+      _passwordCtrl.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Authenticator apps',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              'Use an authenticator app for two-factor authentication.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+
+            // Enrolled apps list.
+            FutureBuilder<List<TOTPApp>>(
+              future: _future,
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return Text('Could not load authenticator apps: ${snap.error}',
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error));
+                }
+                final apps = snap.data ?? [];
+                if (apps.isEmpty && !_enrolling) {
+                  return const Text('No authenticator apps registered.');
+                }
+                return Column(
+                  children: apps.map((a) => _appTile(context, a)).toList(),
+                );
+              },
+            ),
+
+            // Enrollment flow.
+            if (_secret != null) ...[
+              const Divider(height: 32),
+              const Text(
+                  'Enter this secret in your authenticator app, then type the 6-digit code to confirm.'),
+              const SizedBox(height: 12),
+              SelectableText(
+                _secret!,
+                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontFamily: 'monospace',
+                      fontWeight: FontWeight.bold,
+                    ),
+              ),
+              const SizedBox(height: 16),
+              Row(
+                children: [
+                  SizedBox(
+                    width: 160,
+                    child: TextField(
+                      controller: _codeCtrl,
+                      keyboardType: TextInputType.number,
+                      maxLength: 6,
+                      decoration: const InputDecoration(
+                        labelText: 'Code',
+                        border: OutlineInputBorder(),
+                        counterText: '',
+                      ),
+                      onSubmitted: (_) => _confirmCode(),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton(
+                    onPressed: _confirming ? null : _confirmCode,
+                    child: _confirming
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Confirm'),
+                  ),
+                  const SizedBox(width: 8),
+                  TextButton(
+                    onPressed: _cancelEnrollment,
+                    child: const Text('Cancel'),
+                  ),
+                ],
+              ),
+            ] else ...[
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'App nickname (optional)',
+                        hintText: 'e.g. Work phone',
+                        border: OutlineInputBorder(),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    onPressed: _enrolling ? null : _startSetup,
+                    icon: const Icon(Icons.add),
+                    label: _enrolling
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Add app'),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _appTile(BuildContext context, TOTPApp app) {
+    return ListTile(
+      leading: const Icon(Icons.security),
+      title: Text(app.name),
+      subtitle: Text('Added ${_formatDate(app.createdAt)}'),
+      trailing: IconButton(
+        icon: const Icon(Icons.close),
+        tooltip: 'Remove',
+        onPressed: () => _remove(app),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Passkeys
+// ---------------------------------------------------------------------------
+
+class _PasskeysSection extends StatefulWidget {
+  final UserService userService;
+
+  const _PasskeysSection({required this.userService});
+
+  @override
+  State<_PasskeysSection> createState() => _PasskeysSectionState();
+}
+
+class _PasskeysSectionState extends State<_PasskeysSection> {
+  late Future<List<Passkey>> _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = widget.userService.loadPasskeys();
+  }
+
+  void _refresh() {
+    setState(() {
+      _future = widget.userService.loadPasskeys();
+    });
+  }
+
+  Future<void> _revoke(Passkey passkey) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove passkey'),
+        content: Text('Remove "${passkey.name}"? You won\'t be able to sign in with it.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Remove')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    try {
+      await widget.userService.revokePasskey(passkey.id);
+      _refresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Passkeys', style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              'Sign in with Touch ID, Windows Hello, or your phone.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            FutureBuilder<List<Passkey>>(
+              future: _future,
+              builder: (context, snap) {
+                if (snap.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+                if (snap.hasError) {
+                  return Text('Could not load passkeys: ${snap.error}',
+                      style:
+                          TextStyle(color: Theme.of(context).colorScheme.error));
+                }
+                final passkeys = snap.data ?? [];
+                if (passkeys.isEmpty) {
+                  return const Text('No passkeys registered.');
+                }
+                return Column(
+                  children:
+                      passkeys.map((p) => _passkeyTile(context, p)).toList(),
+                );
+              },
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _passkeyTile(BuildContext context, Passkey passkey) {
+    return ListTile(
+      leading: const Icon(Icons.key),
+      title: Text(passkey.name),
+      subtitle: Text('Added ${_formatDate(passkey.createdAt)}'),
+      trailing: IconButton(
+        icon: const Icon(Icons.close),
+        tooltip: 'Remove',
+        onPressed: () => _revoke(passkey),
+      ),
+    );
+  }
+
+  String _formatDate(DateTime dt) {
+    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 }
 

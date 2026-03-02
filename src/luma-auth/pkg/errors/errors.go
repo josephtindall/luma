@@ -22,6 +22,12 @@ var (
 	ErrForbidden          = errors.New("forbidden")            // 403
 	ErrSetupRequired      = errors.New("setup required")       // 503
 	ErrSetupComplete      = errors.New("setup complete")       // 410
+	ErrMFARequired        = errors.New("mfa required")         // 200 (not an HTTP error)
+	ErrMFATokenInvalid    = errors.New("mfa token invalid")    // 401
+	ErrMFACodeInvalid     = errors.New("invalid mfa code")     // 401
+	ErrTOTPAlreadySetup   = errors.New("totp already set up")  // 409
+	ErrTOTPNotSetup       = errors.New("totp not set up")      // 404
+	ErrPasskeyNotFound    = errors.New("passkey not found")    // 404
 )
 
 // HTTPStatus maps a sentinel error to its canonical HTTP status code.
@@ -56,6 +62,16 @@ func HTTPStatus(err error) int {
 		return http.StatusServiceUnavailable
 	case errors.Is(err, ErrSetupComplete):
 		return http.StatusGone
+	case errors.Is(err, ErrMFATokenInvalid):
+		return http.StatusUnauthorized
+	case errors.Is(err, ErrMFACodeInvalid):
+		return http.StatusUnauthorized
+	case errors.Is(err, ErrTOTPAlreadySetup):
+		return http.StatusConflict
+	case errors.Is(err, ErrTOTPNotSetup):
+		return http.StatusNotFound
+	case errors.Is(err, ErrPasskeyNotFound):
+		return http.StatusNotFound
 	default:
 		return http.StatusInternalServerError
 	}
@@ -94,6 +110,16 @@ func ErrorCode(err error) string {
 		return "SETUP_REQUIRED"
 	case errors.Is(err, ErrSetupComplete):
 		return "SETUP_COMPLETE"
+	case errors.Is(err, ErrMFATokenInvalid):
+		return "MFA_TOKEN_INVALID"
+	case errors.Is(err, ErrMFACodeInvalid):
+		return "MFA_CODE_INVALID"
+	case errors.Is(err, ErrTOTPAlreadySetup):
+		return "TOTP_ALREADY_SETUP"
+	case errors.Is(err, ErrTOTPNotSetup):
+		return "TOTP_NOT_SETUP"
+	case errors.Is(err, ErrPasskeyNotFound):
+		return "PASSKEY_NOT_FOUND"
 	default:
 		return "INTERNAL_ERROR"
 	}

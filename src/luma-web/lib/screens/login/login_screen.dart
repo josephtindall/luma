@@ -41,11 +41,14 @@ class _LoginScreenState extends State<LoginScreen> {
         _emailCtrl.text.trim(),
         _passwordCtrl.text,
       );
-      // Load user data before the router navigates to /home.
-      await Future.wait([
-        widget.userService.loadProfile(),
-        widget.userService.loadPreferences(),
-      ]);
+      // If MFA is required, the router will redirect to /mfa.
+      // Only load profile/prefs when we have a real session.
+      if (!widget.auth.mfaPending) {
+        await Future.wait([
+          widget.userService.loadProfile(),
+          widget.userService.loadPreferences(),
+        ]);
+      }
     } on AuthException {
       // Per the auth service's security model: never distinguish "email not found" from
       // "wrong password" — always show the same generic message.

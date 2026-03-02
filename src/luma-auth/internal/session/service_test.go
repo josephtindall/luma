@@ -72,6 +72,7 @@ func (m *mockUserRepo) LockAccount(_ context.Context, _, _ string) error {
 	return nil
 }
 func (m *mockUserRepo) UnlockAccount(_ context.Context, _ string) error { return nil }
+func (m *mockUserRepo) SetMFAEnabled(_ context.Context, _ string, _ bool) error { return nil }
 func (m *mockUserRepo) RegisterAtomic(_ context.Context, _ user.RegisterParams) (string, error) {
 	return m.registerID, m.registerErr
 }
@@ -165,7 +166,7 @@ func newSvc(
 	auditSvc audit.Service,
 	invs invitation.Repository,
 ) *Service {
-	return NewService(users, devices, tokens, auditSvc, invs, testJWTKey)
+	return NewService(users, devices, tokens, auditSvc, invs, nil, testJWTKey)
 }
 
 func activeUser() *user.User {
@@ -212,14 +213,17 @@ func TestLogin_Success(t *testing.T) {
 	users := &mockUserRepo{user: activeUser()}
 	svc := newSvc(users, &mockDeviceRepo{}, &mockTokenRepo{}, &mockAuditSvc{}, &mockInvRepo{})
 
-	pair, err := svc.Login(context.Background(), LoginParams{
+	result, err := svc.Login(context.Background(), LoginParams{
 		Email:    "alice@example.com",
 		Password: testPassword,
 	})
 	if err != nil {
 		t.Fatalf("Login: %v", err)
 	}
-	if pair.AccessToken == "" || pair.RefreshToken == "" {
+	if result.MFARequired {
+		t.Error("expected MFARequired=false for user without MFA")
+	}
+	if result.Pair.AccessToken == "" || result.Pair.RefreshToken == "" {
 		t.Error("expected non-empty token pair")
 	}
 }

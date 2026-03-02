@@ -124,6 +124,85 @@ class UserService extends ChangeNotifier {
         .toList();
   }
 
+  // ── TOTP management ─────────────────────────────────────────────────────
+
+  /// Lists all enrolled TOTP authenticator apps.
+  Future<List<TOTPApp>> loadTOTPApps() async {
+    final resp = await _api.get('/api/luma/user/me/mfa/totp');
+    if (resp.statusCode != 200) {
+      throw Exception('Failed to load authenticator apps');
+    }
+    final data = json.decode(resp.body);
+    final items = _unwrapList(data, ['totp', 'data']);
+    return items
+        .map((e) => TOTPApp.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Starts TOTP enrollment. Returns {id, secret, otpauth_uri}.
+  Future<Map<String, String>> setupTOTP(String name) async {
+    final resp = await _api.post('/api/luma/user/me/mfa/totp/setup', {
+      'name': name,
+    });
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to set up TOTP');
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    return {
+      'id': data['id'] as String? ?? '',
+      'secret': data['secret'] as String? ?? '',
+      'otpauth_uri': data['otpauth_uri'] as String? ?? '',
+    };
+  }
+
+  /// Confirms TOTP setup with the secret ID and a verification code.
+  Future<void> confirmTOTP(String id, String code) async {
+    final resp = await _api.post('/api/luma/user/me/mfa/totp/confirm', {
+      'id': id,
+      'code': code,
+    });
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Invalid code');
+    }
+    await loadProfile(); // refresh mfaEnabled state
+  }
+
+  /// Removes a specific TOTP app. Requires password confirmation.
+  Future<void> removeTOTPApp(String id, String password) async {
+    final resp = await _api.deleteWithBody('/api/luma/user/me/mfa/totp/$id', {
+      'password': password,
+    });
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to remove authenticator app');
+    }
+    await loadProfile();
+  }
+
+  // ── Passkey management ─────────────────────────────────────────────────
+
+  Future<List<Passkey>> loadPasskeys() async {
+    final resp = await _api.get('/api/luma/user/me/passkeys');
+    if (resp.statusCode != 200) {
+      throw Exception('Failed to load passkeys');
+    }
+    final data = json.decode(resp.body);
+    final items = _unwrapList(data, ['passkeys', 'data']);
+    return items
+        .map((e) => Passkey.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> revokePasskey(String passkeyId) async {
+    final resp = await _api.delete('/api/luma/user/me/passkeys/$passkeyId');
+    if (resp.statusCode != 200 && resp.statusCode != 204) {
+      throw Exception('Failed to revoke passkey');
+    }
+    await loadProfile();
+  }
+
   void clear() {
     _profile = null;
     _preferences = null;

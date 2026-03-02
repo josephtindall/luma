@@ -28,6 +28,8 @@ import (
 	devicepg "github.com/josephtindall/luma-auth/internal/device/postgres"
 	"github.com/josephtindall/luma-auth/internal/invitation"
 	invitationpg "github.com/josephtindall/luma-auth/internal/invitation/postgres"
+	mfapkg "github.com/josephtindall/luma-auth/internal/mfa"
+	mfapg "github.com/josephtindall/luma-auth/internal/mfa/postgres"
 	"github.com/josephtindall/luma-auth/internal/migrate"
 	"github.com/josephtindall/luma-auth/internal/preferences"
 	prefpg "github.com/josephtindall/luma-auth/internal/preferences/postgres"
@@ -94,6 +96,7 @@ func run() error {
 	invitationRepo := invitationpg.New(db)
 	bootstrapRepo := bootstrappg.New(db)
 	authzRepo := authzpg.New(db)
+	mfaRepo := mfapg.New(db)
 
 	// ── 6. Services ───────────────────────────────────────────────────────────
 	auditSvc := audit.NewAsyncService(auditRepo)
@@ -104,6 +107,7 @@ func run() error {
 	prefSvc := preferences.NewService(prefRepo)
 	invitationSvc := invitation.NewService(invitationRepo)
 	bootstrapSvc := bootstrap.NewService(bootstrapRepo)
+	mfaSvc := mfapkg.NewService(mfaRepo, userRepo, auditSvc)
 
 	sessionSvc := session.NewService(
 		userRepo,
@@ -111,6 +115,7 @@ func run() error {
 		sessionRepo,
 		auditSvc,
 		invitationRepo,
+		mfaSvc,
 		cfg.JWTSigningKey,
 	)
 
@@ -132,6 +137,7 @@ func run() error {
 	prefHandler := preferences.NewHandler(prefSvc)
 	invHandler := invitation.NewHandler(invitationSvc, cfg.BaseURL)
 	authzHandler := authz.NewHandler(authzAuthorizer, auditSvc)
+	mfaHandler := mfapkg.NewHandler(mfaSvc, sessionSvc, true /* secureCookie */)
 
 	// ── 9. Router ─────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -168,6 +174,9 @@ func run() error {
 		r.Post("/api/auth/login", sessionHandler.Login)
 		r.Post("/api/auth/refresh", sessionHandler.Refresh)
 		r.Post("/api/auth/register", sessionHandler.Register)
+		r.Post("/api/auth/mfa/verify", mfaHandler.VerifyMFA)
+		r.Post("/api/auth/passkeys/login/begin", mfaHandler.BeginLogin)
+		r.Post("/api/auth/passkeys/login/finish", mfaHandler.FinishLogin)
 	})
 
 	// ── Invitation join (unauthenticated — accessed before account creation) ──
@@ -192,6 +201,16 @@ func run() error {
 
 		r.Get("/api/auth/devices", deviceHandler.List)
 		r.Delete("/api/auth/devices/{id}", deviceHandler.Revoke)
+
+		r.Get("/api/auth/mfa/totp", mfaHandler.ListTOTP)
+		r.Post("/api/auth/mfa/totp/setup", mfaHandler.SetupTOTP)
+		r.Post("/api/auth/mfa/totp/confirm", mfaHandler.ConfirmTOTP)
+		r.Delete("/api/auth/mfa/totp/{id}", mfaHandler.RemoveTOTP)
+
+		r.Post("/api/auth/passkeys/register/begin", mfaHandler.BeginRegistration)
+		r.Post("/api/auth/passkeys/register/finish", mfaHandler.FinishRegistration)
+		r.Get("/api/auth/passkeys", mfaHandler.ListPasskeys)
+		r.Delete("/api/auth/passkeys/{id}", mfaHandler.RevokePasskey)
 
 		r.Get("/api/auth/audit/me", auditHandler(auditRepo, false))
 		r.Get("/api/auth/audit", auditHandler(auditRepo, true))

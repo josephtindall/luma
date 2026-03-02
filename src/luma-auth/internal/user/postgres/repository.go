@@ -26,7 +26,7 @@ func New(db *pgxpool.Pool) *Repository {
 func (r *Repository) GetByID(ctx context.Context, id string) (*user.User, error) {
 	const q = `
 		SELECT id, email, display_name, password_hash, instance_role_id,
-		       COALESCE(avatar_seed, ''), failed_login_attempts, locked_at,
+		       COALESCE(avatar_seed, ''), mfa_enabled, failed_login_attempts, locked_at,
 		       COALESCE(locked_reason, ''), created_at, updated_at
 		FROM auth.users
 		WHERE id = $1`
@@ -44,7 +44,7 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*user.User, error)
 func (r *Repository) GetByEmail(ctx context.Context, email string) (*user.User, error) {
 	const q = `
 		SELECT id, email, display_name, password_hash, instance_role_id,
-		       COALESCE(avatar_seed, ''), failed_login_attempts, locked_at,
+		       COALESCE(avatar_seed, ''), mfa_enabled, failed_login_attempts, locked_at,
 		       COALESCE(locked_reason, ''), created_at, updated_at
 		FROM auth.users
 		WHERE email = $1`
@@ -155,6 +155,15 @@ func (r *Repository) UnlockAccount(ctx context.Context, id string) error {
 	return nil
 }
 
+func (r *Repository) SetMFAEnabled(ctx context.Context, id string, enabled bool) error {
+	const q = `UPDATE auth.users SET mfa_enabled = $2, updated_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, id, enabled)
+	if err != nil {
+		return fmt.Errorf("user.postgres.SetMFAEnabled: %w", err)
+	}
+	return nil
+}
+
 // RegisterAtomic creates a new member user, their preferences row, and marks
 // the invitation as accepted — all inside a single transaction.
 func (r *Repository) RegisterAtomic(ctx context.Context, params user.RegisterParams) (string, error) {
@@ -212,6 +221,7 @@ func scanUser(row pgx.Row) (*user.User, error) {
 		&u.PasswordHash,
 		&u.InstanceRoleID,
 		&u.AvatarSeed,
+		&u.MFAEnabled,
 		&u.FailedLoginAttempts,
 		&u.LockedAt,
 		&u.LockedReason,

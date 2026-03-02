@@ -25,6 +25,8 @@ class ApiClient {
   Future<http.Response> patch(String path, Map<String, dynamic> body) =>
       _send('PATCH', path, body);
   Future<http.Response> delete(String path) => _send('DELETE', path, null);
+  Future<http.Response> deleteWithBody(String path, Map<String, dynamic> body) =>
+      _send('DELETE', path, body);
 
   Future<http.Response> _send(
     String method,
@@ -77,6 +79,13 @@ class ApiClient {
         return http.patch(uri, headers: headers,
             body: body != null ? json.encode(body) : null);
       case 'DELETE':
+        if (body != null) {
+          final request = http.Request('DELETE', uri)
+            ..headers.addAll(headers)
+            ..body = json.encode(body);
+          final streamed = await request.send();
+          return http.Response.fromStream(streamed);
+        }
         return http.delete(uri, headers: headers);
       default:
         throw ArgumentError('Unknown HTTP method: $method');

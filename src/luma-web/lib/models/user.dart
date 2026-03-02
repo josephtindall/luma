@@ -3,6 +3,7 @@ class UserProfile {
   final String email;
   final String displayName;
   final String avatarSeed;
+  final bool mfaEnabled;
   final DateTime createdAt;
 
   const UserProfile({
@@ -10,6 +11,7 @@ class UserProfile {
     required this.email,
     required this.displayName,
     required this.avatarSeed,
+    required this.mfaEnabled,
     required this.createdAt,
   });
 
@@ -19,6 +21,7 @@ class UserProfile {
       email: _str(json['email']),
       displayName: _str(json['display_name']),
       avatarSeed: _str(json['avatar_seed']),
+      mfaEnabled: _bool(json['mfa_enabled']),
       createdAt: _dt(json['created_at']),
     );
   }
@@ -101,6 +104,46 @@ class Device {
       lastSeenAt: _dt(_get(json, 'LastSeenAt', 'last_seen_at')),
       createdAt: _dt(_get(json, 'CreatedAt', 'created_at')),
       isCurrent: _bool(_get(json, 'IsCurrent', 'is_current')),
+    );
+  }
+}
+
+class TOTPApp {
+  final String id;
+  final String name;
+  final DateTime createdAt;
+
+  const TOTPApp({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+  });
+
+  factory TOTPApp.fromJson(Map<String, dynamic> json) {
+    return TOTPApp(
+      id: _str(json['id']),
+      name: _str(json['name']),
+      createdAt: _dt(json['created_at']),
+    );
+  }
+}
+
+class Passkey {
+  final String id;
+  final String name;
+  final DateTime createdAt;
+
+  const Passkey({
+    required this.id,
+    required this.name,
+    required this.createdAt,
+  });
+
+  factory Passkey.fromJson(Map<String, dynamic> json) {
+    return Passkey(
+      id: _str(json['id']),
+      name: _str(json['name']),
+      createdAt: _dt(json['created_at']),
     );
   }
 }

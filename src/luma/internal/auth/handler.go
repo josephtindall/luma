@@ -48,6 +48,13 @@ func (h *Handler) AuthRoutes() chi.Router {
 	r.Post("/login", h.login)
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
+
+	// MFA challenge verification (unauthenticated — issues session tokens).
+	r.Post("/mfa/verify", h.sessionIssuerProxy("/api/auth/mfa/verify"))
+
+	// Passkey login (unauthenticated).
+	r.Post("/passkeys/login/begin", h.proxySetup("POST", "/api/auth/passkeys/login/begin"))
+	r.Post("/passkeys/login/finish", h.sessionIssuerProxy("/api/auth/passkeys/login/finish"))
 	return r
 }
 
@@ -67,6 +74,18 @@ func (h *Handler) UserRoutes() chi.Router {
 	r.Get("/me/devices", h.proxyAuth("GET", "/api/auth/devices"))
 	r.Delete("/me/devices/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/devices/", "id"))
 	r.Get("/me/audit", h.proxyAuth("GET", "/api/auth/audit/me"))
+
+	// TOTP management.
+	r.Get("/me/mfa/totp", h.proxyAuth("GET", "/api/auth/mfa/totp"))
+	r.Post("/me/mfa/totp/setup", h.proxyAuth("POST", "/api/auth/mfa/totp/setup"))
+	r.Post("/me/mfa/totp/confirm", h.proxyAuth("POST", "/api/auth/mfa/totp/confirm"))
+	r.Delete("/me/mfa/totp/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/mfa/totp/", "id"))
+
+	// Passkey management.
+	r.Post("/me/passkeys/register/begin", h.proxyAuth("POST", "/api/auth/passkeys/register/begin"))
+	r.Post("/me/passkeys/register/finish", h.proxyAuth("POST", "/api/auth/passkeys/register/finish"))
+	r.Get("/me/passkeys", h.proxyAuth("GET", "/api/auth/passkeys"))
+	r.Delete("/me/passkeys/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/passkeys/", "id"))
 	return r
 }
 
@@ -273,6 +292,14 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// MFA required — forward the challenge response as-is (no cookies to rewrite).
+	if mfaRequired, _ := payload["mfa_required"].(bool); mfaRequired {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(body) //nolint:errcheck
+		return
+	}
+
 	accessToken, _ := payload["access_token"].(string)
 
 	// Rewrite Set-Cookie path from auth service's path to Luma's refresh path.
@@ -354,6 +381,45 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body) //nolint:errcheck
+}
+
+// sessionIssuerProxy returns a handler for unauthenticated endpoints that issue
+// session tokens (MFA verify, passkey login finish). It forwards the request body,
+// rewrites Set-Cookie paths, and returns the full response body.
+func (h *Handler) sessionIssuerProxy(authPath string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.authURL+authPath, r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+
+		resp, err := h.client.Do(req)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
+			return
+		}
+		defer resp.Body.Close()
+
+		if resp.StatusCode != http.StatusOK {
+			w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+			w.WriteHeader(resp.StatusCode)
+			io.Copy(w, resp.Body) //nolint:errcheck
+			return
+		}
+
+		body, err := io.ReadAll(resp.Body)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+
+		rewriteCookies(w, resp, "/api/auth/refresh", "/api/luma/auth/refresh")
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(body) //nolint:errcheck
+	}
 }
 
 // rewriteCookies reads Set-Cookie headers from the auth service response via resp.Cookies(),
