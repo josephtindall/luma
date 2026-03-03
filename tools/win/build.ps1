@@ -61,13 +61,10 @@ if ($buildWeb) {
     Write-Info "Luma will serve the app automatically (LUMA_STATIC_DIR is set by run.ps1)."
 }
 
-# -- Production Docker image --------------------------------------------------
-
 if ($buildGo) {
     Write-Step "Building production Docker image (luma:latest)"
     Assert-Tool "docker"
 
-    # Build context is src/luma/ -- contains Dockerfile, Go source, migrations.
     docker build -f "$SrcGoDir\Dockerfile" -t luma:latest "$SrcGoDir"
     if ($LASTEXITCODE -ne 0) { Write-Error "Production Docker build failed." }
 
@@ -77,8 +74,6 @@ if ($buildGo) {
     Write-Warn "Note: The Flutter web app is NOT baked into this image."
     Write-Info "In production, serve artifacts/web/ from nginx or a CDN."
 }
-
-# -- Development Docker image -------------------------------------------------
 
 if ($buildDev) {
     Write-Step "Building development Docker image (luma:dev)"
@@ -90,8 +85,6 @@ if ($buildDev) {
     Write-Ok "luma:dev built."
     Write-Info "Start dev stack with:  .\tools\win\run.ps1"
 }
-
-# -- Static Linux binary -------------------------------------------------------
 
 if ($buildBinary) {
     Write-Step "Cross-compiling static linux/amd64 binary"
@@ -123,7 +116,5 @@ if ($buildBinary) {
     Write-Ok "artifacts/luma  (static linux/amd64 -- no runtime dependencies)"
     Write-Info "Deploy this binary directly or copy it into a minimal container image."
 }
-
-# -- Summary ------------------------------------------------------------------
 
 Write-Host "`nBuild complete.`n" -ForegroundColor Green
