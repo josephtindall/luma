@@ -106,6 +106,12 @@ class AuthService extends ChangeNotifier {
     );
 
     if (resp.statusCode != 200) {
+      if (resp.statusCode == 429) {
+        throw AuthException('Too many attempts. Please wait a few minutes.');
+      }
+      if (resp.statusCode == 403) {
+        throw AuthException('Account locked. Contact an administrator.');
+      }
       throw AuthException('Invalid credentials');
     }
 
