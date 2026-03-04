@@ -32,17 +32,19 @@ func (c *MFAChallenge) IsValid() bool {
 
 // Passkey represents a row in auth.passkeys.
 type Passkey struct {
-	ID           string
-	UserID       string
-	CredentialID []byte
-	PublicKey    []byte
-	SignCount    int64
-	Name         string
-	AAGUID       []byte
-	Transports   []string
-	LastUsedAt   *time.Time
-	RevokedAt    *time.Time
-	CreatedAt    time.Time
+	ID             string
+	UserID         string
+	CredentialID   []byte
+	PublicKey      []byte
+	SignCount      int64
+	Name           string
+	AAGUID         []byte
+	Transports     []string
+	BackupEligible bool
+	BackupState    bool
+	LastUsedAt     *time.Time
+	RevokedAt      *time.Time
+	CreatedAt      time.Time
 }
 
 // IsRevoked returns true if the passkey has been revoked.

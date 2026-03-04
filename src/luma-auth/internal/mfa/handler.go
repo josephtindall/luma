@@ -1,8 +1,10 @@
 package mfa
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"io"
 	"net"
 	"net/http"
 	"time"
@@ -328,19 +330,30 @@ func (h *Handler) BeginLogin(w http.ResponseWriter, r *http.Request) {
 // FinishLogin handles POST /api/auth/passkeys/login/finish.
 // Verifies the assertion, issues tokens, and sets the refresh cookie.
 func (h *Handler) FinishLogin(w http.ResponseWriter, r *http.Request) {
-	// The MFA token is passed as a query parameter since the body is the
-	// WebAuthn assertion response that must be forwarded raw to the library.
-	mfaToken := r.URL.Query().Get("mfa_token")
-	if mfaToken == "" {
-		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "mfa_token query parameter is required")
+	// Buffer the body so we can extract mfa_token and still pass it to the
+	// webauthn library (which reads r.Body for the assertion response).
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "could not read body")
 		return
 	}
 
-	userID, deviceID, err := h.svc.LookupChallenge(r.Context(), mfaToken)
+	var wrapper struct {
+		MFAToken string `json:"mfa_token"`
+	}
+	if err := json.Unmarshal(bodyBytes, &wrapper); err != nil || wrapper.MFAToken == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "mfa_token is required")
+		return
+	}
+
+	userID, deviceID, err := h.svc.LookupChallenge(r.Context(), wrapper.MFAToken)
 	if err != nil {
 		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
 		return
 	}
+
+	// Reconstruct the request with the buffered body for go-webauthn.
+	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
 
 	if err := h.svc.FinishLogin(r.Context(), userID, remoteIP(r), r.UserAgent(), r); err != nil {
 		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
@@ -348,7 +361,7 @@ func (h *Handler) FinishLogin(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Consume the MFA challenge now that login succeeded.
-	_ = h.svc.ConsumeChallenge(r.Context(), mfaToken)
+	_ = h.svc.ConsumeChallenge(r.Context(), wrapper.MFAToken)
 
 	accessToken, refreshToken, expiresAt, err := h.sessions.IssueForDevice(r.Context(), userID, deviceID, remoteIP(r), r.UserAgent())
 	if err != nil {

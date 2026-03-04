@@ -554,13 +554,15 @@ func (s *Service) FinishRegistration(ctx context.Context, userID string, r *http
 	}
 
 	p := &Passkey{
-		UserID:       userID,
-		CredentialID: cred.ID,
-		PublicKey:    cred.PublicKey,
-		SignCount:    int64(cred.Authenticator.SignCount),
-		Name:         name,
-		AAGUID:       cred.Authenticator.AAGUID,
-		Transports:   transports,
+		UserID:         userID,
+		CredentialID:   cred.ID,
+		PublicKey:      cred.PublicKey,
+		SignCount:      int64(cred.Authenticator.SignCount),
+		Name:           name,
+		AAGUID:         cred.Authenticator.AAGUID,
+		Transports:     transports,
+		BackupEligible: cred.Flags.BackupEligible,
+		BackupState:    cred.Flags.BackupState,
 	}
 
 	if err := s.StorePasskey(ctx, p); err != nil {

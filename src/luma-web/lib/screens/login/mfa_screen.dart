@@ -17,7 +17,11 @@ class MFAScreen extends StatefulWidget {
 class _MFAScreenState extends State<MFAScreen> {
   final _codeCtrl = TextEditingController();
   bool _loading = false;
+  bool _passkeyLoading = false;
   String? _error;
+
+  bool get _hasTotp => widget.auth.mfaMethods.contains('totp');
+  bool get _hasPasskey => widget.auth.mfaMethods.contains('passkey');
 
   @override
   void dispose() {
@@ -52,6 +56,29 @@ class _MFAScreenState extends State<MFAScreen> {
     }
   }
 
+  Future<void> _verifyWithPasskey() async {
+    if (_passkeyLoading) return;
+
+    setState(() {
+      _passkeyLoading = true;
+      _error = null;
+    });
+
+    try {
+      await widget.auth.verifyMFAWithPasskey();
+      await Future.wait([
+        widget.userService.loadProfile(),
+        widget.userService.loadPreferences(),
+      ]);
+    } on AuthException catch (e) {
+      setState(() => _error = e.message);
+    } catch (e) {
+      setState(() => _error = 'Passkey verification failed. Try again.');
+    } finally {
+      if (mounted) setState(() => _passkeyLoading = false);
+    }
+  }
+
   void _cancel() {
     widget.auth.cancelMFA();
   }
@@ -74,7 +101,11 @@ class _MFAScreenState extends State<MFAScreen> {
                 ),
                 const SizedBox(height: 8),
                 Text(
-                  'Enter the 6-digit code from your authenticator app.',
+                  _hasTotp && _hasPasskey
+                      ? 'Enter your authenticator code or use a passkey.'
+                      : _hasPasskey
+                          ? 'Use your passkey to sign in.'
+                          : 'Enter the 6-digit code from your authenticator app.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 24),
@@ -94,39 +125,72 @@ class _MFAScreenState extends State<MFAScreen> {
                   ),
                   const SizedBox(height: 16),
                 ],
-                TextField(
-                  controller: _codeCtrl,
-                  autofocus: true,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                        letterSpacing: 8,
-                      ),
-                  keyboardType: TextInputType.number,
-                  inputFormatters: [
-                    FilteringTextInputFormatter.digitsOnly,
-                    LengthLimitingTextInputFormatter(6),
-                  ],
-                  decoration: const InputDecoration(
-                    hintText: '000000',
-                    border: OutlineInputBorder(),
+                // Passkey button — shown when passkeys are available.
+                if (_hasPasskey) ...[
+                  FilledButton.icon(
+                    onPressed: _passkeyLoading ? null : _verifyWithPasskey,
+                    icon: const Icon(Icons.key),
+                    label: _passkeyLoading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Sign in with passkey'),
                   ),
-                  onChanged: (value) {
-                    if (value.length == 6) _verify();
-                  },
-                  onSubmitted: (_) => _verify(),
-                ),
-                const SizedBox(height: 24),
-                FilledButton(
-                  onPressed: _loading ? null : _verify,
-                  child: _loading
-                      ? const SizedBox(
-                          height: 20,
-                          width: 20,
-                          child: CircularProgressIndicator(
-                              strokeWidth: 2, color: Colors.white),
-                        )
-                      : const Text('Verify'),
-                ),
+                  if (_hasTotp) ...[
+                    const SizedBox(height: 20),
+                    Row(
+                      children: [
+                        const Expanded(child: Divider()),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Text('or',
+                              style: Theme.of(context).textTheme.bodySmall),
+                        ),
+                        const Expanded(child: Divider()),
+                      ],
+                    ),
+                    const SizedBox(height: 20),
+                  ],
+                ],
+                // TOTP section — shown when TOTP is available.
+                if (_hasTotp) ...[
+                  TextField(
+                    controller: _codeCtrl,
+                    autofocus: !_hasPasskey,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                          letterSpacing: 8,
+                        ),
+                    keyboardType: TextInputType.number,
+                    inputFormatters: [
+                      FilteringTextInputFormatter.digitsOnly,
+                      LengthLimitingTextInputFormatter(6),
+                    ],
+                    decoration: const InputDecoration(
+                      hintText: '000000',
+                      border: OutlineInputBorder(),
+                    ),
+                    onChanged: (value) {
+                      if (value.length == 6) _verify();
+                    },
+                    onSubmitted: (_) => _verify(),
+                  ),
+                  const SizedBox(height: 24),
+                  FilledButton(
+                    onPressed: _loading ? null : _verify,
+                    child: _loading
+                        ? const SizedBox(
+                            height: 20,
+                            width: 20,
+                            child: CircularProgressIndicator(
+                                strokeWidth: 2, color: Colors.white),
+                          )
+                        : const Text('Verify'),
+                  ),
+                ],
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: _cancel,

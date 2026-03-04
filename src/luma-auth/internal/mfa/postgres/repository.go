@@ -203,11 +203,12 @@ func (r *Repository) ConsumeChallenge(ctx context.Context, id string) error {
 
 func (r *Repository) CreatePasskey(ctx context.Context, p *mfa.Passkey) error {
 	const q = `
-		INSERT INTO auth.passkeys (user_id, credential_id, public_key, sign_count, name, aaguid, transports)
-		VALUES ($1, $2, $3, $4, $5, $6, $7)`
+		INSERT INTO auth.passkeys (user_id, credential_id, public_key, sign_count, name, aaguid, transports, backup_eligible, backup_state)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`
 
 	_, err := r.db.Exec(ctx, q,
-		p.UserID, p.CredentialID, p.PublicKey, p.SignCount, p.Name, p.AAGUID, p.Transports)
+		p.UserID, p.CredentialID, p.PublicKey, p.SignCount, p.Name, p.AAGUID, p.Transports,
+		p.BackupEligible, p.BackupState)
 	if err != nil {
 		return fmt.Errorf("mfa.postgres.CreatePasskey: %w", err)
 	}
@@ -217,7 +218,8 @@ func (r *Repository) CreatePasskey(ctx context.Context, p *mfa.Passkey) error {
 func (r *Repository) GetPasskeyByCredentialID(ctx context.Context, credentialID []byte) (*mfa.Passkey, error) {
 	const q = `
 		SELECT id, user_id, credential_id, public_key, sign_count, name,
-		       aaguid, transports, last_used_at, revoked_at, created_at
+		       aaguid, transports, backup_eligible, backup_state,
+		       last_used_at, revoked_at, created_at
 		FROM auth.passkeys
 		WHERE credential_id = $1 AND revoked_at IS NULL`
 
@@ -234,7 +236,8 @@ func (r *Repository) GetPasskeyByCredentialID(ctx context.Context, credentialID 
 func (r *Repository) ListPasskeysForUser(ctx context.Context, userID string) ([]*mfa.Passkey, error) {
 	const q = `
 		SELECT id, user_id, credential_id, public_key, sign_count, name,
-		       aaguid, transports, last_used_at, revoked_at, created_at
+		       aaguid, transports, backup_eligible, backup_state,
+		       last_used_at, revoked_at, created_at
 		FROM auth.passkeys
 		WHERE user_id = $1 AND revoked_at IS NULL
 		ORDER BY created_at DESC`
@@ -277,7 +280,8 @@ func (r *Repository) RevokePasskey(ctx context.Context, id string) error {
 func (r *Repository) GetPasskeyByID(ctx context.Context, id string) (*mfa.Passkey, error) {
 	const q = `
 		SELECT id, user_id, credential_id, public_key, sign_count, name,
-		       aaguid, transports, last_used_at, revoked_at, created_at
+		       aaguid, transports, backup_eligible, backup_state,
+		       last_used_at, revoked_at, created_at
 		FROM auth.passkeys
 		WHERE id = $1`
 
@@ -305,7 +309,8 @@ func scanPasskey(row pgx.Row) (*mfa.Passkey, error) {
 	p := &mfa.Passkey{}
 	err := row.Scan(
 		&p.ID, &p.UserID, &p.CredentialID, &p.PublicKey, &p.SignCount, &p.Name,
-		&p.AAGUID, &p.Transports, &p.LastUsedAt, &p.RevokedAt, &p.CreatedAt,
+		&p.AAGUID, &p.Transports, &p.BackupEligible, &p.BackupState,
+		&p.LastUsedAt, &p.RevokedAt, &p.CreatedAt,
 	)
 	return p, err
 }

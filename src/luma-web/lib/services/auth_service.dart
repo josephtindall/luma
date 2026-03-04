@@ -4,6 +4,8 @@ import 'dart:js_interop_unsafe';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
+import 'webauthn_interop.dart' as webauthn;
+
 /// Detects the browser name from the user agent string.
 ///
 /// Check order matters — Brave and Edge include "Chrome" in their UA.
@@ -146,6 +148,50 @@ class AuthService extends ChangeNotifier {
     }
 
     final data = json.decode(resp.body) as Map<String, dynamic>;
+    _accessToken = data['access_token'] as String?;
+    _mfaToken = null;
+    _mfaMethods = [];
+    notifyListeners();
+  }
+
+  /// Verifies MFA using a passkey (WebAuthn assertion).
+  /// Called from the MFA screen when the user chooses to use a passkey.
+  /// Throws [AuthException] on failure.
+  Future<void> verifyMFAWithPasskey() async {
+    if (_mfaToken == null) {
+      throw AuthException('No MFA challenge pending');
+    }
+
+    // Step 1: Begin the passkey login ceremony.
+    final beginResp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/passkeys/login/begin'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'mfa_token': _mfaToken}),
+    );
+    if (beginResp.statusCode != 200) {
+      throw AuthException('Failed to start passkey login');
+    }
+    final assertionOptions =
+        json.decode(beginResp.body) as Map<String, dynamic>;
+
+    // Step 2: Prompt the browser authenticator.
+    final credential = await webauthn.getCredential(assertionOptions);
+
+    // Step 3: Send assertion + mfa_token to finish.
+    final finishBody = <String, dynamic>{
+      ...credential,
+      'mfa_token': _mfaToken,
+    };
+    final finishResp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/passkeys/login/finish'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(finishBody),
+    );
+    if (finishResp.statusCode != 200) {
+      throw AuthException('Passkey verification failed');
+    }
+
+    final data = json.decode(finishResp.body) as Map<String, dynamic>;
     _accessToken = data['access_token'] as String?;
     _mfaToken = null;
     _mfaMethods = [];
