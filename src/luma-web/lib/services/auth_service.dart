@@ -348,7 +348,12 @@ class AuthService extends ChangeNotifier {
   /// Logs out, clearing the session on the server and in memory.
   Future<void> logout() async {
     try {
-      await http.post(Uri.parse('$_baseUrl/api/luma/auth/logout'));
+      await http.post(
+        Uri.parse('$_baseUrl/api/luma/auth/logout'),
+        headers: {
+          if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
+        },
+      );
     } catch (_) {}
     _accessToken = null;
     onSessionCleared?.call();

@@ -391,6 +391,9 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	if cookie := r.Header.Get("Cookie"); cookie != "" {
 		req.Header.Set("Cookie", cookie)
 	}
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
 
 	resp, err := h.client.Do(req)
 	if err != nil {

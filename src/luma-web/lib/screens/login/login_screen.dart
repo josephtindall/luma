@@ -47,6 +47,7 @@ class _LoginScreenState extends State<LoginScreen> {
   _LoginStep _step = _LoginStep.email;
   bool _loading = false;
   bool _obscure = true;
+  bool _showEmailField = false;
   String? _error;
 
   // Identified email + its MFA capabilities.
@@ -69,6 +70,7 @@ class _LoginScreenState extends State<LoginScreen> {
       _step = step;
       _error = null;
       _loading = false;
+      if (step == _LoginStep.email) _showEmailField = false;
     });
   }
 
@@ -349,7 +351,7 @@ class _LoginScreenState extends State<LoginScreen> {
         const SizedBox(height: 24),
         if (_error != null) _buildError(),
         // Show saved accounts as tiles if they exist.
-        if (savedEmails.isNotEmpty) ...[
+        if (savedEmails.isNotEmpty && !_showEmailField) ...[
           ...savedEmails.map((email) => Padding(
                 padding: const EdgeInsets.only(bottom: 8),
                 child: _EmailTile(
@@ -364,8 +366,7 @@ class _LoginScreenState extends State<LoginScreen> {
           const SizedBox(height: 8),
           OutlinedButton(
             onPressed: () => setState(() {
-              // Force showing the email text field by clearing saved list view.
-              _emailStore.removeEmail(''); // no-op, just force rebuild
+              _showEmailField = true;
               _emailCtrl.clear();
             }),
             child: const Text('Use another account'),
