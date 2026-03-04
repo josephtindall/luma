@@ -1,4 +1,4 @@
-package haven
+package auth
 
 import "context"
 
@@ -21,7 +21,7 @@ func IdentityFromContext(ctx context.Context) *Identity {
 	return id
 }
 
-// withToken stores the raw bearer token in the context for forwarding to Haven.
+// withToken stores the raw bearer token in the context for forwarding to the auth service.
 func withToken(ctx context.Context, token string) context.Context {
 	return context.WithValue(ctx, tokenKey, token)
 }

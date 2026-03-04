@@ -91,9 +91,9 @@ Five-step linear flow. Same underlying API as CLI path.
 
 ```bash
 # Required environment variables
-HAVEN_INSTANCE_NAME="Acme Engineering"
-HAVEN_OWNER_EMAIL="admin@acme.com"
-HAVEN_OWNER_NAME="IT Administrator"
+HAVEN_INSTANCE_NAME="My Home"
+HAVEN_OWNER_EMAIL="admin@home.local"
+HAVEN_OWNER_NAME="Administrator"
 HAVEN_OWNER_PASSWORD="..."           # min 12 chars — use a secrets manager
 HAVEN_INSTANCE_TIMEZONE="America/New_York"
 HAVEN_INSTANCE_LOCALE="en-US"

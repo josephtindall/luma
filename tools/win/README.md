@@ -42,11 +42,11 @@ Everything else happens in a terminal.
 
 All scripts live in `tools\win\`. You run them by typing their name at the terminal prompt.
 
-| Script | What it does |
-|--------|-------------|
-| `build.ps1` | Compiles the code into something runnable |
-| `run.ps1` | Starts the entire application stack |
-| `clean.ps1` | Stops everything and cleans up files |
+| Script        | What it does                                              |
+|---------------|-----------------------------------------------------------|
+| `build.ps1`   | Compiles the code into something runnable                 |
+| `run.ps1`     | Starts the entire application stack                       |
+| `clean.ps1`   | Stops everything and cleans up files                      |
 | `publish.ps1` | Sends a finished build to a registry so others can use it |
 
 ---
@@ -62,6 +62,7 @@ Run this once before you start for the first time, and again whenever you change
 ```
 
 This does two things:
+
 - Compiles the web interface (`src\luma-web\`) and saves it to `artifacts\web\`
 - Builds a Docker image of the Go server called `luma:latest`
 
@@ -216,18 +217,18 @@ The exported files will appear in the `artifacts\` folder.
 
 ## Quick reference
 
-| Goal | Command |
-|------|---------|
-| Build everything | `.\tools\win\build.ps1` |
-| Build only the web interface | `.\tools\win\build.ps1 -Web` |
-| Start the stack | `.\tools\win\run.ps1` |
-| Start fresh (resets database) | `.\tools\win\run.ps1 -Fresh` |
-| Start in background | `.\tools\win\run.ps1 -Detach` |
-| Start infra only (run Go locally) | `.\tools\win\run.ps1 -DbOnly` |
-| Stop and clean build files | `.\tools\win\clean.ps1` |
-| Full reset (wipes database too) | `.\tools\win\clean.ps1 -Full` |
-| Preview a clean without doing it | `.\tools\win\clean.ps1 -WhatIf` |
-| Push a release | `.\tools\win\publish.ps1 -Registry <your-registry> -Tag v1.0.0` |
+| Goal                              | Command                                                         |
+|-----------------------------------|-----------------------------------------------------------------|
+| Build everything                  | `.\tools\win\build.ps1`                                         |
+| Build only the web interface      | `.\tools\win\build.ps1 -Web`                                    |
+| Start the stack                   | `.\tools\win\run.ps1`                                           |
+| Start fresh (resets database)     | `.\tools\win\run.ps1 -Fresh`                                    |
+| Start in background               | `.\tools\win\run.ps1 -Detach`                                   |
+| Start infra only (run Go locally) | `.\tools\win\run.ps1 -DbOnly`                                   |
+| Stop and clean build files        | `.\tools\win\clean.ps1`                                         |
+| Full reset (wipes database too)   | `.\tools\win\clean.ps1 -Full`                                   |
+| Preview a clean without doing it  | `.\tools\win\clean.ps1 -WhatIf`                                 |
+| Push a release                    | `.\tools\win\publish.ps1 -Registry <your-registry> -Tag v1.0.0` |
 
 ---
 

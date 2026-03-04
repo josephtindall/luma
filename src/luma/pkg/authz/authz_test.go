@@ -62,7 +62,7 @@ func TestRequireCan_Denied(t *testing.T) {
 }
 
 func TestRequireCan_Error(t *testing.T) {
-	checker := &mockChecker{err: errors.New("haven unavailable")}
+	checker := &mockChecker{err: errors.New("auth service unavailable")}
 	a := NewAuthorizer(checker, userIDFromCtx("user-1"))
 	w := httptest.NewRecorder()
 

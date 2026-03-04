@@ -30,7 +30,7 @@ CREATE TABLE luma.vaults (
 );
 CREATE INDEX idx_vaults_owner ON luma.vaults(owner_id);
 
--- Vault membership — links Haven users to vaults with a role.
+-- Vault membership — links users to vaults with a role.
 CREATE TABLE luma.vault_members (
     vault_id   UUID NOT NULL REFERENCES luma.vaults(id) ON DELETE CASCADE,
     user_id    TEXT NOT NULL,

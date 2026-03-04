@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
 
 import '../../services/auth_service.dart';
+import '../../services/user_service.dart';
 
 class LoginScreen extends StatefulWidget {
   final AuthService auth;
+  final UserService userService;
 
-  const LoginScreen({super.key, required this.auth});
+  const LoginScreen({super.key, required this.auth, required this.userService});
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -39,9 +41,16 @@ class _LoginScreenState extends State<LoginScreen> {
         _emailCtrl.text.trim(),
         _passwordCtrl.text,
       );
-      // Router reacts to AuthService.notifyListeners() — no explicit navigation here.
+      // If MFA is required, the router will redirect to /mfa.
+      // Only load profile/prefs when we have a real session.
+      if (!widget.auth.mfaPending) {
+        await Future.wait([
+          widget.userService.loadProfile(),
+          widget.userService.loadPreferences(),
+        ]);
+      }
     } on AuthException {
-      // Per Haven's security model: never distinguish "email not found" from
+      // Per the auth service's security model: never distinguish "email not found" from
       // "wrong password" — always show the same generic message.
       setState(() => _error = 'Invalid credentials');
     } catch (_) {

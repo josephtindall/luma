@@ -1,0 +1,27 @@
+# Air live-reload configuration for luma-auth development.
+# https://github.com/air-verse/air
+
+root = "."
+tmp_dir = "tmp"
+
+[build]
+  cmd = "go build -o ./tmp/luma-auth ./cmd/server"
+  bin = "./tmp/luma-auth"
+  delay = 500              # ms to wait after a change before rebuilding
+  include_ext = ["go"]
+  exclude_dir  = ["tmp", "vendor", "migrations"]
+  kill_delay   = "200ms"
+  rerun        = false
+
+[log]
+  time = true
+  main_only = false
+
+[color]
+  main    = "magenta"
+  watcher = "cyan"
+  build   = "yellow"
+  runner  = "green"
+
+[misc]
+  clean_on_exit = true

@@ -1,6 +1,29 @@
 import 'dart:convert';
+import 'dart:js_interop';
+import 'dart:js_interop_unsafe';
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+
+import 'webauthn_interop.dart' as webauthn;
+
+/// Detects the browser name from the user agent string.
+///
+/// Check order matters — Brave and Edge include "Chrome" in their UA.
+String detectBrowserName() {
+  try {
+    final nav = globalContext['navigator'] as JSObject?;
+    if (nav == null) return 'Browser';
+    final ua = (nav['userAgent'] as JSString?)?.toDart ?? '';
+    if (ua.contains('Brave')) return 'Brave';
+    if (ua.contains('Edg/')) return 'Edge';
+    if (ua.contains('Chrome/')) return 'Chrome';
+    if (ua.contains('Firefox/')) return 'Firefox';
+    if (ua.contains('Safari/')) return 'Safari';
+    return 'Browser';
+  } catch (_) {
+    return 'Browser';
+  }
+}
 
 /// Manages authentication state for the Luma web app.
 ///
@@ -13,6 +36,14 @@ class AuthService extends ChangeNotifier {
   String _setupState = 'unknown'; // "unknown" | "unclaimed" | "active"
   bool _isInitialized = false;
 
+  // MFA challenge state — set when login returns mfa_required.
+  String? _mfaToken;
+  List<String> _mfaMethods = [];
+
+  /// Called when the session is cleared (logout, expiry) so dependent services
+  /// can drop cached state. Set from main.dart to avoid circular imports.
+  VoidCallback? onSessionCleared;
+
   AuthService(this._baseUrl);
 
   String? get accessToken => _accessToken;
@@ -20,7 +51,11 @@ class AuthService extends ChangeNotifier {
   String get setupState => _setupState;
   bool get isInitialized => _isInitialized;
 
-  /// Called from main.dart before runApp. Probes Haven state and attempts
+  /// True when login succeeded but a second factor is required.
+  bool get mfaPending => _mfaToken != null;
+  List<String> get mfaMethods => _mfaMethods;
+
+  /// Called from main.dart before runApp. Probes auth service state and attempts
   /// silent token refresh if the instance is active.
   Future<void> initialize() async {
     try {
@@ -55,7 +90,8 @@ class AuthService extends ChangeNotifier {
     }
   }
 
-  /// Logs in with email + password. Stores the access token on success.
+  /// Logs in with email + password. On success, either stores the access token
+  /// or sets [mfaPending] if a second factor is required.
   /// Throws [AuthException] on failure.
   Future<void> login(String email, String password) async {
     final resp = await http.post(
@@ -65,16 +101,113 @@ class AuthService extends ChangeNotifier {
         'email': email,
         'password': password,
         'platform': 'web',
-        'device_name': 'Browser',
+        'device_name': detectBrowserName(),
       }),
     );
 
     if (resp.statusCode != 200) {
+      if (resp.statusCode == 429) {
+        throw AuthException('Too many attempts. Please wait a few minutes.');
+      }
+      if (resp.statusCode == 403) {
+        throw AuthException('Account locked. Contact an administrator.');
+      }
       throw AuthException('Invalid credentials');
     }
 
     final data = json.decode(resp.body) as Map<String, dynamic>;
+
+    // MFA required — store the challenge token for the verification screen.
+    if (data['mfa_required'] == true) {
+      _mfaToken = data['mfa_token'] as String?;
+      final methods = data['methods'];
+      _mfaMethods = (methods is List) ? methods.cast<String>() : [];
+      notifyListeners();
+      return;
+    }
+
     _accessToken = data['access_token'] as String?;
+    _mfaToken = null;
+    _mfaMethods = [];
+    notifyListeners();
+  }
+
+  /// Verifies the MFA code against the pending challenge.
+  /// Called from the MFA verification screen after [mfaPending] is true.
+  /// Throws [AuthException] on failure.
+  Future<void> verifyMFA(String code) async {
+    if (_mfaToken == null) {
+      throw AuthException('No MFA challenge pending');
+    }
+
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/mfa/verify'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'mfa_token': _mfaToken,
+        'code': code,
+      }),
+    );
+
+    if (resp.statusCode != 200) {
+      throw AuthException('Invalid code');
+    }
+
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    _accessToken = data['access_token'] as String?;
+    _mfaToken = null;
+    _mfaMethods = [];
+    notifyListeners();
+  }
+
+  /// Verifies MFA using a passkey (WebAuthn assertion).
+  /// Called from the MFA screen when the user chooses to use a passkey.
+  /// Throws [AuthException] on failure.
+  Future<void> verifyMFAWithPasskey() async {
+    if (_mfaToken == null) {
+      throw AuthException('No MFA challenge pending');
+    }
+
+    // Step 1: Begin the passkey login ceremony.
+    final beginResp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/passkeys/login/begin'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'mfa_token': _mfaToken}),
+    );
+    if (beginResp.statusCode != 200) {
+      throw AuthException('Failed to start passkey login');
+    }
+    final assertionOptions =
+        json.decode(beginResp.body) as Map<String, dynamic>;
+
+    // Step 2: Prompt the browser authenticator.
+    final credential = await webauthn.getCredential(assertionOptions);
+
+    // Step 3: Send assertion + mfa_token to finish.
+    final finishBody = <String, dynamic>{
+      ...credential,
+      'mfa_token': _mfaToken,
+    };
+    final finishResp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/passkeys/login/finish'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(finishBody),
+    );
+    if (finishResp.statusCode != 200) {
+      throw AuthException('Passkey verification failed');
+    }
+
+    final data = json.decode(finishResp.body) as Map<String, dynamic>;
+    _accessToken = data['access_token'] as String?;
+    _mfaToken = null;
+    _mfaMethods = [];
+    notifyListeners();
+  }
+
+  /// Clears the pending MFA challenge — returns to the login screen.
+  void cancelMFA() {
+    _mfaToken = null;
+    _mfaMethods = [];
     notifyListeners();
   }
 
@@ -100,6 +233,15 @@ class AuthService extends ChangeNotifier {
       await http.post(Uri.parse('$_baseUrl/api/luma/auth/logout'));
     } catch (_) {}
     _accessToken = null;
+    onSessionCleared?.call();
+    notifyListeners();
+  }
+
+  /// Sets the access token and marks the instance as active.
+  /// Used after setup completes — the owner endpoint already returns a token.
+  void activateSession(String accessToken) {
+    _accessToken = accessToken;
+    _setupState = 'active';
     notifyListeners();
   }
 
@@ -107,6 +249,9 @@ class AuthService extends ChangeNotifier {
   /// Called by ApiClient after a failed refresh.
   void clearSession() {
     _accessToken = null;
+    _mfaToken = null;
+    _mfaMethods = [];
+    onSessionCleared?.call();
     notifyListeners();
   }
 }
