@@ -33,6 +33,7 @@ type Config struct {
 
 	// WebAuthn
 	RPDisplayName string // AUTH_RP_DISPLAY_NAME — default "Luma"
+	RPOrigin      string // AUTH_RP_ORIGIN — public-facing origin where the browser runs, e.g. http://localhost:8002
 
 	// Setup
 	SetupToken string // AUTH_SETUP_TOKEN — CLI unattended path only
@@ -53,6 +54,7 @@ func Load() (*Config, error) {
 		RedisAddr:     os.Getenv("AUTH_REDIS_ADDR"),
 		RedisPassword: os.Getenv("AUTH_REDIS_PASSWORD"),
 		RPDisplayName: envOrDefault("AUTH_RP_DISPLAY_NAME", "Luma"),
+		RPOrigin:      os.Getenv("AUTH_RP_ORIGIN"),
 		SetupToken:    os.Getenv("AUTH_SETUP_TOKEN"),
 	}
 

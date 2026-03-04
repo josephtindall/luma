@@ -48,6 +48,7 @@ services:
       AUTH_REDIS_ADDR: redis:6379
       LUMA_AUTH_JWT_SIGNING_KEY: ${LUMA_AUTH_JWT_SIGNING_KEY:-61a15cb016a661c9ba248baece7a39a680e8d17971ad155ced32781f54bbcfd5}
       AUTH_BASE_URL: http://localhost:8080
+      AUTH_RP_ORIGIN: http://localhost:8002
       AUTH_PORT: 8080
     ports:
       - "8080:8080"

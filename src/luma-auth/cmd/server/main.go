@@ -101,15 +101,19 @@ func run() error {
 	mfaRepo := mfapg.New(db)
 
 	// ── 5b. WebAuthn instance ─────────────────────────────────────────────────────
-	baseURL, err := url.Parse(cfg.BaseURL)
+	rpOrigin := cfg.RPOrigin
+	if rpOrigin == "" {
+		rpOrigin = cfg.BaseURL
+	}
+	rpURL, err := url.Parse(rpOrigin)
 	if err != nil {
-		return fmt.Errorf("webauthn: parse base url: %w", err)
+		return fmt.Errorf("webauthn: parse rp origin: %w", err)
 	}
 
 	wa, err := webauthn.New(&webauthn.Config{
 		RPDisplayName: cfg.RPDisplayName,
-		RPID:          baseURL.Hostname(),
-		RPOrigins:     []string{cfg.BaseURL},
+		RPID:          rpURL.Hostname(),
+		RPOrigins:     []string{rpOrigin},
 	})
 	if err != nil {
 		return fmt.Errorf("webauthn: init: %w", err)
