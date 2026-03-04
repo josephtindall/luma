@@ -31,7 +31,7 @@ class UserService extends ChangeNotifier {
       'display_name': displayName,
       'email': email,
     });
-    if (resp.statusCode != 200) {
+    if (resp.statusCode != 200 && resp.statusCode != 204) {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['error'] ?? 'Failed to update profile');
     }
