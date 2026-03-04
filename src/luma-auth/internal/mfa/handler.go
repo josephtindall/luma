@@ -375,6 +375,46 @@ func (h *Handler) FinishLogin(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// ── Recovery Codes (Bearer required) ────────────────────────────────────────
+
+// GenerateRecoveryCodes handles POST /api/auth/users/me/mfa/recovery-codes.
+func (h *Handler) GenerateRecoveryCodes(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+
+	codes, err := h.svc.GenerateRecoveryCodes(r.Context(), claims.Subject)
+	if err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string][]string{
+		"codes": codes,
+	})
+}
+
+// GetRecoveryCodesCount handles GET /api/auth/users/me/mfa/recovery-codes/count.
+func (h *Handler) GetRecoveryCodesCount(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+
+	count, err := h.svc.CountUnusedRecoveryCodes(r.Context(), claims.Subject)
+	if err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]int{
+		"count": count,
+	})
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const refreshCookieName = "auth_refresh"

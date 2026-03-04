@@ -112,7 +112,18 @@ func (s *Service) Login(ctx context.Context, params LoginParams) (*LoginResult, 
 	}
 
 	if u.IsLocked() {
-		return nil, pkgerrors.ErrAccountLocked
+		// Auto-unlock after 30 minutes — prevents permanent self-lockout for
+		// self-hosted admins. The lock still blocks brute-force during the window.
+		if u.IsLockExpired(30 * time.Minute) {
+			_ = s.users.UnlockAccount(ctx, u.ID)
+			s.audit.WriteAsync(ctx, audit.Event{
+				UserID:   u.ID,
+				Event:    audit.EventAccountUnlocked,
+				Metadata: map[string]any{"reason": "auto_unlock_30m"},
+			})
+		} else {
+			return nil, pkgerrors.ErrAccountLocked
+		}
 	}
 
 	// Reset the failure counter on success.

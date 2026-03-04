@@ -774,6 +774,189 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
 }
 
 // ---------------------------------------------------------------------------
+// Recovery Codes
+// ---------------------------------------------------------------------------
+
+class _RecoveryCodesSection extends StatefulWidget {
+  final UserService userService;
+
+  const _RecoveryCodesSection({required this.userService});
+
+  @override
+  State<_RecoveryCodesSection> createState() => _RecoveryCodesSectionState();
+}
+
+class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
+  int? _count;
+  bool _loading = true;
+  bool _generating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  Future<void> _refresh() async {
+    setState(() => _loading = true);
+    try {
+      final count = await widget.userService.getRecoveryCodesCount();
+      if (mounted) {
+        setState(() {
+          _count = count;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _generate() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Generate new recovery codes?'),
+        content: const Text(
+            'This will immediately invalidate any existing recovery codes you have saved. Are you sure?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Generate'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    if (!mounted) return;
+    setState(() => _generating = true);
+
+    try {
+      final codes = await widget.userService.generateRecoveryCodes();
+      if (!mounted) return;
+
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Save your recovery codes'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                  'These codes can be used to sign in if you lose your authenticator app or passkeys.'),
+              const SizedBox(height: 8),
+              const Text(
+                'Copy or download them now. They will not be shown again.',
+                style:
+                    TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: SelectableText(
+                  codes.join('\n'),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontFamily: 'monospace',
+                        height: 1.5,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            FilledButton.icon(
+              onPressed: () {
+                // In a real app we'd trigger a file download using universal_html
+                // or similar, but for now we instruct the user to copy.
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Please select and copy the codes above')),
+                );
+              },
+              icon: const Icon(Icons.copy),
+              label: const Text('Copy'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('I saved them'),
+            ),
+          ],
+        ),
+      );
+
+      _refresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error generating codes: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _generating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Recovery codes',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              'Use a recovery code to sign in if you lose access to your other MFA methods.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            if (_loading)
+              const CircularProgressIndicator()
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _count == 0
+                        ? 'No active recovery codes.'
+                        : '$_count unused codes remaining.',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _generating ? null : _generate,
+                    icon: _generating
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh),
+                    label:
+                        Text(_count == 0 ? 'Generate codes' : 'Replace codes'),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Preferences
 // ---------------------------------------------------------------------------
 

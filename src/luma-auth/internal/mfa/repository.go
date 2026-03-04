@@ -69,4 +69,19 @@ type Repository interface {
 
 	// CountActivePasskeys returns the number of non-revoked passkeys for a user.
 	CountActivePasskeys(ctx context.Context, userID string) (int, error)
+
+	// ── Recovery Codes ──────────────────────────────────────────────────────────
+
+	// ReplaceRecoveryCodes deletes any existing unused codes for the user and
+	// inserts a new batch of hashed codes.
+	ReplaceRecoveryCodes(ctx context.Context, userID string, codeHashes []string) error
+
+	// GetRecoveryCodeByHash looks up an unused recovery code by its hash.
+	GetRecoveryCodeByHash(ctx context.Context, userID, codeHash string) (*RecoveryCode, error)
+
+	// ConsumeRecoveryCode marks a recovery code as used.
+	ConsumeRecoveryCode(ctx context.Context, id string) error
+
+	// CountUnusedRecoveryCodes returns the number of unused recovery codes for a user.
+	CountUnusedRecoveryCodes(ctx context.Context, userID string) (int, error)
 }

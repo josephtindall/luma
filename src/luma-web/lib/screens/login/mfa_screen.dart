@@ -32,7 +32,7 @@ class _MFAScreenState extends State<MFAScreen> {
   Future<void> _verify() async {
     if (_loading) return;
     final code = _codeCtrl.text.trim();
-    if (code.length != 6) return;
+    if (code.length != 6 && code.length != 11) return;
 
     setState(() {
       _loading = true;
@@ -102,10 +102,10 @@ class _MFAScreenState extends State<MFAScreen> {
                 const SizedBox(height: 8),
                 Text(
                   _hasTotp && _hasPasskey
-                      ? 'Enter your authenticator code or use a passkey.'
+                      ? 'Enter your authenticator code, recovery code, or use a passkey.'
                       : _hasPasskey
                           ? 'Use your passkey to sign in.'
-                          : 'Enter the 6-digit code from your authenticator app.',
+                          : 'Enter the 6-digit code from your authenticator app, or an 11-character recovery code.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 24),
@@ -164,17 +164,20 @@ class _MFAScreenState extends State<MFAScreen> {
                     style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                           letterSpacing: 8,
                         ),
-                    keyboardType: TextInputType.number,
+                    keyboardType: TextInputType.visiblePassword,
                     inputFormatters: [
-                      FilteringTextInputFormatter.digitsOnly,
-                      LengthLimitingTextInputFormatter(6),
+                      LengthLimitingTextInputFormatter(11),
                     ],
                     decoration: const InputDecoration(
-                      hintText: '000000',
+                      hintText: '000000 or ABCDE-12345',
                       border: OutlineInputBorder(),
                     ),
                     onChanged: (value) {
-                      if (value.length == 6) _verify();
+                      if (value.length == 6 && !value.contains('-')) {
+                        _verify();
+                      } else if (value.length == 11) {
+                        _verify();
+                      }
                     },
                     onSubmitted: (_) => _verify(),
                   ),

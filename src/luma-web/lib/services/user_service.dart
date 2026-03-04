@@ -166,7 +166,31 @@ class UserService extends ChangeNotifier {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['error'] ?? 'Invalid code');
     }
-    await loadProfile(); // refresh mfaEnabled state
+  }
+
+  // ── Recovery Codes ──────────────────────────────────────────────────────
+
+  /// Generates a new batch of recovery codes, invalidating any existing ones.
+  Future<List<String>> generateRecoveryCodes() async {
+    final resp = await _api.post('/api/luma/user/me/mfa/recovery-codes', {});
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to generate recovery codes');
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    final codes = data['codes'] as List<dynamic>? ?? [];
+    return codes.map((c) => c.toString()).toList();
+  }
+
+  /// Returns the number of unused recovery codes remaining.
+  Future<int> getRecoveryCodesCount() async {
+    final resp = await _api.get('/api/luma/user/me/mfa/recovery-codes/count');
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to load recovery codes count');
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    return data['count'] as int? ?? 0;
   }
 
   /// Removes a specific TOTP app. Requires password confirmation.

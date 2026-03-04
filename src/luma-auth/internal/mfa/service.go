@@ -264,6 +264,40 @@ func (s *Service) VerifyChallenge(ctx context.Context, mfaToken, code, ipAddress
 		return "", "", pkgerrors.ErrMFATokenInvalid
 	}
 
+	// Distinguish between a recovery code and a TOTP token by length.
+	// Our recovery codes are formatted as XXXXX-XXXXX (11 chars).
+	// TOTP codes are 6-8 digits.
+	if len(code) == 11 {
+		hash := sha256.Sum256([]byte(code))
+		codeHashHex := hex.EncodeToString(hash[:])
+
+		rc, err := s.repo.GetRecoveryCodeByHash(ctx, challenge.UserID, codeHashHex)
+		if err != nil {
+			return "", "", fmt.Errorf("mfa.Service.VerifyChallenge lookup recovery code: %w", err)
+		}
+		if rc != nil && !rc.IsUsed() {
+			if err := s.repo.ConsumeRecoveryCode(ctx, rc.ID); err != nil {
+				return "", "", fmt.Errorf("mfa.Service.VerifyChallenge consume recovery: %w", err)
+			}
+			s.audit.WriteAsync(ctx, audit.Event{
+				UserID:    challenge.UserID,
+				DeviceID:  challenge.DeviceID,
+				Event:     audit.EventMFAChallengeOK,
+				IPAddress: ipAddress,
+				Metadata:  map[string]any{"method": "recovery_code"},
+			})
+			return challenge.UserID, challenge.DeviceID, s.repo.ConsumeChallenge(ctx, challenge.ID)
+		}
+		// If it looked like a recovery code but wasn't valid, fail immediately.
+		s.audit.WriteAsync(ctx, audit.Event{
+			UserID:    challenge.UserID,
+			Event:     audit.EventMFAChallengeFail,
+			IPAddress: ipAddress,
+			Metadata:  map[string]any{"reason": "invalid_recovery_code"},
+		})
+		return "", "", pkgerrors.ErrMFACodeInvalid
+	}
+
 	// Verify the TOTP code against all verified secrets for this user.
 	// Per RFC 6238, we track the last used time-step counter per secret and
 	// reject any code whose counter has already been consumed (replay guard).
@@ -313,6 +347,7 @@ func (s *Service) VerifyChallenge(ctx context.Context, mfaToken, code, ipAddress
 			UserID:    challenge.UserID,
 			Event:     audit.EventMFAChallengeFail,
 			IPAddress: ipAddress,
+			Metadata:  map[string]any{"reason": "invalid_totp_code"},
 		})
 		return "", "", pkgerrors.ErrMFACodeInvalid
 	}
@@ -327,6 +362,7 @@ func (s *Service) VerifyChallenge(ctx context.Context, mfaToken, code, ipAddress
 		DeviceID:  challenge.DeviceID,
 		Event:     audit.EventMFAChallengeOK,
 		IPAddress: ipAddress,
+		Metadata:  map[string]any{"method": "totp"},
 	})
 
 	return challenge.UserID, challenge.DeviceID, nil
@@ -658,4 +694,63 @@ func generateChallengeToken() (raw, hash string, err error) {
 func hashChallengeToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
+}
+
+// ── Recovery Codes ──────────────────────────────────────────────────────────
+
+// GenerateRecoveryCodes invalidates any existing recovery codes, generates exactly
+// 8 new codes, hashes and stores them, and returns the plaintext codes.
+// The caller MUST ensure the user has fully authenticated (MFA if enabled) before calling this.
+func (s *Service) GenerateRecoveryCodes(ctx context.Context, userID string) ([]string, error) {
+	const (
+		numCodes   = 8
+		codeLength = 10
+		alphabet   = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Crockford-ish (no I, O, 0, 1)
+	)
+
+	plaincodes := make([]string, numCodes)
+	hashes := make([]string, numCodes)
+
+	for i := 0; i < numCodes; i++ {
+		// Generate random bytes to pick from the alphabet
+		bytes := make([]byte, codeLength)
+		if _, err := rand.Read(bytes); err != nil {
+			return nil, fmt.Errorf("mfa.Service.GenerateRecoveryCodes rand: %w", err)
+		}
+
+		code := make([]byte, codeLength)
+		for j := 0; j < codeLength; j++ {
+			code[j] = alphabet[bytes[j]%byte(len(alphabet))]
+		}
+		// Format as XXXXX-XXXXX for readability
+		plaincodes[i] = fmt.Sprintf("%s-%s", string(code[:5]), string(code[5:]))
+
+		// Hash for storage using SHA-256
+		hash := sha256.Sum256([]byte(plaincodes[i]))
+		hashes[i] = hex.EncodeToString(hash[:])
+	}
+
+	if err := s.repo.ReplaceRecoveryCodes(ctx, userID, hashes); err != nil {
+		return nil, fmt.Errorf("mfa.Service.GenerateRecoveryCodes replace: %w", err)
+	}
+
+	s.audit.WriteAsync(ctx, audit.Event{
+		UserID: userID,
+		Event:  audit.EventProfileUpdated, // No specific event for recovery codes yet
+		Metadata: map[string]any{
+			"action": "recovery_codes_generated",
+			"count":  numCodes,
+		},
+	})
+
+	return plaincodes, nil
+}
+
+// CountUnusedRecoveryCodes returns the number of unused recovery codes for a user.
+func (s *Service) CountUnusedRecoveryCodes(ctx context.Context, userID string) (int, error) {
+	count, err := s.repo.CountUnusedRecoveryCodes(ctx, userID)
+	if err != nil {
+		return 0, fmt.Errorf("mfa.Service.CountUnusedRecoveryCodes: %w", err)
+	}
+	return count, nil
 }

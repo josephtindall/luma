@@ -24,6 +24,12 @@ func (u *User) IsLocked() bool {
 	return u.LockedAt != nil
 }
 
+// IsLockExpired returns true if the account was locked more than `d` ago.
+// Returns false if the account is not locked.
+func (u *User) IsLockExpired(d time.Duration) bool {
+	return u.LockedAt != nil && time.Since(*u.LockedAt) > d
+}
+
 // PublicUser is the API-safe projection of a user. No password hash, no lock
 // details. Returned on GET /api/auth/users/{id} and in token validation.
 type PublicUser struct {

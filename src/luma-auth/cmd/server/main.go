@@ -229,6 +229,9 @@ func run() error {
 		r.Post("/api/auth/mfa/totp/confirm", mfaHandler.ConfirmTOTP)
 		r.Delete("/api/auth/mfa/totp/{id}", mfaHandler.RemoveTOTP)
 
+		r.Post("/api/auth/users/me/mfa/recovery-codes", mfaHandler.GenerateRecoveryCodes)
+		r.Get("/api/auth/users/me/mfa/recovery-codes/count", mfaHandler.GetRecoveryCodesCount)
+
 		r.Post("/api/auth/passkeys/register/begin", mfaHandler.BeginRegistration)
 		r.Post("/api/auth/passkeys/register/finish", mfaHandler.FinishRegistration)
 		r.Get("/api/auth/passkeys", mfaHandler.ListPasskeys)
