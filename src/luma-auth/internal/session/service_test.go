@@ -71,7 +71,7 @@ func (m *mockUserRepo) LockAccount(_ context.Context, _, _ string) error {
 	m.lockCalled = true
 	return nil
 }
-func (m *mockUserRepo) UnlockAccount(_ context.Context, _ string) error { return nil }
+func (m *mockUserRepo) UnlockAccount(_ context.Context, _ string) error         { return nil }
 func (m *mockUserRepo) SetMFAEnabled(_ context.Context, _ string, _ bool) error { return nil }
 func (m *mockUserRepo) RegisterAtomic(_ context.Context, _ user.RegisterParams) (string, error) {
 	return m.registerID, m.registerErr
@@ -157,6 +157,20 @@ func (m *mockInvRepo) List(_ context.Context) ([]*invitation.Invitation, error) 
 func (m *mockInvRepo) Accept(_ context.Context, _ string) error                 { return nil }
 func (m *mockInvRepo) Revoke(_ context.Context, _ string) error                 { return nil }
 
+// ── Mock: MFAMethodChecker ────────────────────────────────────────────────────
+
+type mockMFAChecker struct {
+	totpCount    int
+	passkeyCount int
+}
+
+func (m *mockMFAChecker) CountVerifiedTOTPSecrets(_ context.Context, _ string) (int, error) {
+	return m.totpCount, nil
+}
+func (m *mockMFAChecker) CountActivePasskeys(_ context.Context, _ string) (int, error) {
+	return m.passkeyCount, nil
+}
+
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 func newSvc(
@@ -166,7 +180,18 @@ func newSvc(
 	auditSvc audit.Service,
 	invs invitation.Repository,
 ) *Service {
-	return NewService(users, devices, tokens, auditSvc, invs, nil, testJWTKey)
+	return NewService(users, devices, tokens, auditSvc, invs, nil, nil, testJWTKey)
+}
+
+func newSvcWithMFA(
+	users user.Repository,
+	devices device.Repository,
+	tokens Repository,
+	auditSvc audit.Service,
+	invs invitation.Repository,
+	checker MFAMethodChecker,
+) *Service {
+	return NewService(users, devices, tokens, auditSvc, invs, nil, checker, testJWTKey)
 }
 
 func activeUser() *user.User {
@@ -614,5 +639,58 @@ func TestRegister_AuditsUserRegistered(t *testing.T) {
 	}
 	if !found {
 		t.Errorf("expected user_registered audit event; got %v", auditSvc.events)
+	}
+}
+
+// ── Identify tests ────────────────────────────────────────────────────────────
+
+func TestIdentify_ExistingUser_WithPasskeyAndTOTP(t *testing.T) {
+	u := activeUser()
+	u.MFAEnabled = true
+
+	svc := newSvcWithMFA(
+		&mockUserRepo{user: u},
+		&mockDeviceRepo{}, &mockTokenRepo{}, &mockAuditSvc{}, &mockInvRepo{},
+		&mockMFAChecker{totpCount: 1, passkeyCount: 2},
+	)
+
+	result, err := svc.Identify(context.Background(), "alice@example.com")
+	if err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+	if !result.HasMFA || !result.HasPasskey || !result.HasTOTP {
+		t.Errorf("expected all MFA flags true, got %+v", result)
+	}
+}
+
+func TestIdentify_ExistingUser_PasswordOnly(t *testing.T) {
+	svc := newSvcWithMFA(
+		&mockUserRepo{user: activeUser()}, // MFAEnabled = false
+		&mockDeviceRepo{}, &mockTokenRepo{}, &mockAuditSvc{}, &mockInvRepo{},
+		&mockMFAChecker{},
+	)
+
+	result, err := svc.Identify(context.Background(), "alice@example.com")
+	if err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+	if result.HasMFA || result.HasPasskey || result.HasTOTP {
+		t.Errorf("expected all MFA flags false for password-only user, got %+v", result)
+	}
+}
+
+func TestIdentify_UnknownEmail_ReturnsSameAsPasswordOnly(t *testing.T) {
+	svc := newSvcWithMFA(
+		&mockUserRepo{getUserErr: pkgerrors.ErrUserNotFound},
+		&mockDeviceRepo{}, &mockTokenRepo{}, &mockAuditSvc{}, &mockInvRepo{},
+		&mockMFAChecker{totpCount: 99, passkeyCount: 99}, // should never be reached
+	)
+
+	result, err := svc.Identify(context.Background(), "nobody@example.com")
+	if err != nil {
+		t.Fatalf("Identify: %v", err)
+	}
+	if result.HasMFA || result.HasPasskey || result.HasTOTP {
+		t.Errorf("expected all MFA flags false for unknown email (anti-enumeration), got %+v", result)
 	}
 }

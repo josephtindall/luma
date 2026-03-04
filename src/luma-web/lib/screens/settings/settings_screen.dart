@@ -5,17 +5,37 @@ import '../../services/user_service.dart';
 import '../../services/webauthn_interop.dart' as webauthn;
 import '../../widgets/user_avatar.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   final UserService userService;
 
   const SettingsScreen({super.key, required this.userService});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _hasTOTP = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Load initial TOTP state.
+    widget.userService.loadTOTPApps().then((apps) {
+      if (mounted) setState(() => _hasTOTP = apps.isNotEmpty);
+    });
+  }
+
+  void _onTOTPChanged(bool hasTOTP) {
+    setState(() => _hasTOTP = hasTOTP);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListenableBuilder(
-        listenable: userService,
+        listenable: widget.userService,
         builder: (context, _) {
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
@@ -24,23 +44,30 @@ class SettingsScreen extends StatelessWidget {
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: Column(
                   children: [
-                    _ProfileSection(userService: userService),
+                    _ProfileSection(userService: widget.userService),
                     const SizedBox(height: 24),
-                    _PasswordSection(userService: userService),
+                    _PasswordSection(userService: widget.userService),
                     const SizedBox(height: 24),
-                    _TOTPSection(userService: userService),
+                    _TOTPSection(
+                      userService: widget.userService,
+                      onTOTPChanged: _onTOTPChanged,
+                    ),
                     const SizedBox(height: 24),
-                    _PasskeysSection(userService: userService),
-                    if (userService.profile?.mfaEnabled == true) ...[
-                      const SizedBox(height: 24),
-                      _RecoveryCodesSection(userService: userService),
-                    ],
+                    _PasskeysSection(
+                      userService: widget.userService,
+                      hasTOTP: _hasTOTP,
+                    ),
                     const SizedBox(height: 24),
-                    _PreferencesSection(userService: userService),
+                    _RecoveryCodesSection(
+                      userService: widget.userService,
+                      hasTOTP: _hasTOTP,
+                    ),
                     const SizedBox(height: 24),
-                    _DevicesSection(userService: userService),
+                    _PreferencesSection(userService: widget.userService),
                     const SizedBox(height: 24),
-                    _AuditSection(userService: userService),
+                    _DevicesSection(userService: widget.userService),
+                    const SizedBox(height: 24),
+                    _AuditSection(userService: widget.userService),
                   ],
                 ),
               ),
@@ -297,8 +324,9 @@ class _PasswordSectionState extends State<_PasswordSection> {
 
 class _TOTPSection extends StatefulWidget {
   final UserService userService;
+  final ValueChanged<bool>? onTOTPChanged;
 
-  const _TOTPSection({required this.userService});
+  const _TOTPSection({required this.userService, this.onTOTPChanged});
 
   @override
   State<_TOTPSection> createState() => _TOTPSectionState();
@@ -332,7 +360,10 @@ class _TOTPSectionState extends State<_TOTPSection> {
 
   void _refresh() {
     setState(() {
-      _future = widget.userService.loadTOTPApps();
+      _future = widget.userService.loadTOTPApps().then((apps) {
+        widget.onTOTPChanged?.call(apps.isNotEmpty);
+        return apps;
+      });
     });
   }
 
@@ -598,8 +629,9 @@ class _TOTPSectionState extends State<_TOTPSection> {
 
 class _PasskeysSection extends StatefulWidget {
   final UserService userService;
+  final bool hasTOTP;
 
-  const _PasskeysSection({required this.userService});
+  const _PasskeysSection({required this.userService, required this.hasTOTP});
 
   @override
   State<_PasskeysSection> createState() => _PasskeysSectionState();
@@ -727,32 +759,60 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
               },
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Passkey nickname (optional)',
-                      hintText: 'e.g. MacBook Touch ID',
-                      border: OutlineInputBorder(),
+            if (!widget.hasTOTP) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Add an authenticator app first to enable passkey registration.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Passkey nickname (optional)',
+                        hintText: 'e.g. MacBook Touch ID',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                FilledButton.icon(
-                  onPressed: _registering ? null : _addPasskey,
-                  icon: const Icon(Icons.add),
-                  label: _registering
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Add passkey'),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    onPressed: _registering ? null : _addPasskey,
+                    icon: const Icon(Icons.add),
+                    label: _registering
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Add passkey'),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -783,8 +843,10 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
 
 class _RecoveryCodesSection extends StatefulWidget {
   final UserService userService;
+  final bool hasTOTP;
 
-  const _RecoveryCodesSection({required this.userService});
+  const _RecoveryCodesSection(
+      {required this.userService, required this.hasTOTP});
 
   @override
   State<_RecoveryCodesSection> createState() => _RecoveryCodesSectionState();
@@ -927,7 +989,33 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 16),
-            if (_loading)
+            if (!widget.hasTOTP)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Add an authenticator app first to enable recovery codes.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (_loading)
               const CircularProgressIndicator()
             else
               Row(

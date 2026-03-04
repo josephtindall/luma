@@ -34,7 +34,8 @@ class SetupWizardScreen extends StatefulWidget {
   final AuthService auth;
   final UserService userService;
 
-  const SetupWizardScreen({super.key, required this.auth, required this.userService});
+  const SetupWizardScreen(
+      {super.key, required this.auth, required this.userService});
 
   @override
   State<SetupWizardScreen> createState() => _SetupWizardScreenState();
@@ -134,13 +135,12 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         _setStep(1);
-
       } else if (resp.statusCode == 429) {
         setState(() =>
             _error = 'Too many attempts \u2014 wait a moment and try again.');
       } else {
-        setState(() => _error = _parseError(
-            resp, 'Invalid token \u2014 check startup logs.'));
+        setState(() => _error =
+            _parseError(resp, 'Invalid token \u2014 check startup logs.'));
       }
     } catch (_) {
       setState(() => _error = 'Could not reach the server. Try again.');
@@ -170,7 +170,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
         _setStep(2);
-
       } else if (resp.statusCode == 429) {
         setState(() =>
             _error = 'Too many attempts \u2014 wait a moment and try again.');
@@ -188,7 +187,8 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
   Future<void> _createOwner() async {
     if (!_formKey2.currentState!.validate()) return;
     if (!_acknowledged) {
-      setState(() => _error = 'You must acknowledge that this is the owner account.');
+      setState(() =>
+          _error = 'You must acknowledge that this is the owner account.');
       return;
     }
 
@@ -208,11 +208,11 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
           'confirmed': true,
           'device_name': detectBrowserName(),
           'platform': 'web',
+          'fingerprint': getDeviceFingerprint(),
         }),
       );
 
       if (resp.statusCode >= 200 && resp.statusCode < 300) {
-
         final data = json.decode(resp.body) as Map<String, dynamic>;
         final token = data['access_token'] as String?;
         if (token != null && token.isNotEmpty) {
@@ -230,14 +230,14 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
             context.go('/home');
           }
         } else {
-          setState(() => _error = 'Owner created but no token returned. Please log in.');
+          setState(() =>
+              _error = 'Owner created but no token returned. Please log in.');
         }
       } else if (resp.statusCode == 429) {
         setState(() =>
             _error = 'Too many attempts \u2014 wait a moment and try again.');
       } else {
-        setState(() =>
-            _error = _parseError(resp, 'Setup failed. Try again.'));
+        setState(() => _error = _parseError(resp, 'Setup failed. Try again.'));
       }
     } catch (_) {
       setState(() => _error = 'Could not reach the server. Try again.');
@@ -250,7 +250,6 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
 
   void _goBack() {
     _setStep(_step - 1);
-
   }
 
   Widget _buildCurrentStep() {
@@ -360,11 +359,9 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
                                 ? const Offset(1, 0)
                                 : const Offset(-1, 0);
                             // The incoming child matches the current key.
-                            final isIncoming =
-                                child.key == ValueKey(_step);
-                            final slideOffset = isIncoming
-                                ? offset
-                                : Offset(-offset.dx, 0);
+                            final isIncoming = child.key == ValueKey(_step);
+                            final slideOffset =
+                                isIncoming ? offset : Offset(-offset.dx, 0);
                             return SlideTransition(
                               position: Tween(
                                 begin: slideOffset,
@@ -416,9 +413,8 @@ class _StepIndicator extends StatelessWidget {
             Expanded(
               child: Container(
                 height: 2,
-                color: i <= currentStep
-                    ? colors.primary
-                    : colors.outlineVariant,
+                color:
+                    i <= currentStep ? colors.primary : colors.outlineVariant,
               ),
             ),
           Column(
@@ -474,9 +470,8 @@ class _StepIndicator extends StatelessWidget {
                   color: i <= currentStep || currentStep >= 3
                       ? colors.onSurface
                       : colors.outlineVariant,
-                  fontWeight: i == currentStep
-                      ? FontWeight.w600
-                      : FontWeight.normal,
+                  fontWeight:
+                      i == currentStep ? FontWeight.w600 : FontWeight.normal,
                 ),
               ),
             ],
@@ -536,12 +531,10 @@ class _Step0State extends State<_Step0> {
 
   void _onInputChanged() {
     // Filter to alphanumeric, uppercase, clamp to 8 chars.
-    final raw = _inputCtrl.text
-        .toUpperCase()
-        .replaceAll(RegExp(r'[^A-Z0-9]'), '');
-    final clamped = raw.length > _kCodeLength
-        ? raw.substring(0, _kCodeLength)
-        : raw;
+    final raw =
+        _inputCtrl.text.toUpperCase().replaceAll(RegExp(r'[^A-Z0-9]'), '');
+    final clamped =
+        raw.length > _kCodeLength ? raw.substring(0, _kCodeLength) : raw;
 
     // If filtering changed the text, rewrite without re-triggering.
     if (clamped != _inputCtrl.text) {
@@ -595,8 +588,7 @@ class _Step0State extends State<_Step0> {
                   children: [
                     for (var i = 0; i < half; i++)
                       Padding(
-                        padding:
-                            EdgeInsets.only(right: i < half - 1 ? 6 : 0),
+                        padding: EdgeInsets.only(right: i < half - 1 ? 6 : 0),
                         child: _buildCharBox(i, colors),
                       ),
                     Padding(

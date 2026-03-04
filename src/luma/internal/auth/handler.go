@@ -44,6 +44,7 @@ func (h *Handler) SetupRoutes() chi.Router {
 // AuthRoutes returns a router for /api/luma/auth/* endpoints.
 func (h *Handler) AuthRoutes() chi.Router {
 	r := chi.NewRouter()
+	r.Post("/identify", h.proxySetup("POST", "/api/auth/identify"))
 	r.Post("/login", h.login)
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
@@ -54,6 +55,10 @@ func (h *Handler) AuthRoutes() chi.Router {
 	// Passkey login (unauthenticated).
 	r.Post("/passkeys/login/begin", h.proxySetup("POST", "/api/auth/passkeys/login/begin"))
 	r.Post("/passkeys/login/finish", h.sessionIssuerProxy("/api/auth/passkeys/login/finish"))
+
+	// Passwordless passkey login (unauthenticated — no password required).
+	r.Post("/passkeys/passwordless/begin", h.proxySetup("POST", "/api/auth/passkeys/passwordless/begin"))
+	r.Post("/passkeys/passwordless/finish", h.sessionIssuerProxy("/api/auth/passkeys/passwordless/finish"))
 	return r
 }
 

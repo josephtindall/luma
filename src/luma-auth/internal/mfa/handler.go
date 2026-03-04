@@ -21,16 +21,30 @@ type SessionIssuer interface {
 	IssueForDevice(ctx context.Context, userID, deviceID, ipAddress, userAgent string) (accessToken, refreshToken string, expiresAt time.Time, err error)
 }
 
+// UserByEmailLookup resolves an email to a user ID.
+// Used by the passwordless passkey flow to identify the user without a password.
+type UserByEmailLookup interface {
+	GetUserIDByEmail(ctx context.Context, email string) (userID string, err error)
+}
+
+// DeviceEnsurer finds or creates a device for a user.
+// Used by the passwordless passkey flow which has no prior password login step.
+type DeviceEnsurer interface {
+	EnsureDevice(ctx context.Context, userID, fingerprint, deviceName, platform, userAgent string) (deviceID string, err error)
+}
+
 // Handler serves MFA endpoints.
 type Handler struct {
 	svc          *Service
 	sessions     SessionIssuer
+	userLookup   UserByEmailLookup
+	devices      DeviceEnsurer
 	secureCookie bool
 }
 
 // NewHandler constructs the MFA handler.
-func NewHandler(svc *Service, sessions SessionIssuer, secureCookie bool) *Handler {
-	return &Handler{svc: svc, sessions: sessions, secureCookie: secureCookie}
+func NewHandler(svc *Service, sessions SessionIssuer, userLookup UserByEmailLookup, devices DeviceEnsurer, secureCookie bool) *Handler {
+	return &Handler{svc: svc, sessions: sessions, userLookup: userLookup, devices: devices, secureCookie: secureCookie}
 }
 
 // ── TOTP management (Bearer required) ───────────────────────────────────────
@@ -362,6 +376,93 @@ func (h *Handler) FinishLogin(w http.ResponseWriter, r *http.Request) {
 
 	// Consume the MFA challenge now that login succeeded.
 	_ = h.svc.ConsumeChallenge(r.Context(), wrapper.MFAToken)
+
+	accessToken, refreshToken, expiresAt, err := h.sessions.IssueForDevice(r.Context(), userID, deviceID, remoteIP(r), r.UserAgent())
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to issue tokens")
+		return
+	}
+
+	h.setRefreshCookie(w, refreshToken, expiresAt)
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{
+		"access_token": accessToken,
+	})
+}
+
+// ── Passwordless passkey login (email-based, no password required) ───────────
+
+// BeginPasskeyLogin handles POST /api/auth/passkeys/passwordless/begin.
+// Accepts an email address and returns WebAuthn assertion options.
+// No password is required — the passkey itself authenticates the user.
+func (h *Handler) BeginPasskeyLogin(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid body")
+		return
+	}
+	if req.Email == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "email is required")
+		return
+	}
+
+	userID, err := h.userLookup.GetUserIDByEmail(r.Context(), req.Email)
+	if err != nil {
+		// Don't reveal whether the email exists.
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid credentials")
+		return
+	}
+
+	assertion, err := h.svc.BeginLogin(r.Context(), userID)
+	if err != nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid credentials")
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, assertion)
+}
+
+// FinishPasskeyLogin handles POST /api/auth/passkeys/passwordless/finish.
+// Verifies the WebAuthn assertion, creates/finds the device, issues tokens.
+func (h *Handler) FinishPasskeyLogin(w http.ResponseWriter, r *http.Request) {
+	bodyBytes, err := io.ReadAll(r.Body)
+	if err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "could not read body")
+		return
+	}
+
+	var wrapper struct {
+		Email       string `json:"email"`
+		Fingerprint string `json:"fingerprint"`
+		DeviceName  string `json:"device_name"`
+		Platform    string `json:"platform"`
+	}
+	if err := json.Unmarshal(bodyBytes, &wrapper); err != nil || wrapper.Email == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "email is required")
+		return
+	}
+
+	userID, err := h.userLookup.GetUserIDByEmail(r.Context(), wrapper.Email)
+	if err != nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "invalid credentials")
+		return
+	}
+
+	// Reconstruct the request body for go-webauthn.
+	r.Body = io.NopCloser(bytes.NewReader(bodyBytes))
+
+	if err := h.svc.FinishLogin(r.Context(), userID, remoteIP(r), r.UserAgent(), r); err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+
+	// Find or create the device.
+	deviceID, err := h.devices.EnsureDevice(r.Context(), userID, wrapper.Fingerprint, wrapper.DeviceName, wrapper.Platform, r.UserAgent())
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "device error")
+		return
+	}
 
 	accessToken, refreshToken, expiresAt, err := h.sessions.IssueForDevice(r.Context(), userID, deviceID, remoteIP(r), r.UserAgent())
 	if err != nil {

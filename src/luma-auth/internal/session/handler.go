@@ -70,6 +70,31 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// Identify handles POST /api/auth/identify.
+// Returns which MFA methods are available for the given email without
+// requiring a password. Returns the same shape for unknown emails (anti-enumeration).
+func (h *Handler) Identify(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Email string `json:"email"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid body")
+		return
+	}
+	if req.Email == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "email is required")
+		return
+	}
+
+	result, err := h.svc.Identify(r.Context(), req.Email)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "identify failed")
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, result)
+}
+
 // Login handles POST /api/auth/login.
 func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 	var req struct {
@@ -244,7 +269,6 @@ func refreshTokenFromRequest(r *http.Request) string {
 func errorCode(err error) string {
 	return pkgerrors.ErrorCode(err)
 }
-
 
 // remoteIP strips the port from r.RemoteAddr so it can be stored as INET.
 func remoteIP(r *http.Request) string {

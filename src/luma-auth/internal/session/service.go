@@ -52,6 +52,13 @@ type MFAChallengeCreator interface {
 	CreateChallenge(ctx context.Context, userID, deviceID string) (*mfa.ChallengeResult, error)
 }
 
+// MFAMethodChecker is a narrow interface satisfied by mfa.Service.
+// Used by Identify to report which MFA methods a user has registered.
+type MFAMethodChecker interface {
+	CountVerifiedTOTPSecrets(ctx context.Context, userID string) (int, error)
+	CountActivePasskeys(ctx context.Context, userID string) (int, error)
+}
+
 // Service handles login, logout, and token refresh. It orchestrates the user,
 // device, session, and audit packages — all wired in cmd/server/main.go.
 type Service struct {
@@ -61,6 +68,7 @@ type Service struct {
 	audit       audit.Service
 	invitations invitation.Repository
 	mfa         MFAChallengeCreator
+	mfaChecker  MFAMethodChecker
 	jwtKey      []byte
 }
 
@@ -72,6 +80,7 @@ func NewService(
 	audit audit.Service,
 	invitations invitation.Repository,
 	mfaSvc MFAChallengeCreator,
+	mfaChecker MFAMethodChecker,
 	jwtKey []byte,
 ) *Service {
 	return &Service{
@@ -81,6 +90,7 @@ func NewService(
 		audit:       audit,
 		invitations: invitations,
 		mfa:         mfaSvc,
+		mfaChecker:  mfaChecker,
 		jwtKey:      jwtKey,
 	}
 }
@@ -185,6 +195,37 @@ func (s *Service) Login(ctx context.Context, params LoginParams) (*LoginResult, 
 	})
 
 	return &LoginResult{Pair: pair}, nil
+}
+
+// Identify looks up which MFA methods a user has registered. This is called
+// before password entry so the frontend can show the right authentication step.
+//
+// Security: returns an empty result for unknown emails — no enumeration.
+func (s *Service) Identify(ctx context.Context, email string) (*IdentifyResult, error) {
+	u, err := s.users.GetByEmail(ctx, email)
+	if err != nil {
+		// Unknown email — return password-only to prevent enumeration.
+		return &IdentifyResult{}, nil
+	}
+
+	if !u.MFAEnabled || s.mfaChecker == nil {
+		return &IdentifyResult{}, nil
+	}
+
+	totpCount, err := s.mfaChecker.CountVerifiedTOTPSecrets(ctx, u.ID)
+	if err != nil {
+		return nil, fmt.Errorf("session.Service.Identify count totp: %w", err)
+	}
+	passkeyCount, err := s.mfaChecker.CountActivePasskeys(ctx, u.ID)
+	if err != nil {
+		return nil, fmt.Errorf("session.Service.Identify count passkeys: %w", err)
+	}
+
+	return &IdentifyResult{
+		HasPasskey: passkeyCount > 0,
+		HasTOTP:    totpCount > 0,
+		HasMFA:     true,
+	}, nil
 }
 
 // Register creates a new user via an invitation token and issues a token pair.
@@ -470,4 +511,48 @@ func recordFailedLogin(ctx context.Context, users user.Repository, auditSvc audi
 		})
 	}
 	return nil
+}
+
+// GetUserIDByEmail resolves an email address to a user ID.
+// Satisfies the mfa.UserByEmailLookup interface for passwordless passkey login.
+func (s *Service) GetUserIDByEmail(ctx context.Context, email string) (string, error) {
+	u, err := s.users.GetByEmail(ctx, email)
+	if err != nil {
+		return "", err
+	}
+	return u.ID, nil
+}
+
+// EnsureDevice finds an existing device by fingerprint or creates a new one.
+// Satisfies the mfa.DeviceEnsurer interface for passwordless passkey login.
+func (s *Service) EnsureDevice(ctx context.Context, userID, fingerprint, deviceName, platform, userAgent string) (string, error) {
+	dev, err := s.devices.GetByFingerprint(ctx, userID, fingerprint)
+	if err != nil {
+		return "", fmt.Errorf("session.Service.EnsureDevice lookup: %w", err)
+	}
+	if dev != nil {
+		if dev.IsRevoked() {
+			return "", pkgerrors.ErrDeviceRevoked
+		}
+		_ = s.devices.UpdateLastSeen(ctx, dev.ID)
+		return dev.ID, nil
+	}
+
+	dev, err = s.devices.Create(ctx, device.RegisterParams{
+		UserID:      userID,
+		Name:        deviceName,
+		Platform:    device.Platform(platform),
+		Fingerprint: fingerprint,
+		UserAgent:   userAgent,
+	})
+	if err != nil {
+		return "", fmt.Errorf("session.Service.EnsureDevice create: %w", err)
+	}
+	s.audit.WriteAsync(ctx, audit.Event{
+		UserID:   userID,
+		DeviceID: dev.ID,
+		Event:    audit.EventDeviceRegistered,
+		Metadata: map[string]any{"platform": platform, "via": "passkey_passwordless"},
+	})
+	return dev.ID, nil
 }

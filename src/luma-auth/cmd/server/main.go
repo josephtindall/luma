@@ -138,6 +138,7 @@ func run() error {
 		auditSvc,
 		invitationRepo,
 		mfaSvc,
+		mfaSvc, // also satisfies MFAMethodChecker
 		cfg.JWTSigningKey,
 	)
 
@@ -159,7 +160,7 @@ func run() error {
 	prefHandler := preferences.NewHandler(prefSvc)
 	invHandler := invitation.NewHandler(invitationSvc, cfg.BaseURL)
 	authzHandler := authz.NewHandler(authzAuthorizer, auditSvc)
-	mfaHandler := mfapkg.NewHandler(mfaSvc, sessionSvc, true /* secureCookie */)
+	mfaHandler := mfapkg.NewHandler(mfaSvc, sessionSvc, sessionSvc, sessionSvc, true /* secureCookie */)
 
 	// ── 9. Router ─────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -193,12 +194,15 @@ func run() error {
 	// ── Auth (rate-limited on sensitive paths) ────────────────────────────────
 	r.Group(func(r chi.Router) {
 		r.Use(pkgmiddleware.IPRateLimit(rdb))
+		r.Post("/api/auth/identify", sessionHandler.Identify)
 		r.Post("/api/auth/login", sessionHandler.Login)
 		r.Post("/api/auth/refresh", sessionHandler.Refresh)
 		r.Post("/api/auth/register", sessionHandler.Register)
 		r.Post("/api/auth/mfa/verify", mfaHandler.VerifyMFA)
 		r.Post("/api/auth/passkeys/login/begin", mfaHandler.BeginLogin)
 		r.Post("/api/auth/passkeys/login/finish", mfaHandler.FinishLogin)
+		r.Post("/api/auth/passkeys/passwordless/begin", mfaHandler.BeginPasskeyLogin)
+		r.Post("/api/auth/passkeys/passwordless/finish", mfaHandler.FinishPasskeyLogin)
 	})
 
 	// ── Invitation join (unauthenticated — accessed before account creation) ──

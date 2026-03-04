@@ -57,6 +57,18 @@ func NewService(repo Repository, users user.Repository, auditSvc audit.Service, 
 	return &Service{repo: repo, users: users, audit: auditSvc, webAuthn: wa, waStore: waStore}
 }
 
+// CountVerifiedTOTPSecrets returns how many verified TOTP secrets a user has.
+// Exposed so session.Service can check MFA method availability during identify.
+func (s *Service) CountVerifiedTOTPSecrets(ctx context.Context, userID string) (int, error) {
+	return s.repo.CountVerifiedTOTPSecrets(ctx, userID)
+}
+
+// CountActivePasskeys returns the number of non-revoked passkeys for a user.
+// Exposed so session.Service can check MFA method availability during identify.
+func (s *Service) CountActivePasskeys(ctx context.Context, userID string) (int, error) {
+	return s.repo.CountActivePasskeys(ctx, userID)
+}
+
 // ── TOTP Setup ──────────────────────────────────────────────────────────────
 
 // SetupTOTP generates a new TOTP secret for the user. The secret is not yet
