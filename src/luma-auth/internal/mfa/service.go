@@ -8,9 +8,12 @@ import (
 	"encoding/base64"
 	"encoding/hex"
 	"fmt"
+	"net/http"
 	"net/url"
 	"time"
 
+	"github.com/go-webauthn/webauthn/protocol"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/pquerna/otp"
 	"github.com/pquerna/otp/totp"
 
@@ -42,14 +45,16 @@ type TokenPairResult struct {
 
 // Service contains business logic for MFA (TOTP + passkeys).
 type Service struct {
-	repo  Repository
-	users user.Repository
-	audit audit.Service
+	repo     Repository
+	users    user.Repository
+	audit    audit.Service
+	webAuthn *webauthn.WebAuthn
+	waStore  *WebAuthnSessionStore
 }
 
 // NewService constructs the MFA service.
-func NewService(repo Repository, users user.Repository, auditSvc audit.Service) *Service {
-	return &Service{repo: repo, users: users, audit: auditSvc}
+func NewService(repo Repository, users user.Repository, auditSvc audit.Service, wa *webauthn.WebAuthn, waStore *WebAuthnSessionStore) *Service {
+	return &Service{repo: repo, users: users, audit: auditSvc, webAuthn: wa, waStore: waStore}
 }
 
 // ── TOTP Setup ──────────────────────────────────────────────────────────────
@@ -57,9 +62,20 @@ func NewService(repo Repository, users user.Repository, auditSvc audit.Service) 
 // SetupTOTP generates a new TOTP secret for the user. The secret is not yet
 // verified — the user must call ConfirmTOTP with a valid code and the returned ID.
 // Any existing unverified secrets are cleaned up first.
+const maxTOTPSecretsPerUser = 10
+
 func (s *Service) SetupTOTP(ctx context.Context, userID, name string) (*TOTPSetupResult, error) {
 	if name == "" {
 		name = "Authenticator"
+	}
+
+	// Enforce per-user limit on enrolled authenticator apps.
+	count, err := s.repo.CountVerifiedTOTPSecrets(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.SetupTOTP count: %w", err)
+	}
+	if count >= maxTOTPSecretsPerUser {
+		return nil, pkgerrors.ErrTOTPLimitReached
 	}
 
 	// Clean up any stale unverified secrets from previous incomplete enrollments.
@@ -113,8 +129,8 @@ func (s *Service) ConfirmTOTP(ctx context.Context, userID, secretID, code string
 	b32Secret := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(secret.Secret)
 	valid, err := totp.ValidateCustom(code, b32Secret, time.Now().UTC(), totp.ValidateOpts{
 		Period:    30,
-		Skew:     1,
-		Digits:   otp.DigitsSix,
+		Skew:      1,
+		Digits:    otp.DigitsSix,
 		Algorithm: otp.AlgorithmSHA1,
 	})
 	if err != nil || !valid {
@@ -214,11 +230,17 @@ func (s *Service) CreateChallenge(ctx context.Context, userID, deviceID string) 
 
 	// Determine available methods.
 	methods := []string{}
-	totpCount, _ := s.repo.CountVerifiedTOTPSecrets(ctx, userID)
+	totpCount, err := s.repo.CountVerifiedTOTPSecrets(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.CreateChallenge count totp: %w", err)
+	}
 	if totpCount > 0 {
 		methods = append(methods, "totp")
 	}
-	passkeyCount, _ := s.repo.CountActivePasskeys(ctx, userID)
+	passkeyCount, err := s.repo.CountActivePasskeys(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.CreateChallenge count passkeys: %w", err)
+	}
 	if passkeyCount > 0 {
 		methods = append(methods, "passkey")
 	}
@@ -269,13 +291,15 @@ func (s *Service) VerifyChallenge(ctx context.Context, mfaToken, code, ipAddress
 			t := time.Unix(c*30, 0).UTC()
 			valid, verr := totp.ValidateCustom(code, b32Secret, t, totp.ValidateOpts{
 				Period:    30,
-				Skew:     0,
-				Digits:   otp.DigitsSix,
+				Skew:      0,
+				Digits:    otp.DigitsSix,
 				Algorithm: otp.AlgorithmSHA1,
 			})
 			if verr == nil && valid {
 				// Record the counter so this code can't be replayed.
-				_ = s.repo.UpdateTOTPLastUsedCounter(ctx, secret.ID, c)
+				if uerr := s.repo.UpdateTOTPLastUsedCounter(ctx, secret.ID, c); uerr != nil {
+					return "", "", fmt.Errorf("mfa.Service.VerifyChallenge update counter: %w", uerr)
+				}
 				codeValid = true
 				break
 			}
@@ -306,6 +330,38 @@ func (s *Service) VerifyChallenge(ctx context.Context, mfaToken, code, ipAddress
 	})
 
 	return challenge.UserID, challenge.DeviceID, nil
+}
+
+// LookupChallenge validates an MFA token and returns the associated user and
+// device IDs without consuming the challenge. Used by the passkey login flow
+// to identify the user before starting the WebAuthn ceremony.
+func (s *Service) LookupChallenge(ctx context.Context, mfaToken string) (userID, deviceID string, err error) {
+	hash := hashChallengeToken(mfaToken)
+
+	challenge, err := s.repo.GetChallengeByHash(ctx, hash)
+	if err != nil {
+		return "", "", fmt.Errorf("mfa.Service.LookupChallenge lookup: %w", err)
+	}
+	if challenge == nil || !challenge.IsValid() {
+		return "", "", pkgerrors.ErrMFATokenInvalid
+	}
+
+	return challenge.UserID, challenge.DeviceID, nil
+}
+
+// ConsumeChallenge marks an MFA challenge as consumed after successful passkey login.
+func (s *Service) ConsumeChallenge(ctx context.Context, mfaToken string) error {
+	hash := hashChallengeToken(mfaToken)
+
+	challenge, err := s.repo.GetChallengeByHash(ctx, hash)
+	if err != nil {
+		return fmt.Errorf("mfa.Service.ConsumeChallenge lookup: %w", err)
+	}
+	if challenge == nil {
+		return pkgerrors.ErrMFATokenInvalid
+	}
+
+	return s.repo.ConsumeChallenge(ctx, challenge.ID)
 }
 
 // ── Passkeys ────────────────────────────────────────────────────────────────
@@ -374,9 +430,12 @@ func (s *Service) RevokePasskey(ctx context.Context, userID, passkeyID string) e
 	// Check if any MFA methods remain.
 	passkeyCount, err := s.repo.CountActivePasskeys(ctx, userID)
 	if err != nil {
-		return fmt.Errorf("mfa.Service.RevokePasskey count: %w", err)
+		return fmt.Errorf("mfa.Service.RevokePasskey count passkeys: %w", err)
 	}
-	totpCount, _ := s.repo.CountVerifiedTOTPSecrets(ctx, userID)
+	totpCount, err := s.repo.CountVerifiedTOTPSecrets(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("mfa.Service.RevokePasskey count totp: %w", err)
+	}
 
 	if passkeyCount == 0 && totpCount == 0 {
 		if err := s.users.SetMFAEnabled(ctx, userID, false); err != nil {
@@ -401,6 +460,185 @@ func (s *Service) GetPasskeyByCredentialID(ctx context.Context, credentialID []b
 		return nil, fmt.Errorf("mfa.Service.GetPasskeyByCredentialID: %w", err)
 	}
 	return p, nil
+}
+
+// ── Passkey Registration Ceremonies ─────────────────────────────────────────
+
+const maxPasskeysPerUser = 10
+
+// BeginRegistration starts a WebAuthn registration ceremony for the given user.
+// Returns the CredentialCreation options to pass to navigator.credentials.create().
+func (s *Service) BeginRegistration(ctx context.Context, userID, name string) (*protocol.CredentialCreation, error) {
+	if name == "" {
+		name = "Passkey"
+	}
+
+	// Enforce per-user passkey limit.
+	count, err := s.repo.CountActivePasskeys(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.BeginRegistration count: %w", err)
+	}
+	if count >= maxPasskeysPerUser {
+		return nil, pkgerrors.ErrPasskeyLimitReached
+	}
+
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.BeginRegistration get user: %w", err)
+	}
+
+	// Build the existing credentials list so the browser excludes them.
+	existing, err := s.repo.ListPasskeysForUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.BeginRegistration list passkeys: %w", err)
+	}
+
+	waUser := &webAuthnUser{u: u, passkeys: existing}
+
+	creation, session, err := s.webAuthn.BeginRegistration(waUser,
+		webauthn.WithResidentKeyRequirement(protocol.ResidentKeyRequirementPreferred),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.BeginRegistration begin: %w", err)
+	}
+
+	// Store session + name in Redis.
+	if err := s.waStore.Save(ctx, regSessionKey(userID), session); err != nil {
+		return nil, fmt.Errorf("mfa.Service.BeginRegistration save session: %w", err)
+	}
+	if err := s.waStore.SaveName(ctx, regNameKey(userID), name); err != nil {
+		return nil, fmt.Errorf("mfa.Service.BeginRegistration save name: %w", err)
+	}
+
+	return creation, nil
+}
+
+// FinishRegistration completes the registration ceremony, stores the new
+// passkey credential, and enables MFA.
+func (s *Service) FinishRegistration(ctx context.Context, userID string, r *http.Request) (*Passkey, error) {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.FinishRegistration get user: %w", err)
+	}
+
+	existing, err := s.repo.ListPasskeysForUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.FinishRegistration list passkeys: %w", err)
+	}
+
+	session, err := s.waStore.Get(ctx, regSessionKey(userID))
+	if err != nil {
+		return nil, pkgerrors.ErrWebAuthnSessionExpired
+	}
+
+	name, err := s.waStore.GetName(ctx, regNameKey(userID))
+	if err != nil {
+		name = "Passkey"
+	}
+
+	waUser := &webAuthnUser{u: u, passkeys: existing}
+
+	cred, err := s.webAuthn.FinishRegistration(waUser, *session, r)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.FinishRegistration finish: %w", err)
+	}
+
+	// Clean up Redis session.
+	_ = s.waStore.Delete(ctx, regSessionKey(userID))
+	_ = s.waStore.Delete(ctx, regNameKey(userID))
+
+	// Map transports.
+	transports := make([]string, 0, len(cred.Transport))
+	for _, t := range cred.Transport {
+		transports = append(transports, string(t))
+	}
+
+	p := &Passkey{
+		UserID:       userID,
+		CredentialID: cred.ID,
+		PublicKey:    cred.PublicKey,
+		SignCount:    int64(cred.Authenticator.SignCount),
+		Name:         name,
+		AAGUID:       cred.Authenticator.AAGUID,
+		Transports:   transports,
+	}
+
+	if err := s.StorePasskey(ctx, p); err != nil {
+		return nil, err
+	}
+
+	return p, nil
+}
+
+// ── Passkey Login Ceremonies ────────────────────────────────────────────────
+
+// BeginLogin starts a WebAuthn login ceremony for a user who has passkeys.
+func (s *Service) BeginLogin(ctx context.Context, userID string) (*protocol.CredentialAssertion, error) {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.BeginLogin get user: %w", err)
+	}
+
+	existing, err := s.repo.ListPasskeysForUser(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.BeginLogin list passkeys: %w", err)
+	}
+	if len(existing) == 0 {
+		return nil, pkgerrors.ErrPasskeyNotFound
+	}
+
+	waUser := &webAuthnUser{u: u, passkeys: existing}
+
+	assertion, session, err := s.webAuthn.BeginLogin(waUser)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.BeginLogin begin: %w", err)
+	}
+
+	if err := s.waStore.Save(ctx, loginSessionKey(userID), session); err != nil {
+		return nil, fmt.Errorf("mfa.Service.BeginLogin save session: %w", err)
+	}
+
+	return assertion, nil
+}
+
+// FinishLogin completes the login ceremony and updates the sign count.
+func (s *Service) FinishLogin(ctx context.Context, userID, ipAddress, userAgent string, r *http.Request) error {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("mfa.Service.FinishLogin get user: %w", err)
+	}
+
+	existing, err := s.repo.ListPasskeysForUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("mfa.Service.FinishLogin list passkeys: %w", err)
+	}
+
+	session, err := s.waStore.Get(ctx, loginSessionKey(userID))
+	if err != nil {
+		return pkgerrors.ErrWebAuthnSessionExpired
+	}
+
+	waUser := &webAuthnUser{u: u, passkeys: existing}
+
+	cred, err := s.webAuthn.FinishLogin(waUser, *session, r)
+	if err != nil {
+		return fmt.Errorf("mfa.Service.FinishLogin finish: %w", err)
+	}
+
+	// Clean up Redis session.
+	_ = s.waStore.Delete(ctx, loginSessionKey(userID))
+
+	// Find the matching passkey and update sign count.
+	for _, p := range existing {
+		if string(p.CredentialID) == string(cred.ID) {
+			if err := s.AuthenticatePasskey(ctx, p, int64(cred.Authenticator.SignCount), ipAddress, userAgent); err != nil {
+				return err
+			}
+			break
+		}
+	}
+
+	return nil
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

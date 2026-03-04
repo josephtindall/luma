@@ -151,7 +151,7 @@ func (r *Repository) UpdateTOTPLastUsedCounter(ctx context.Context, id string, c
 
 // ── MFA Challenges ──────────────────────────────────────────────────────────
 
-func (r *Repository) CreateChallenge(ctx context.Context, userID, deviceID, tokenHash string, expiresAt interface{}) error {
+func (r *Repository) CreateChallenge(ctx context.Context, userID, deviceID, tokenHash string, expiresAt time.Time) error {
 	const q = `
 		INSERT INTO auth.mfa_challenges (user_id, device_id, token_hash, expires_at)
 		VALUES ($1, $2, $3, $4)`
@@ -183,8 +183,16 @@ func (r *Repository) GetChallengeByHash(ctx context.Context, tokenHash string) (
 }
 
 func (r *Repository) ConsumeChallenge(ctx context.Context, id string) error {
-	const q = `UPDATE auth.mfa_challenges SET consumed_at = NOW() WHERE id = $1`
-	_, err := r.db.Exec(ctx, q, id)
+	const q = `
+		UPDATE auth.mfa_challenges SET consumed_at = NOW()
+		WHERE id = $1 AND consumed_at IS NULL
+		RETURNING id`
+
+	var consumed string
+	err := r.db.QueryRow(ctx, q, id).Scan(&consumed)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("mfa.postgres.ConsumeChallenge: already consumed")
+	}
 	if err != nil {
 		return fmt.Errorf("mfa.postgres.ConsumeChallenge: %w", err)
 	}
@@ -304,6 +312,3 @@ func scanPasskey(row pgx.Row) (*mfa.Passkey, error) {
 
 // ensure we implement the interface.
 var _ mfa.Repository = (*Repository)(nil)
-
-// ensure time.Time satisfies the expiresAt parameter.
-var _ interface{} = time.Time{}

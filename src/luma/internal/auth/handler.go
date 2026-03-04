@@ -7,7 +7,6 @@ import (
 	"io"
 	"net/http"
 	"strings"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 )
@@ -162,8 +161,8 @@ func (h *Handler) proxyAuth(method, authPath string) http.HandlerFunc {
 func (h *Handler) proxyAuthWithParam(method, authPathPrefix, paramName string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		paramVal := chi.URLParam(r, paramName)
-		if paramVal == "" {
-			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "missing " + paramName})
+		if paramVal == "" || strings.ContainsAny(paramVal, "/\\") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid " + paramName})
 			return
 		}
 
@@ -275,6 +274,7 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 		w.WriteHeader(resp.StatusCode)
 		io.Copy(w, resp.Body) //nolint:errcheck
 		return
@@ -330,6 +330,7 @@ func (h *Handler) refresh(w http.ResponseWriter, r *http.Request) {
 	defer resp.Body.Close()
 
 	if resp.StatusCode != http.StatusOK {
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
 		w.WriteHeader(resp.StatusCode)
 		io.Copy(w, resp.Body) //nolint:errcheck
 		return
@@ -374,10 +375,8 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 	}
 	defer resp.Body.Close()
 
-	// Forward any Set-Cookie headers (expiry cookies from auth service).
-	for _, sc := range resp.Header["Set-Cookie"] {
-		w.Header().Add("Set-Cookie", sc)
-	}
+	// Rewrite the Set-Cookie path so the browser clears the correct cookie.
+	rewriteCookies(w, resp, "/api/auth/refresh", "/api/luma/auth/refresh")
 
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body) //nolint:errcheck
@@ -453,7 +452,7 @@ func cookieString(c *http.Cookie) string {
 	}
 	if !c.Expires.IsZero() {
 		b.WriteString("; Expires=")
-		b.WriteString(c.Expires.UTC().Format(time.RFC1123))
+		b.WriteString(c.Expires.UTC().Format(http.TimeFormat))
 	}
 	if c.MaxAge > 0 {
 		b.WriteString(fmt.Sprintf("; Max-Age=%d", c.MaxAge))

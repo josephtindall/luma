@@ -52,7 +52,6 @@ try {
         Write-Warn "Watch for it in the logs -- it looks like:"
         Write-Warn "  ========================================"
         Write-Warn "    Setup token: <base64url string>"
-        Write-Warn "    Expires at:  00:00 am/pm"
         Write-Warn "  ========================================"
         Write-Info "After starting, open http://localhost:8002 and paste the token."
     }

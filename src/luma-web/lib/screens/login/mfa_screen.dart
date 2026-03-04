@@ -26,6 +26,7 @@ class _MFAScreenState extends State<MFAScreen> {
   }
 
   Future<void> _verify() async {
+    if (_loading) return;
     final code = _codeCtrl.text.trim();
     if (code.length != 6) return;
 

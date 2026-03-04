@@ -31,6 +31,9 @@ type Config struct {
 	JWTSigningKey     []byte // LUMA_AUTH_JWT_SIGNING_KEY
 	JWTSigningKeyPrev []byte // LUMA_AUTH_JWT_SIGNING_KEY_PREV — only during key rotation
 
+	// WebAuthn
+	RPDisplayName string // AUTH_RP_DISPLAY_NAME — default "Luma"
+
 	// Setup
 	SetupToken string // AUTH_SETUP_TOKEN — CLI unattended path only
 }
@@ -49,6 +52,7 @@ func Load() (*Config, error) {
 		DBSSLMode:     envOrDefault("AUTH_DB_SSL_MODE", "prefer"),
 		RedisAddr:     os.Getenv("AUTH_REDIS_ADDR"),
 		RedisPassword: os.Getenv("AUTH_REDIS_PASSWORD"),
+		RPDisplayName: envOrDefault("AUTH_RP_DISPLAY_NAME", "Luma"),
 		SetupToken:    os.Getenv("AUTH_SETUP_TOKEN"),
 	}
 

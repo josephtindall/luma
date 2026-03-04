@@ -38,6 +38,10 @@ class AuthService extends ChangeNotifier {
   String? _mfaToken;
   List<String> _mfaMethods = [];
 
+  /// Called when the session is cleared (logout, expiry) so dependent services
+  /// can drop cached state. Set from main.dart to avoid circular imports.
+  VoidCallback? onSessionCleared;
+
   AuthService(this._baseUrl);
 
   String? get accessToken => _accessToken;
@@ -177,6 +181,7 @@ class AuthService extends ChangeNotifier {
       await http.post(Uri.parse('$_baseUrl/api/luma/auth/logout'));
     } catch (_) {}
     _accessToken = null;
+    onSessionCleared?.call();
     notifyListeners();
   }
 
@@ -194,6 +199,7 @@ class AuthService extends ChangeNotifier {
     _accessToken = null;
     _mfaToken = null;
     _mfaMethods = [];
+    onSessionCleared?.call();
     notifyListeners();
   }
 }

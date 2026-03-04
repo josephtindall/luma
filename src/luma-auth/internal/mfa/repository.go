@@ -1,6 +1,9 @@
 package mfa
 
-import "context"
+import (
+	"context"
+	"time"
+)
 
 // Repository is the persistence interface for MFA data (TOTP, challenges, passkeys).
 type Repository interface {
@@ -36,7 +39,7 @@ type Repository interface {
 	// ── MFA Challenges ──────────────────────────────────────────────────
 
 	// CreateChallenge inserts a new MFA challenge.
-	CreateChallenge(ctx context.Context, userID, deviceID, tokenHash string, expiresAt interface{}) error
+	CreateChallenge(ctx context.Context, userID, deviceID, tokenHash string, expiresAt time.Time) error
 
 	// GetChallengeByHash looks up an MFA challenge by token hash.
 	GetChallengeByHash(ctx context.Context, tokenHash string) (*MFAChallenge, error)

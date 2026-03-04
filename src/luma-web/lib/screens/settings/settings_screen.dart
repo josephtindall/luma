@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../../models/user.dart';
 import '../../services/user_service.dart';
+import '../../services/webauthn_interop.dart' as webauthn;
 import '../../widgets/user_avatar.dart';
 
 class SettingsScreen extends StatelessWidget {
@@ -471,9 +472,10 @@ class _TOTPSectionState extends State<_TOTPSection> {
                   return const Center(child: CircularProgressIndicator());
                 }
                 if (snap.hasError) {
-                  return Text('Could not load authenticator apps: ${snap.error}',
-                      style:
-                          TextStyle(color: Theme.of(context).colorScheme.error));
+                  return Text(
+                      'Could not load authenticator apps: ${snap.error}',
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.error));
                 }
                 final apps = snap.data ?? [];
                 if (apps.isEmpty && !_enrolling) {
@@ -542,7 +544,7 @@ class _TOTPSectionState extends State<_TOTPSection> {
                       controller: _nameCtrl,
                       decoration: const InputDecoration(
                         labelText: 'App nickname (optional)',
-                        hintText: 'e.g. Work phone',
+                        hintText: 'e.g. My Ente Auth app',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -601,11 +603,19 @@ class _PasskeysSection extends StatefulWidget {
 
 class _PasskeysSectionState extends State<_PasskeysSection> {
   late Future<List<Passkey>> _future;
+  final _nameCtrl = TextEditingController();
+  bool _registering = false;
 
   @override
   void initState() {
     super.initState();
     _future = widget.userService.loadPasskeys();
+  }
+
+  @override
+  void dispose() {
+    _nameCtrl.dispose();
+    super.dispose();
   }
 
   void _refresh() {
@@ -614,12 +624,44 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
     });
   }
 
+  Future<void> _addPasskey() async {
+    final name = _nameCtrl.text.trim();
+    setState(() => _registering = true);
+    try {
+      // Step 1: Get creation options from the server.
+      final options = await widget.userService.beginPasskeyRegistration(name);
+
+      // Step 2: Prompt the browser to create a credential.
+      final credential = await webauthn.createCredential(options);
+
+      // Step 3: Send the credential back to the server.
+      await widget.userService.finishPasskeyRegistration(credential);
+
+      _nameCtrl.clear();
+      _refresh();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Passkey added')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _registering = false);
+    }
+  }
+
   Future<void> _revoke(Passkey passkey) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Remove passkey'),
-        content: Text('Remove "${passkey.name}"? You won\'t be able to sign in with it.'),
+        content: Text(
+            'Remove "${passkey.name}"? You won\'t be able to sign in with it.'),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -667,11 +709,11 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
                 }
                 if (snap.hasError) {
                   return Text('Could not load passkeys: ${snap.error}',
-                      style:
-                          TextStyle(color: Theme.of(context).colorScheme.error));
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.error));
                 }
                 final passkeys = snap.data ?? [];
-                if (passkeys.isEmpty) {
+                if (passkeys.isEmpty && !_registering) {
                   return const Text('No passkeys registered.');
                 }
                 return Column(
@@ -679,6 +721,33 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
                       passkeys.map((p) => _passkeyTile(context, p)).toList(),
                 );
               },
+            ),
+            const SizedBox(height: 12),
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    controller: _nameCtrl,
+                    decoration: const InputDecoration(
+                      labelText: 'Passkey nickname (optional)',
+                      hintText: 'e.g. MacBook Touch ID',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                FilledButton.icon(
+                  onPressed: _registering ? null : _addPasskey,
+                  icon: const Icon(Icons.add),
+                  label: _registering
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2),
+                        )
+                      : const Text('Add passkey'),
+                ),
+              ],
             ),
           ],
         ),
@@ -749,8 +818,7 @@ class _PreferencesSectionState extends State<_PreferencesSection> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Preferences',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text('Preferences', style: Theme.of(context).textTheme.titleMedium),
             const SizedBox(height: 16),
 
             // Theme
@@ -797,8 +865,7 @@ class _PreferencesSectionState extends State<_PreferencesSection> {
             // Timezone
             _label(context, 'Timezone'),
             const SizedBox(height: 4),
-            Text(prefs.timezone,
-                style: Theme.of(context).textTheme.bodyMedium),
+            Text(prefs.timezone, style: Theme.of(context).textTheme.bodyMedium),
             const SizedBox(height: 16),
 
             // Compact mode
@@ -895,15 +962,16 @@ class _DevicesSectionState extends State<_DevicesSection> {
                 }
                 if (snap.hasError) {
                   return Text('Could not load devices: ${snap.error}',
-                      style:
-                          TextStyle(color: Theme.of(context).colorScheme.error));
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.error));
                 }
                 final devices = snap.data ?? [];
                 if (devices.isEmpty) {
                   return const Text('No active devices.');
                 }
                 return Column(
-                  children: devices.map((d) => _deviceTile(context, d)).toList(),
+                  children:
+                      devices.map((d) => _deviceTile(context, d)).toList(),
                 );
               },
             ),
@@ -1000,8 +1068,8 @@ class _AuditSectionState extends State<_AuditSection> {
                 }
                 if (snap.hasError) {
                   return Text('Could not load activity: ${snap.error}',
-                      style:
-                          TextStyle(color: Theme.of(context).colorScheme.error));
+                      style: TextStyle(
+                          color: Theme.of(context).colorScheme.error));
                 }
                 final events = snap.data ?? [];
                 if (events.isEmpty) {

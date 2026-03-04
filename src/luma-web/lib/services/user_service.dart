@@ -203,6 +203,34 @@ class UserService extends ChangeNotifier {
     await loadProfile();
   }
 
+  /// Begins passkey registration. Returns the PublicKeyCredentialCreationOptions
+  /// JSON to pass to navigator.credentials.create().
+  Future<Map<String, dynamic>> beginPasskeyRegistration(String name) async {
+    final resp = await _api.post('/api/luma/user/me/passkeys/register/begin', {
+      'name': name,
+    });
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to begin passkey registration');
+    }
+    return json.decode(resp.body) as Map<String, dynamic>;
+  }
+
+  /// Completes passkey registration with the browser's credential response.
+  Future<void> finishPasskeyRegistration(
+      Map<String, dynamic> credential) async {
+    final resp = await _api.post(
+      '/api/luma/user/me/passkeys/register/finish',
+      credential,
+    );
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(
+          body['error'] ?? 'Failed to complete passkey registration');
+    }
+    await loadProfile(); // refresh mfaEnabled state
+  }
+
   void clear() {
     _profile = null;
     _preferences = null;

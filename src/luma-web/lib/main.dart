@@ -17,6 +17,8 @@ void main() async {
   final apiClient = ApiClient(authService);
   final userService = UserService(apiClient);
 
+  authService.onSessionCleared = userService.clear;
+
   await authService.initialize();
 
   if (authService.isLoggedIn) {

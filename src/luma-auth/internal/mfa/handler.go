@@ -257,9 +257,18 @@ func (h *Handler) BeginRegistration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: implement WebAuthn registration begin ceremony using go-webauthn/webauthn.
-	// For now, return 501 Not Implemented.
-	httputil.WriteError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "passkey registration not yet implemented")
+	var req struct {
+		Name string `json:"name"`
+	}
+	_ = json.NewDecoder(r.Body).Decode(&req)
+
+	creation, err := h.svc.BeginRegistration(r.Context(), claims.Subject, req.Name)
+	if err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, creation)
 }
 
 // FinishRegistration handles POST /api/auth/passkeys/register/finish.
@@ -271,8 +280,17 @@ func (h *Handler) FinishRegistration(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	// TODO: implement WebAuthn registration finish ceremony.
-	httputil.WriteError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "passkey registration not yet implemented")
+	passkey, err := h.svc.FinishRegistration(r.Context(), claims.Subject, r)
+	if err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"id":         passkey.ID,
+		"name":       passkey.Name,
+		"created_at": passkey.CreatedAt,
+	})
 }
 
 // ── Passkey login ceremonies (unauthenticated, rate-limited) ────────────────
@@ -280,15 +298,68 @@ func (h *Handler) FinishRegistration(w http.ResponseWriter, r *http.Request) {
 // BeginLogin handles POST /api/auth/passkeys/login/begin.
 // Returns PublicKeyCredentialRequestOptions for navigator.credentials.get().
 func (h *Handler) BeginLogin(w http.ResponseWriter, r *http.Request) {
-	// TODO: implement WebAuthn login begin ceremony.
-	httputil.WriteError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "passkey login not yet implemented")
+	var req struct {
+		MFAToken string `json:"mfa_token"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid body")
+		return
+	}
+	if req.MFAToken == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "mfa_token is required")
+		return
+	}
+
+	userID, _, err := h.svc.LookupChallenge(r.Context(), req.MFAToken)
+	if err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+
+	assertion, err := h.svc.BeginLogin(r.Context(), userID)
+	if err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, assertion)
 }
 
 // FinishLogin handles POST /api/auth/passkeys/login/finish.
 // Verifies the assertion, issues tokens, and sets the refresh cookie.
 func (h *Handler) FinishLogin(w http.ResponseWriter, r *http.Request) {
-	// TODO: implement WebAuthn login finish ceremony.
-	httputil.WriteError(w, http.StatusNotImplemented, "NOT_IMPLEMENTED", "passkey login not yet implemented")
+	// The MFA token is passed as a query parameter since the body is the
+	// WebAuthn assertion response that must be forwarded raw to the library.
+	mfaToken := r.URL.Query().Get("mfa_token")
+	if mfaToken == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "mfa_token query parameter is required")
+		return
+	}
+
+	userID, deviceID, err := h.svc.LookupChallenge(r.Context(), mfaToken)
+	if err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+
+	if err := h.svc.FinishLogin(r.Context(), userID, remoteIP(r), r.UserAgent(), r); err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+
+	// Consume the MFA challenge now that login succeeded.
+	_ = h.svc.ConsumeChallenge(r.Context(), mfaToken)
+
+	accessToken, refreshToken, expiresAt, err := h.sessions.IssueForDevice(r.Context(), userID, deviceID, remoteIP(r), r.UserAgent())
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to issue tokens")
+		return
+	}
+
+	h.setRefreshCookie(w, refreshToken, expiresAt)
+	httputil.WriteJSON(w, http.StatusOK, map[string]string{
+		"access_token": accessToken,
+	})
 }
 
 // ── Helpers ─────────────────────────────────────────────────────────────────

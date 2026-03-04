@@ -28,6 +28,9 @@ var (
 	ErrTOTPAlreadySetup   = errors.New("totp already set up")  // 409
 	ErrTOTPNotSetup       = errors.New("totp not set up")      // 404
 	ErrPasskeyNotFound    = errors.New("passkey not found")    // 404
+	ErrTOTPLimitReached      = errors.New("totp app limit reached")    // 409
+	ErrPasskeyLimitReached   = errors.New("passkey limit reached")    // 409
+	ErrWebAuthnSessionExpired = errors.New("webauthn session expired") // 400
 )
 
 // HTTPStatus maps a sentinel error to its canonical HTTP status code.
@@ -72,6 +75,12 @@ func HTTPStatus(err error) int {
 		return http.StatusNotFound
 	case errors.Is(err, ErrPasskeyNotFound):
 		return http.StatusNotFound
+	case errors.Is(err, ErrTOTPLimitReached):
+		return http.StatusConflict
+	case errors.Is(err, ErrPasskeyLimitReached):
+		return http.StatusConflict
+	case errors.Is(err, ErrWebAuthnSessionExpired):
+		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
 	}
@@ -120,6 +129,12 @@ func ErrorCode(err error) string {
 		return "TOTP_NOT_SETUP"
 	case errors.Is(err, ErrPasskeyNotFound):
 		return "PASSKEY_NOT_FOUND"
+	case errors.Is(err, ErrTOTPLimitReached):
+		return "TOTP_LIMIT_REACHED"
+	case errors.Is(err, ErrPasskeyLimitReached):
+		return "PASSKEY_LIMIT_REACHED"
+	case errors.Is(err, ErrWebAuthnSessionExpired):
+		return "WEBAUTHN_SESSION_EXPIRED"
 	default:
 		return "INTERNAL_ERROR"
 	}

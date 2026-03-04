@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"net/url"
 	"os"
 	"os/signal"
 	"syscall"
@@ -15,6 +16,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	chimiddleware "github.com/go-chi/chi/v5/middleware"
+	"github.com/go-webauthn/webauthn/webauthn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 
@@ -98,7 +100,23 @@ func run() error {
 	authzRepo := authzpg.New(db)
 	mfaRepo := mfapg.New(db)
 
-	// ── 6. Services ───────────────────────────────────────────────────────────
+	// ── 5b. WebAuthn instance ─────────────────────────────────────────────────────
+	baseURL, err := url.Parse(cfg.BaseURL)
+	if err != nil {
+		return fmt.Errorf("webauthn: parse base url: %w", err)
+	}
+
+	wa, err := webauthn.New(&webauthn.Config{
+		RPDisplayName: cfg.RPDisplayName,
+		RPID:          baseURL.Hostname(),
+		RPOrigins:     []string{cfg.BaseURL},
+	})
+	if err != nil {
+		return fmt.Errorf("webauthn: init: %w", err)
+	}
+	waStore := mfapkg.NewWebAuthnSessionStore(rdb)
+
+	// ── 6. Services ───────────────────────────────────────────────────────────────
 	auditSvc := audit.NewAsyncService(auditRepo)
 	defer auditSvc.Stop()
 
@@ -107,7 +125,7 @@ func run() error {
 	prefSvc := preferences.NewService(prefRepo)
 	invitationSvc := invitation.NewService(invitationRepo)
 	bootstrapSvc := bootstrap.NewService(bootstrapRepo)
-	mfaSvc := mfapkg.NewService(mfaRepo, userRepo, auditSvc)
+	mfaSvc := mfapkg.NewService(mfaRepo, userRepo, auditSvc, wa, waStore)
 
 	sessionSvc := session.NewService(
 		userRepo,
@@ -288,4 +306,3 @@ func auditHandler(repo audit.Repository, all bool) http.HandlerFunc {
 		httputil.WriteJSON(w, http.StatusOK, rows)
 	}
 }
-
