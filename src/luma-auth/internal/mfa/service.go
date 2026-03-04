@@ -201,6 +201,9 @@ func (s *Service) RemoveTOTP(ctx context.Context, userID, secretID, password str
 		if err := s.users.SetMFAEnabled(ctx, userID, false); err != nil {
 			return fmt.Errorf("mfa.Service.RemoveTOTP disable mfa: %w", err)
 		}
+		if err := s.repo.ReplaceRecoveryCodes(ctx, userID, nil); err != nil {
+			return fmt.Errorf("mfa.Service.RemoveTOTP clear recovery codes: %w", err)
+		}
 	}
 
 	s.audit.WriteAsync(ctx, audit.Event{
@@ -477,6 +480,9 @@ func (s *Service) RevokePasskey(ctx context.Context, userID, passkeyID string) e
 		if err := s.users.SetMFAEnabled(ctx, userID, false); err != nil {
 			return fmt.Errorf("mfa.Service.RevokePasskey disable mfa: %w", err)
 		}
+		if err := s.repo.ReplaceRecoveryCodes(ctx, userID, nil); err != nil {
+			return fmt.Errorf("mfa.Service.RevokePasskey clear recovery codes: %w", err)
+		}
 	}
 
 	s.audit.WriteAsync(ctx, audit.Event{
@@ -702,6 +708,14 @@ func hashChallengeToken(raw string) string {
 // 8 new codes, hashes and stores them, and returns the plaintext codes.
 // The caller MUST ensure the user has fully authenticated (MFA if enabled) before calling this.
 func (s *Service) GenerateRecoveryCodes(ctx context.Context, userID string) ([]string, error) {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.GenerateRecoveryCodes user: %w", err)
+	}
+	if !u.MFAEnabled {
+		return nil, fmt.Errorf("mfa.Service.GenerateRecoveryCodes: MFA must be enabled")
+	}
+
 	const (
 		numCodes   = 8
 		codeLength = 10

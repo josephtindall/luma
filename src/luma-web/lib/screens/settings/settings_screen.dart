@@ -31,6 +31,10 @@ class SettingsScreen extends StatelessWidget {
                     _TOTPSection(userService: userService),
                     const SizedBox(height: 24),
                     _PasskeysSection(userService: userService),
+                    if (userService.profile?.mfaEnabled == true) ...[
+                      const SizedBox(height: 24),
+                      _RecoveryCodesSection(userService: userService),
+                    ],
                     const SizedBox(height: 24),
                     _PreferencesSection(userService: userService),
                     const SizedBox(height: 24),

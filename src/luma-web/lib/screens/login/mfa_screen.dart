@@ -104,7 +104,7 @@ class _MFAScreenState extends State<MFAScreen> {
                   _hasTotp && _hasPasskey
                       ? 'Enter your authenticator code, recovery code, or use a passkey.'
                       : _hasPasskey
-                          ? 'Use your passkey to sign in.'
+                          ? 'Use your passkey to sign in, or enter an 11-character recovery code.'
                           : 'Enter the 6-digit code from your authenticator app, or an 11-character recovery code.',
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
@@ -139,61 +139,57 @@ class _MFAScreenState extends State<MFAScreen> {
                           )
                         : const Text('Sign in with passkey'),
                   ),
-                  if (_hasTotp) ...[
-                    const SizedBox(height: 20),
-                    Row(
-                      children: [
-                        const Expanded(child: Divider()),
-                        Padding(
-                          padding: const EdgeInsets.symmetric(horizontal: 16),
-                          child: Text('or',
-                              style: Theme.of(context).textTheme.bodySmall),
-                        ),
-                        const Expanded(child: Divider()),
-                      ],
-                    ),
-                    const SizedBox(height: 20),
-                  ],
-                ],
-                // TOTP section — shown when TOTP is available.
-                if (_hasTotp) ...[
-                  TextField(
-                    controller: _codeCtrl,
-                    autofocus: !_hasPasskey,
-                    textAlign: TextAlign.center,
-                    style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                          letterSpacing: 8,
-                        ),
-                    keyboardType: TextInputType.visiblePassword,
-                    inputFormatters: [
-                      LengthLimitingTextInputFormatter(11),
+                  const SizedBox(height: 20),
+                  Row(
+                    children: [
+                      const Expanded(child: Divider()),
+                      Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 16),
+                        child: Text('or',
+                            style: Theme.of(context).textTheme.bodySmall),
+                      ),
+                      const Expanded(child: Divider()),
                     ],
-                    decoration: const InputDecoration(
-                      hintText: '000000 or ABCDE-12345',
-                      border: OutlineInputBorder(),
-                    ),
-                    onChanged: (value) {
-                      if (value.length == 6 && !value.contains('-')) {
-                        _verify();
-                      } else if (value.length == 11) {
-                        _verify();
-                      }
-                    },
-                    onSubmitted: (_) => _verify(),
                   ),
-                  const SizedBox(height: 24),
-                  FilledButton(
-                    onPressed: _loading ? null : _verify,
-                    child: _loading
-                        ? const SizedBox(
-                            height: 20,
-                            width: 20,
-                            child: CircularProgressIndicator(
-                                strokeWidth: 2, color: Colors.white),
-                          )
-                        : const Text('Verify'),
-                  ),
+                  const SizedBox(height: 20),
                 ],
+                // Text input section — always shown for TOTP or Recovery Codes.
+                TextField(
+                  controller: _codeCtrl,
+                  autofocus: !_hasPasskey,
+                  textAlign: TextAlign.center,
+                  style: Theme.of(context).textTheme.headlineSmall?.copyWith(
+                        letterSpacing: 8,
+                      ),
+                  keyboardType: TextInputType.visiblePassword,
+                  inputFormatters: [
+                    LengthLimitingTextInputFormatter(11),
+                  ],
+                  decoration: const InputDecoration(
+                    hintText: '000 000',
+                    border: OutlineInputBorder(),
+                  ),
+                  onChanged: (value) {
+                    if (value.length == 6 && !value.contains('-')) {
+                      _verify();
+                    } else if (value.length == 11) {
+                      _verify();
+                    }
+                  },
+                  onSubmitted: (_) => _verify(),
+                ),
+                const SizedBox(height: 24),
+                FilledButton(
+                  onPressed: _loading ? null : _verify,
+                  child: _loading
+                      ? const SizedBox(
+                          height: 20,
+                          width: 20,
+                          child: CircularProgressIndicator(
+                              strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Verify'),
+                ),
                 const SizedBox(height: 12),
                 TextButton(
                   onPressed: _cancel,

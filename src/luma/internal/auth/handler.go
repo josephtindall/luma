@@ -80,6 +80,10 @@ func (h *Handler) UserRoutes() chi.Router {
 	r.Post("/me/mfa/totp/confirm", h.proxyAuth("POST", "/api/auth/mfa/totp/confirm"))
 	r.Delete("/me/mfa/totp/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/mfa/totp/", "id"))
 
+	// Recovery Codes.
+	r.Post("/me/mfa/recovery-codes", h.proxyAuth("POST", "/api/auth/users/me/mfa/recovery-codes"))
+	r.Get("/me/mfa/recovery-codes/count", h.proxyAuth("GET", "/api/auth/users/me/mfa/recovery-codes/count"))
+
 	// Passkey management.
 	r.Post("/me/passkeys/register/begin", h.proxyAuth("POST", "/api/auth/passkeys/register/begin"))
 	r.Post("/me/passkeys/register/finish", h.proxyAuth("POST", "/api/auth/passkeys/register/finish"))
