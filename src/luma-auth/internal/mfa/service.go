@@ -463,9 +463,19 @@ func (s *Service) AuthenticatePasskey(ctx context.Context, passkey *Passkey, new
 	return nil
 }
 
-// RevokePasskey soft-deletes a passkey and clears mfa_enabled if no other
-// methods remain.
-func (s *Service) RevokePasskey(ctx context.Context, userID, passkeyID string) error {
+// RevokePasskey soft-deletes a passkey after verifying the user's password,
+// and clears mfa_enabled if no other methods remain.
+func (s *Service) RevokePasskey(ctx context.Context, userID, passkeyID, password string) error {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("mfa.Service.RevokePasskey get user: %w", err)
+	}
+
+	ok, err := crypto.VerifyPassword(password, u.PasswordHash)
+	if err != nil || !ok {
+		return pkgerrors.ErrInvalidCredentials
+	}
+
 	p, err := s.repo.GetPasskeyByID(ctx, passkeyID)
 	if err != nil {
 		return fmt.Errorf("mfa.Service.RevokePasskey get: %w", err)

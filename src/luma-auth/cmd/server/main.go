@@ -181,8 +181,9 @@ func run() error {
 			return
 		}
 		httputil.WriteJSON(w, http.StatusOK, map[string]string{
-			"status": "ok",
-			"state":  string(state.SetupState),
+			"status":        "ok",
+			"state":         string(state.SetupState),
+			"instance_name": state.Name,
 		})
 	})
 

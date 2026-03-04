@@ -343,7 +343,7 @@ class _LoginScreenState extends State<LoginScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         Text(
-          'Sign in to Luma',
+          'Sign in to ${widget.auth.instanceName.isNotEmpty ? widget.auth.instanceName : "Luma"}',
           style: Theme.of(context).textTheme.headlineMedium,
         ),
         const SizedBox(height: 24),

@@ -83,6 +83,7 @@ class AuthService extends ChangeNotifier {
 
   String? _accessToken;
   String _setupState = 'unknown'; // "unknown" | "unclaimed" | "active"
+  String _instanceName = '';
   bool _isInitialized = false;
 
   // MFA challenge state — set when login returns mfa_required.
@@ -98,6 +99,7 @@ class AuthService extends ChangeNotifier {
   String? get accessToken => _accessToken;
   bool get isLoggedIn => _accessToken != null;
   String get setupState => _setupState;
+  String get instanceName => _instanceName;
   bool get isInitialized => _isInitialized;
 
   /// True when login succeeded but a second factor is required.
@@ -112,6 +114,7 @@ class AuthService extends ChangeNotifier {
       if (resp.statusCode == 200) {
         final data = json.decode(resp.body) as Map<String, dynamic>;
         _setupState = (data['state'] as String?) ?? 'unknown';
+        _instanceName = (data['instance_name'] as String?) ?? '';
       }
     } catch (_) {
       _setupState = 'unknown';

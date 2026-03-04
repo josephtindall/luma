@@ -254,7 +254,19 @@ func (h *Handler) RevokePasskey(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if err := h.svc.RevokePasskey(r.Context(), claims.Subject, passkeyID); err != nil {
+	var req struct {
+		Password string `json:"password"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid body")
+		return
+	}
+	if req.Password == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "password is required")
+		return
+	}
+
+	if err := h.svc.RevokePasskey(r.Context(), claims.Subject, passkeyID, req.Password); err != nil {
 		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
 		return
 	}

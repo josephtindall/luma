@@ -110,7 +110,7 @@ func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
 
 // status probes auth service state.
 // auth service 503 → {"state":"unclaimed"}
-// auth service 401 → {"state":"active"}
+// auth service 401 → {"state":"active","instance_name":"..."}
 // Connection error/timeout → HTTP 503 {"error":"auth service unavailable"}
 // Unexpected status → HTTP 502
 func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
@@ -131,7 +131,22 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 	case http.StatusServiceUnavailable: // 503 — UNCLAIMED or SETUP
 		writeJSON(w, http.StatusOK, map[string]string{"state": "unclaimed"})
 	case http.StatusUnauthorized: // 401 — ACTIVE
-		writeJSON(w, http.StatusOK, map[string]string{"state": "active"})
+		// Fetch instance name from health endpoint.
+		result := map[string]string{"state": "active"}
+		if hReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, h.authURL+"/api/auth/health", nil); err == nil {
+			if hResp, err := h.client.Do(hReq); err == nil {
+				defer hResp.Body.Close()
+				if hResp.StatusCode == http.StatusOK {
+					var health map[string]string
+					if json.NewDecoder(hResp.Body).Decode(&health) == nil {
+						if name, ok := health["instance_name"]; ok && name != "" {
+							result["instance_name"] = name
+						}
+					}
+				}
+			}
+		}
+		writeJSON(w, http.StatusOK, result)
 	default:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("unexpected auth status: %d", resp.StatusCode)})
 	}

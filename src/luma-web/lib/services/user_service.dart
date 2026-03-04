@@ -219,10 +219,14 @@ class UserService extends ChangeNotifier {
         .toList();
   }
 
-  Future<void> revokePasskey(String passkeyId) async {
-    final resp = await _api.delete('/api/luma/user/me/passkeys/$passkeyId');
+  Future<void> revokePasskey(String passkeyId, String password) async {
+    final resp =
+        await _api.deleteWithBody('/api/luma/user/me/passkeys/$passkeyId', {
+      'password': password,
+    });
     if (resp.statusCode != 200 && resp.statusCode != 204) {
-      throw Exception('Failed to revoke passkey');
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to revoke passkey');
     }
     await loadProfile();
   }

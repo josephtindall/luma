@@ -390,6 +390,12 @@ class _TOTPSectionState extends State<_TOTPSection> {
     final code = _codeCtrl.text.trim();
     if (code.length != 6 || _pendingId == null) return;
 
+    // Capture current TOTP app count before confirming.
+    List<TOTPApp>? currentApps;
+    try {
+      currentApps = await widget.userService.loadTOTPApps();
+    } catch (_) {}
+
     setState(() => _confirming = true);
     try {
       await widget.userService.confirmTOTP(_pendingId!, code);
@@ -401,6 +407,102 @@ class _TOTPSectionState extends State<_TOTPSection> {
       _nameCtrl.clear();
       _codeCtrl.clear();
       _refresh();
+
+      // If this was the first TOTP app, auto-generate recovery codes.
+      final isFirstApp = (currentApps == null || currentApps.isEmpty);
+      if (isFirstApp && mounted) {
+        try {
+          final codes = await widget.userService.generateRecoveryCodes();
+          if (mounted) {
+            await showDialog<void>(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Recovery codes generated'),
+                content: SizedBox(
+                  width: 400,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(ctx).colorScheme.errorContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded,
+                                color: Theme.of(ctx).colorScheme.error),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Save these codes in a safe place. If you lose access '
+                                'to your authenticator app and use all 8 codes, you '
+                                'will need to regenerate them or risk losing your '
+                                'account forever.',
+                                style: TextStyle(
+                                    color: Theme.of(ctx)
+                                        .colorScheme
+                                        .onErrorContainer),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color:
+                              Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: Theme.of(ctx).colorScheme.outline),
+                        ),
+                        child: SelectableText(
+                          codes
+                              .asMap()
+                              .entries
+                              .map((e) {
+                                final i = e.key;
+                                final code = e.value;
+                                // 2-column layout: odd-indexed codes get leading tab
+                                if (i % 2 == 0 && i < codes.length - 1) {
+                                  return '${code.padRight(12)}${codes[i + 1]}';
+                                } else if (i % 2 == 0) {
+                                  return code;
+                                }
+                                return null;
+                              })
+                              .where((l) => l != null)
+                              .join('\n'),
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 16,
+                            height: 1.6,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('I\'ve saved these codes'),
+                  ),
+                ],
+              ),
+            );
+          }
+        } catch (_) {
+          // Recovery code generation failed — user can do it manually later.
+        }
+      }
+
+      widget.onTOTPChanged?.call(true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Authenticator app added')),
@@ -692,12 +794,27 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
   }
 
   Future<void> _revoke(Passkey passkey) async {
+    final passwordCtrl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Remove passkey'),
-        content: Text(
-            'Remove "${passkey.name}"? You won\'t be able to sign in with it.'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+                'Remove "${passkey.name}"? You won\'t be able to sign in with it. Enter your password to confirm.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passwordCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Password',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -708,12 +825,17 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || passwordCtrl.text.isEmpty) {
+      passwordCtrl.dispose();
+      return;
+    }
 
     try {
-      await widget.userService.revokePasskey(passkey.id);
+      await widget.userService.revokePasskey(passkey.id, passwordCtrl.text);
+      passwordCtrl.dispose();
       _refresh();
     } catch (e) {
+      passwordCtrl.dispose();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
@@ -863,6 +985,14 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
     _refresh();
   }
 
+  @override
+  void didUpdateWidget(covariant _RecoveryCodesSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.hasTOTP != oldWidget.hasTOTP) {
+      _refresh();
+    }
+  }
+
   Future<void> _refresh() async {
     setState(() => _loading = true);
     try {
@@ -931,7 +1061,21 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
                   borderRadius: BorderRadius.circular(8),
                 ),
                 child: SelectableText(
-                  codes.join('\n'),
+                  codes
+                      .asMap()
+                      .entries
+                      .map((e) {
+                        final i = e.key;
+                        final code = e.value;
+                        if (i % 2 == 0 && i < codes.length - 1) {
+                          return '${code.padRight(12)}${codes[i + 1]}';
+                        } else if (i % 2 == 0) {
+                          return code;
+                        }
+                        return null;
+                      })
+                      .where((l) => l != null)
+                      .join('\n'),
                   style: Theme.of(context).textTheme.bodyMedium?.copyWith(
                         fontFamily: 'monospace',
                         height: 1.5,
