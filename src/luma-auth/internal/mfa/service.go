@@ -140,14 +140,35 @@ func (s *Service) ConfirmTOTP(ctx context.Context, userID, secretID, code string
 	}
 
 	b32Secret := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(secret.Secret)
-	valid, err := totp.ValidateCustom(code, b32Secret, time.Now().UTC(), totp.ValidateOpts{
-		Period:    30,
-		Skew:      1,
-		Digits:    otp.DigitsSix,
-		Algorithm: otp.AlgorithmSHA1,
-	})
-	if err != nil || !valid {
+
+	// We need to know exactly which counter was accepted to prevent it from being replayed.
+	// ValidateCustom doesn't return the matching counter, so we manually loop over the allowed skew
+	// exactly like VerifyChallenge does.
+	codeValid := false
+	currentCounter := time.Now().UTC().Unix() / 30
+	var matchedCounter int64
+
+	for _, c := range []int64{currentCounter - 1, currentCounter, currentCounter + 1} {
+		t := time.Unix(c*30, 0).UTC()
+		valid, verr := totp.ValidateCustom(code, b32Secret, t, totp.ValidateOpts{
+			Period:    30,
+			Skew:      0, // strictly check this specific counter
+			Digits:    otp.DigitsSix,
+			Algorithm: otp.AlgorithmSHA1,
+		})
+		if verr == nil && valid {
+			codeValid = true
+			matchedCounter = c
+			break
+		}
+	}
+
+	if !codeValid {
 		return pkgerrors.ErrMFACodeInvalid
+	}
+
+	if err := s.repo.UpdateTOTPLastUsedCounter(ctx, secretID, matchedCounter); err != nil {
+		return fmt.Errorf("mfa.Service.ConfirmTOTP update counter: %w", err)
 	}
 
 	if err := s.repo.VerifyTOTPSecret(ctx, secretID); err != nil {

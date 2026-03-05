@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"time"
 
 	"github.com/josephtindall/luma-auth/internal/audit"
@@ -239,6 +240,11 @@ func (s *Service) Register(ctx context.Context, params SessionRegisterParams) (*
 	// Validate invitation.
 	inv, err := s.invitations.GetByID(ctx, params.InvitationID)
 	if err != nil || inv == nil || !inv.IsValid() {
+		return nil, pkgerrors.ErrTokenInvalid
+	}
+
+	// Strictly enforce that the user is registering the exact email they were invited with.
+	if !strings.EqualFold(params.Email, inv.Email) {
 		return nil, pkgerrors.ErrTokenInvalid
 	}
 

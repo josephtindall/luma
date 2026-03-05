@@ -214,6 +214,7 @@ func lockedUser() *user.User {
 func validInvitation() *invitation.Invitation {
 	return &invitation.Invitation{
 		ID:        "inv-1",
+		Email:     "bob@example.com",
 		Status:    invitation.StatusPending,
 		ExpiresAt: time.Now().Add(24 * time.Hour),
 	}
@@ -581,7 +582,7 @@ func TestRegister_PasswordTooShort(t *testing.T) {
 
 	_, err := svc.Register(context.Background(), SessionRegisterParams{
 		InvitationID: "inv-1",
-		Email:        "x@x.com",
+		Email:        "bob@example.com",
 		Password:     "short", // < 12 chars
 	})
 	if !errors.Is(err, pkgerrors.ErrPasswordTooShort) {
@@ -600,7 +601,7 @@ func TestRegister_EmailTaken(t *testing.T) {
 
 	_, err := svc.Register(context.Background(), SessionRegisterParams{
 		InvitationID: "inv-1",
-		Email:        "existing@x.com",
+		Email:        "bob@example.com",
 		Password:     "long-enough-password-here",
 	})
 	if !errors.Is(err, pkgerrors.ErrEmailTaken) {
