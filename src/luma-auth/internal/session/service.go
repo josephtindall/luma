@@ -2,6 +2,7 @@ package session
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -125,7 +126,9 @@ func (s *Service) Login(ctx context.Context, params LoginParams) (*LoginResult, 
 		// Auto-unlock after 30 minutes — prevents permanent self-lockout for
 		// self-hosted admins. The lock still blocks brute-force during the window.
 		if u.IsLockExpired(30 * time.Minute) {
-			_ = s.users.UnlockAccount(ctx, u.ID)
+			if err := s.users.UnlockAccount(ctx, u.ID); err != nil {
+				return nil, fmt.Errorf("session.Service.Login auto-unlock: %w", err)
+			}
 			s.audit.WriteAsync(ctx, audit.Event{
 				UserID:   u.ID,
 				Event:    audit.EventAccountUnlocked,
@@ -204,8 +207,11 @@ func (s *Service) Login(ctx context.Context, params LoginParams) (*LoginResult, 
 func (s *Service) Identify(ctx context.Context, email string) (*IdentifyResult, error) {
 	u, err := s.users.GetByEmail(ctx, email)
 	if err != nil {
-		// Unknown email — return password-only to prevent enumeration.
-		return &IdentifyResult{}, nil
+		if errors.Is(err, pkgerrors.ErrUserNotFound) {
+			// Unknown email — return password-only to prevent enumeration.
+			return &IdentifyResult{}, nil
+		}
+		return nil, fmt.Errorf("session.Service.Identify get user: %w", err)
 	}
 
 	if !u.MFAEnabled || s.mfaChecker == nil {

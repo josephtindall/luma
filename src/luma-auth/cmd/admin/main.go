@@ -52,7 +52,7 @@ func unlockAccount(ctx context.Context, db *pgxpool.Pool, email string) error {
 	const q = `
 		UPDATE auth.users
 		SET locked_at = NULL,
-		    locked_reason = '',
+		    locked_reason = NULL,
 		    failed_login_attempts = 0,
 		    updated_at = NOW()
 		WHERE email = $1

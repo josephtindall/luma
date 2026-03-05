@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -47,31 +48,27 @@ String getDeviceFingerprint() {
   }
 }
 
-/// Simple v4-style UUID using Math.random (sufficient for device fingerprints).
+/// Generates a v4 UUID using Dart's secure random number generator.
 String _generateUUID() {
+  math.Random random;
   try {
-    final crypto = globalContext['crypto'] as JSObject?;
-    if (crypto != null) {
-      final array = globalContext.callMethod<JSAny>(
-        'eval'.toJS,
-        'new Uint8Array(16)'.toJS,
-      ) as JSObject;
-      crypto.callMethod<JSAny>('getRandomValues'.toJS, array);
-      // Convert to hex string
-      final hex = globalContext
-          .callMethod<JSString>(
-            'eval'.toJS,
-            'Array.from(arguments[0]).map(b => b.toString(16).padStart(2,"0")).join("")'
-                .toJS,
-            array,
-          )
-          .toDart;
-      return '${hex.substring(0, 8)}-${hex.substring(8, 12)}-4${hex.substring(13, 16)}-${hex.substring(16, 20)}-${hex.substring(20, 32)}';
-    }
-  } catch (_) {}
-  // Fallback: timestamp + random
-  final now = DateTime.now().millisecondsSinceEpoch;
-  return 'fp-$now';
+    random = math.Random.secure();
+  } catch (_) {
+    // Fallback if secure random is not available on this platform.
+    random = math.Random(DateTime.now().millisecondsSinceEpoch);
+  }
+
+  // Generate 16 random bytes
+  final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+
+  // Protocol v4 requires setting specific bits in byte 6 and 8
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  // Convert to hex string
+  final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).toList();
+
+  return '${hex.sublist(0, 4).join('')}-${hex.sublist(4, 6).join('')}-${hex.sublist(6, 8).join('')}-${hex.sublist(8, 10).join('')}-${hex.sublist(10, 16).join('')}';
 }
 
 /// Manages authentication state for the Luma web app.
