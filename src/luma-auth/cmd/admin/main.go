@@ -11,8 +11,6 @@ import (
 	"os"
 
 	"github.com/jackc/pgx/v5/pgxpool"
-
-	"github.com/josephtindall/luma-auth/pkg/config"
 )
 
 func main() {
@@ -28,13 +26,13 @@ func run(args []string) error {
 		return nil
 	}
 
-	cfg, err := config.Load()
-	if err != nil {
-		return fmt.Errorf("config: %w", err)
+	dbURL := os.Getenv("AUTH_DB_URL")
+	if dbURL == "" {
+		return fmt.Errorf("AUTH_DB_URL environment variable is required")
 	}
 
 	ctx := context.Background()
-	db, err := pgxpool.New(ctx, cfg.DBURL)
+	db, err := pgxpool.New(ctx, dbURL)
 	if err != nil {
 		return fmt.Errorf("connect: %w", err)
 	}

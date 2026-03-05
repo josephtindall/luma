@@ -454,6 +454,10 @@ func (h *Handler) FinishPasskeyLogin(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "email is required")
 		return
 	}
+	if wrapper.Fingerprint == "" || wrapper.DeviceName == "" || wrapper.Platform == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "fingerprint, device_name, and platform are required")
+		return
+	}
 
 	userID, err := h.userLookup.GetUserIDByEmail(r.Context(), wrapper.Email)
 	if err != nil {
