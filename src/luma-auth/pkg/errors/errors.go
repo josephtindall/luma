@@ -8,29 +8,30 @@ import (
 // Sentinel errors returned by the service layer.
 // Handlers map these to HTTP status codes via HTTPStatus.
 var (
-	ErrInvalidCredentials = errors.New("invalid credentials")  // 401
-	ErrAccountLocked      = errors.New("account locked")       // 403
-	ErrTokenExpired       = errors.New("token expired")        // 401
-	ErrTokenInvalid       = errors.New("token invalid")        // 401
-	ErrTokenRevoked       = errors.New("token revoked")        // 401
-	ErrTokenReuseDetected = errors.New("token reuse detected") // 401 — triggers full revocation
-	ErrUserNotFound       = errors.New("user not found")       // 404
-	ErrEmailTaken         = errors.New("email taken")          // 409
-	ErrPasswordTooShort   = errors.New("password too short")   // 422
-	ErrDeviceNotFound     = errors.New("device not found")     // 404
-	ErrDeviceRevoked      = errors.New("device revoked")       // 403
-	ErrForbidden          = errors.New("forbidden")            // 403
-	ErrSetupRequired      = errors.New("setup required")       // 503
-	ErrSetupComplete      = errors.New("setup complete")       // 410
-	ErrMFARequired        = errors.New("mfa required")         // 200 (not an HTTP error)
-	ErrMFATokenInvalid    = errors.New("mfa token invalid")    // 401
-	ErrMFACodeInvalid     = errors.New("invalid mfa code")     // 401
-	ErrTOTPAlreadySetup   = errors.New("totp already set up")  // 409
-	ErrTOTPNotSetup       = errors.New("totp not set up")      // 404
-	ErrPasskeyNotFound    = errors.New("passkey not found")    // 404
-	ErrTOTPLimitReached      = errors.New("totp app limit reached")    // 409
-	ErrPasskeyLimitReached   = errors.New("passkey limit reached")    // 409
+	ErrInvalidCredentials     = errors.New("invalid credentials")      // 401
+	ErrAccountLocked          = errors.New("account locked")           // 403
+	ErrTokenExpired           = errors.New("token expired")            // 401
+	ErrTokenInvalid           = errors.New("token invalid")            // 401
+	ErrTokenRevoked           = errors.New("token revoked")            // 401
+	ErrTokenReuseDetected     = errors.New("token reuse detected")     // 401 — triggers full revocation
+	ErrUserNotFound           = errors.New("user not found")           // 404
+	ErrEmailTaken             = errors.New("email taken")              // 409
+	ErrPasswordTooShort       = errors.New("password too short")       // 422
+	ErrDeviceNotFound         = errors.New("device not found")         // 404
+	ErrDeviceRevoked          = errors.New("device revoked")           // 403
+	ErrForbidden              = errors.New("forbidden")                // 403
+	ErrSetupRequired          = errors.New("setup required")           // 503
+	ErrSetupComplete          = errors.New("setup complete")           // 410
+	ErrMFARequired            = errors.New("mfa required")             // 200 (not an HTTP error)
+	ErrMFATokenInvalid        = errors.New("mfa token invalid")        // 401
+	ErrMFACodeInvalid         = errors.New("invalid mfa code")         // 401
+	ErrTOTPAlreadySetup       = errors.New("totp already set up")      // 409
+	ErrTOTPNotSetup           = errors.New("totp not set up")          // 404
+	ErrPasskeyNotFound        = errors.New("passkey not found")        // 404
+	ErrTOTPLimitReached       = errors.New("totp app limit reached")   // 409
+	ErrPasskeyLimitReached    = errors.New("passkey limit reached")    // 409
 	ErrWebAuthnSessionExpired = errors.New("webauthn session expired") // 400
+	ErrMFANotEnabled          = errors.New("mfa not enabled")          // 400
 )
 
 // HTTPStatus maps a sentinel error to its canonical HTTP status code.
@@ -80,6 +81,8 @@ func HTTPStatus(err error) int {
 	case errors.Is(err, ErrPasskeyLimitReached):
 		return http.StatusConflict
 	case errors.Is(err, ErrWebAuthnSessionExpired):
+		return http.StatusBadRequest
+	case errors.Is(err, ErrMFANotEnabled):
 		return http.StatusBadRequest
 	default:
 		return http.StatusInternalServerError
@@ -135,6 +138,8 @@ func ErrorCode(err error) string {
 		return "PASSKEY_LIMIT_REACHED"
 	case errors.Is(err, ErrWebAuthnSessionExpired):
 		return "WEBAUTHN_SESSION_EXPIRED"
+	case errors.Is(err, ErrMFANotEnabled):
+		return "MFA_NOT_ENABLED"
 	default:
 		return "INTERNAL_ERROR"
 	}

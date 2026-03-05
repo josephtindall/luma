@@ -524,15 +524,18 @@ class _LoginScreenState extends State<LoginScreen> {
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 letterSpacing: 8,
               ),
-          keyboardType: TextInputType.visiblePassword,
-          inputFormatters: [LengthLimitingTextInputFormatter(6)],
+          keyboardType: TextInputType.number,
+          inputFormatters: [
+            FilteringTextInputFormatter.digitsOnly,
+            LengthLimitingTextInputFormatter(6),
+          ],
           decoration: const InputDecoration(
-            hintText: '000 000',
+            hintText: '000000',
             labelText: 'Authenticator code',
             border: OutlineInputBorder(),
           ),
           onChanged: (value) {
-            if (value.length == 6 && widget.auth.mfaPending) {
+            if (value.length == 6) {
               _submitPasswordAndTotp();
             }
           },
@@ -564,7 +567,7 @@ class _LoginScreenState extends State<LoginScreen> {
             style: Theme.of(context).textTheme.headlineMedium),
         const SizedBox(height: 4),
         Text(
-          'Enter one of your 11-character recovery codes (e.g. XXXXX-XXXXX).',
+          'Enter one of your recovery codes (e.g. XXXXX-XXXXX-XXXXX-XXXXX).',
           style: Theme.of(context).textTheme.bodyMedium,
         ),
         const SizedBox(height: 24),
@@ -591,13 +594,19 @@ class _LoginScreenState extends State<LoginScreen> {
           style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                 letterSpacing: 4,
               ),
-          inputFormatters: [LengthLimitingTextInputFormatter(11)],
+          inputFormatters: [
+            LengthLimitingTextInputFormatter(23),
+            FilteringTextInputFormatter.allow(RegExp(r'[a-zA-Z0-9-]')),
+            TextInputFormatter.withFunction((oldValue, newValue) {
+              return newValue.copyWith(text: newValue.text.toUpperCase());
+            }),
+          ],
           decoration: const InputDecoration(
-            hintText: 'XXXXX-XXXXX',
+            hintText: 'XXXXX-XXXXX-XXXXX-XXXXX',
             border: OutlineInputBorder(),
           ),
           onChanged: (value) {
-            if (value.length == 11) _submitRecoveryCode();
+            if (value.length == 11 || value.length == 23) _submitRecoveryCode();
           },
           onSubmitted: (_) => _submitRecoveryCode(),
         ),

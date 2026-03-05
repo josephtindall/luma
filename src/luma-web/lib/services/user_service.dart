@@ -166,6 +166,7 @@ class UserService extends ChangeNotifier {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['error'] ?? 'Invalid code');
     }
+    await loadProfile();
   }
 
   // ── Recovery Codes ──────────────────────────────────────────────────────

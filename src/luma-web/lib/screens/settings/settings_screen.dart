@@ -479,7 +479,7 @@ class _TOTPSectionState extends State<_TOTPSection> {
                                 final code = e.value;
                                 // 2-column layout: odd-indexed codes get leading tab
                                 if (i % 2 == 0 && i < codes.length - 1) {
-                                  return '${code.padRight(12)}${codes[i + 1]}';
+                                  return '${code.padRight(28)}${codes[i + 1]}';
                                 } else if (i % 2 == 0) {
                                   return code;
                                 }
@@ -1077,7 +1077,7 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
                         final i = e.key;
                         final code = e.value;
                         if (i % 2 == 0 && i < codes.length - 1) {
-                          return '${code.padRight(12)}${codes[i + 1]}';
+                          return '${code.padRight(28)}${codes[i + 1]}';
                         } else if (i % 2 == 0) {
                           return code;
                         }

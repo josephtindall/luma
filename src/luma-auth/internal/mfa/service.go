@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
@@ -279,10 +280,15 @@ func (s *Service) VerifyChallenge(ctx context.Context, mfaToken, code, ipAddress
 		return "", "", pkgerrors.ErrMFATokenInvalid
 	}
 
+	// Normalize the code to uppercase and trim spaces.
+	// This ensures codes pasted with lowercase or accidental spaces are still verified correctly.
+	code = strings.ToUpper(strings.TrimSpace(code))
+
 	// Distinguish between a recovery code and a TOTP token by length.
-	// Our recovery codes are formatted as XXXXX-XXXXX (11 chars).
+	// Our new recovery codes are 20 chars formatted as XXXXX-XXXXX-XXXXX-XXXXX (23 chars).
+	// Old codes are 10 chars formatted as XXXXX-XXXXX (11 chars).
 	// TOTP codes are 6-8 digits.
-	if len(code) == 11 {
+	if len(code) == 11 || len(code) == 23 {
 		hash := sha256.Sum256([]byte(code))
 		codeHashHex := hex.EncodeToString(hash[:])
 
@@ -735,12 +741,12 @@ func (s *Service) GenerateRecoveryCodes(ctx context.Context, userID string) ([]s
 		return nil, fmt.Errorf("mfa.Service.GenerateRecoveryCodes user: %w", err)
 	}
 	if !u.MFAEnabled {
-		return nil, fmt.Errorf("mfa.Service.GenerateRecoveryCodes: MFA must be enabled")
+		return nil, pkgerrors.ErrMFANotEnabled
 	}
 
 	const (
 		numCodes   = 8
-		codeLength = 10
+		codeLength = 20
 		alphabet   = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Crockford-ish (no I, O, 0, 1)
 	)
 
@@ -758,8 +764,8 @@ func (s *Service) GenerateRecoveryCodes(ctx context.Context, userID string) ([]s
 		for j := 0; j < codeLength; j++ {
 			code[j] = alphabet[bytes[j]%byte(len(alphabet))]
 		}
-		// Format as XXXXX-XXXXX for readability
-		plaincodes[i] = fmt.Sprintf("%s-%s", string(code[:5]), string(code[5:]))
+		// Format as XXXXX-XXXXX-XXXXX-XXXXX for readability
+		plaincodes[i] = fmt.Sprintf("%s-%s-%s-%s", string(code[:5]), string(code[5:10]), string(code[10:15]), string(code[15:]))
 
 		// Hash for storage using SHA-256
 		hash := sha256.Sum256([]byte(plaincodes[i]))
