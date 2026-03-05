@@ -10,6 +10,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"strings"
 	"time"
 
 	"github.com/go-webauthn/webauthn/protocol"
@@ -55,6 +56,18 @@ type Service struct {
 // NewService constructs the MFA service.
 func NewService(repo Repository, users user.Repository, auditSvc audit.Service, wa *webauthn.WebAuthn, waStore *WebAuthnSessionStore) *Service {
 	return &Service{repo: repo, users: users, audit: auditSvc, webAuthn: wa, waStore: waStore}
+}
+
+// CountVerifiedTOTPSecrets returns how many verified TOTP secrets a user has.
+// Exposed so session.Service can check MFA method availability during identify.
+func (s *Service) CountVerifiedTOTPSecrets(ctx context.Context, userID string) (int, error) {
+	return s.repo.CountVerifiedTOTPSecrets(ctx, userID)
+}
+
+// CountActivePasskeys returns the number of non-revoked passkeys for a user.
+// Exposed so session.Service can check MFA method availability during identify.
+func (s *Service) CountActivePasskeys(ctx context.Context, userID string) (int, error) {
+	return s.repo.CountActivePasskeys(ctx, userID)
 }
 
 // ── TOTP Setup ──────────────────────────────────────────────────────────────
@@ -127,14 +140,35 @@ func (s *Service) ConfirmTOTP(ctx context.Context, userID, secretID, code string
 	}
 
 	b32Secret := base32.StdEncoding.WithPadding(base32.NoPadding).EncodeToString(secret.Secret)
-	valid, err := totp.ValidateCustom(code, b32Secret, time.Now().UTC(), totp.ValidateOpts{
-		Period:    30,
-		Skew:      1,
-		Digits:    otp.DigitsSix,
-		Algorithm: otp.AlgorithmSHA1,
-	})
-	if err != nil || !valid {
+
+	// We need to know exactly which counter was accepted to prevent it from being replayed.
+	// ValidateCustom doesn't return the matching counter, so we manually loop over the allowed skew
+	// exactly like VerifyChallenge does.
+	codeValid := false
+	currentCounter := time.Now().UTC().Unix() / 30
+	var matchedCounter int64
+
+	for _, c := range []int64{currentCounter - 1, currentCounter, currentCounter + 1} {
+		t := time.Unix(c*30, 0).UTC()
+		valid, verr := totp.ValidateCustom(code, b32Secret, t, totp.ValidateOpts{
+			Period:    30,
+			Skew:      0, // strictly check this specific counter
+			Digits:    otp.DigitsSix,
+			Algorithm: otp.AlgorithmSHA1,
+		})
+		if verr == nil && valid {
+			codeValid = true
+			matchedCounter = c
+			break
+		}
+	}
+
+	if !codeValid {
 		return pkgerrors.ErrMFACodeInvalid
+	}
+
+	if err := s.repo.UpdateTOTPLastUsedCounter(ctx, secretID, matchedCounter); err != nil {
+		return fmt.Errorf("mfa.Service.ConfirmTOTP update counter: %w", err)
 	}
 
 	if err := s.repo.VerifyTOTPSecret(ctx, secretID); err != nil {
@@ -201,6 +235,9 @@ func (s *Service) RemoveTOTP(ctx context.Context, userID, secretID, password str
 		if err := s.users.SetMFAEnabled(ctx, userID, false); err != nil {
 			return fmt.Errorf("mfa.Service.RemoveTOTP disable mfa: %w", err)
 		}
+		if err := s.repo.ReplaceRecoveryCodes(ctx, userID, nil); err != nil {
+			return fmt.Errorf("mfa.Service.RemoveTOTP clear recovery codes: %w", err)
+		}
 	}
 
 	s.audit.WriteAsync(ctx, audit.Event{
@@ -264,6 +301,45 @@ func (s *Service) VerifyChallenge(ctx context.Context, mfaToken, code, ipAddress
 		return "", "", pkgerrors.ErrMFATokenInvalid
 	}
 
+	// Normalize the code to uppercase and trim spaces.
+	// This ensures codes pasted with lowercase or accidental spaces are still verified correctly.
+	code = strings.ToUpper(strings.TrimSpace(code))
+
+	// Distinguish between a recovery code and a TOTP token by length.
+	// Our new recovery codes are 20 chars formatted as XXXXX-XXXXX-XXXXX-XXXXX (23 chars).
+	// Old codes are 10 chars formatted as XXXXX-XXXXX (11 chars).
+	// TOTP codes are 6-8 digits.
+	if len(code) == 11 || len(code) == 23 {
+		hash := sha256.Sum256([]byte(code))
+		codeHashHex := hex.EncodeToString(hash[:])
+
+		rc, err := s.repo.GetRecoveryCodeByHash(ctx, challenge.UserID, codeHashHex)
+		if err != nil {
+			return "", "", fmt.Errorf("mfa.Service.VerifyChallenge lookup recovery code: %w", err)
+		}
+		if rc != nil && !rc.IsUsed() {
+			if err := s.repo.ConsumeRecoveryCode(ctx, rc.ID); err != nil {
+				return "", "", fmt.Errorf("mfa.Service.VerifyChallenge consume recovery: %w", err)
+			}
+			s.audit.WriteAsync(ctx, audit.Event{
+				UserID:    challenge.UserID,
+				DeviceID:  challenge.DeviceID,
+				Event:     audit.EventMFAChallengeOK,
+				IPAddress: ipAddress,
+				Metadata:  map[string]any{"method": "recovery_code"},
+			})
+			return challenge.UserID, challenge.DeviceID, s.repo.ConsumeChallenge(ctx, challenge.ID)
+		}
+		// If it looked like a recovery code but wasn't valid, fail immediately.
+		s.audit.WriteAsync(ctx, audit.Event{
+			UserID:    challenge.UserID,
+			Event:     audit.EventMFAChallengeFail,
+			IPAddress: ipAddress,
+			Metadata:  map[string]any{"reason": "invalid_recovery_code"},
+		})
+		return "", "", pkgerrors.ErrMFACodeInvalid
+	}
+
 	// Verify the TOTP code against all verified secrets for this user.
 	// Per RFC 6238, we track the last used time-step counter per secret and
 	// reject any code whose counter has already been consumed (replay guard).
@@ -313,6 +389,7 @@ func (s *Service) VerifyChallenge(ctx context.Context, mfaToken, code, ipAddress
 			UserID:    challenge.UserID,
 			Event:     audit.EventMFAChallengeFail,
 			IPAddress: ipAddress,
+			Metadata:  map[string]any{"reason": "invalid_totp_code"},
 		})
 		return "", "", pkgerrors.ErrMFACodeInvalid
 	}
@@ -327,6 +404,7 @@ func (s *Service) VerifyChallenge(ctx context.Context, mfaToken, code, ipAddress
 		DeviceID:  challenge.DeviceID,
 		Event:     audit.EventMFAChallengeOK,
 		IPAddress: ipAddress,
+		Metadata:  map[string]any{"method": "totp"},
 	})
 
 	return challenge.UserID, challenge.DeviceID, nil
@@ -412,9 +490,19 @@ func (s *Service) AuthenticatePasskey(ctx context.Context, passkey *Passkey, new
 	return nil
 }
 
-// RevokePasskey soft-deletes a passkey and clears mfa_enabled if no other
-// methods remain.
-func (s *Service) RevokePasskey(ctx context.Context, userID, passkeyID string) error {
+// RevokePasskey soft-deletes a passkey after verifying the user's password,
+// and clears mfa_enabled if no other methods remain.
+func (s *Service) RevokePasskey(ctx context.Context, userID, passkeyID, password string) error {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("mfa.Service.RevokePasskey get user: %w", err)
+	}
+
+	ok, err := crypto.VerifyPassword(password, u.PasswordHash)
+	if err != nil || !ok {
+		return pkgerrors.ErrInvalidCredentials
+	}
+
 	p, err := s.repo.GetPasskeyByID(ctx, passkeyID)
 	if err != nil {
 		return fmt.Errorf("mfa.Service.RevokePasskey get: %w", err)
@@ -440,6 +528,9 @@ func (s *Service) RevokePasskey(ctx context.Context, userID, passkeyID string) e
 	if passkeyCount == 0 && totpCount == 0 {
 		if err := s.users.SetMFAEnabled(ctx, userID, false); err != nil {
 			return fmt.Errorf("mfa.Service.RevokePasskey disable mfa: %w", err)
+		}
+		if err := s.repo.ReplaceRecoveryCodes(ctx, userID, nil); err != nil {
+			return fmt.Errorf("mfa.Service.RevokePasskey clear recovery codes: %w", err)
 		}
 	}
 
@@ -658,4 +749,71 @@ func generateChallengeToken() (raw, hash string, err error) {
 func hashChallengeToken(raw string) string {
 	sum := sha256.Sum256([]byte(raw))
 	return hex.EncodeToString(sum[:])
+}
+
+// ── Recovery Codes ──────────────────────────────────────────────────────────
+
+// GenerateRecoveryCodes invalidates any existing recovery codes, generates exactly
+// 8 new codes, hashes and stores them, and returns the plaintext codes.
+// The caller MUST ensure the user has fully authenticated (MFA if enabled) before calling this.
+func (s *Service) GenerateRecoveryCodes(ctx context.Context, userID string) ([]string, error) {
+	u, err := s.users.GetByID(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("mfa.Service.GenerateRecoveryCodes user: %w", err)
+	}
+	if !u.MFAEnabled {
+		return nil, pkgerrors.ErrMFANotEnabled
+	}
+
+	const (
+		numCodes   = 8
+		codeLength = 20
+		alphabet   = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789" // Crockford-ish (no I, O, 0, 1)
+	)
+
+	plaincodes := make([]string, numCodes)
+	hashes := make([]string, numCodes)
+
+	for i := 0; i < numCodes; i++ {
+		// Generate random bytes to pick from the alphabet
+		bytes := make([]byte, codeLength)
+		if _, err := rand.Read(bytes); err != nil {
+			return nil, fmt.Errorf("mfa.Service.GenerateRecoveryCodes rand: %w", err)
+		}
+
+		code := make([]byte, codeLength)
+		for j := 0; j < codeLength; j++ {
+			code[j] = alphabet[bytes[j]%byte(len(alphabet))]
+		}
+		// Format as XXXXX-XXXXX-XXXXX-XXXXX for readability
+		plaincodes[i] = fmt.Sprintf("%s-%s-%s-%s", string(code[:5]), string(code[5:10]), string(code[10:15]), string(code[15:]))
+
+		// Hash for storage using SHA-256
+		hash := sha256.Sum256([]byte(plaincodes[i]))
+		hashes[i] = hex.EncodeToString(hash[:])
+	}
+
+	if err := s.repo.ReplaceRecoveryCodes(ctx, userID, hashes); err != nil {
+		return nil, fmt.Errorf("mfa.Service.GenerateRecoveryCodes replace: %w", err)
+	}
+
+	s.audit.WriteAsync(ctx, audit.Event{
+		UserID: userID,
+		Event:  audit.EventProfileUpdated, // No specific event for recovery codes yet
+		Metadata: map[string]any{
+			"action": "recovery_codes_generated",
+			"count":  numCodes,
+		},
+	})
+
+	return plaincodes, nil
+}
+
+// CountUnusedRecoveryCodes returns the number of unused recovery codes for a user.
+func (s *Service) CountUnusedRecoveryCodes(ctx context.Context, userID string) (int, error) {
+	count, err := s.repo.CountUnusedRecoveryCodes(ctx, userID)
+	if err != nil {
+		return 0, fmt.Errorf("mfa.Service.CountUnusedRecoveryCodes: %w", err)
+	}
+	return count, nil
 }

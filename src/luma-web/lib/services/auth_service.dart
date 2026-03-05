@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:js_interop';
 import 'dart:js_interop_unsafe';
+import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
@@ -25,6 +26,51 @@ String detectBrowserName() {
   }
 }
 
+/// Returns a stable, per-browser fingerprint stored in localStorage.
+/// Generated once on first call, then reused across sessions so that
+/// setup, login, and MFA all reference the same device record.
+String getDeviceFingerprint() {
+  const key = 'luma_device_fp';
+  try {
+    final storage = globalContext['localStorage'] as JSObject?;
+    if (storage == null) return _generateUUID();
+
+    final existing =
+        (storage.callMethod<JSAny?>('getItem'.toJS, key.toJS) as JSString?)
+            ?.toDart;
+    if (existing != null && existing.isNotEmpty) return existing;
+
+    final fp = _generateUUID();
+    storage.callMethod<JSAny?>('setItem'.toJS, key.toJS, fp.toJS);
+    return fp;
+  } catch (_) {
+    return _generateUUID();
+  }
+}
+
+/// Generates a v4 UUID using Dart's secure random number generator.
+String _generateUUID() {
+  math.Random random;
+  try {
+    random = math.Random.secure();
+  } catch (_) {
+    // Fallback if secure random is not available on this platform.
+    random = math.Random(DateTime.now().millisecondsSinceEpoch);
+  }
+
+  // Generate 16 random bytes
+  final bytes = List<int>.generate(16, (_) => random.nextInt(256));
+
+  // Protocol v4 requires setting specific bits in byte 6 and 8
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  // Convert to hex string
+  final hex = bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).toList();
+
+  return '${hex.sublist(0, 4).join('')}-${hex.sublist(4, 6).join('')}-${hex.sublist(6, 8).join('')}-${hex.sublist(8, 10).join('')}-${hex.sublist(10, 16).join('')}';
+}
+
 /// Manages authentication state for the Luma web app.
 ///
 /// Access token lives in memory only. The refresh cookie (HttpOnly, managed by
@@ -34,6 +80,7 @@ class AuthService extends ChangeNotifier {
 
   String? _accessToken;
   String _setupState = 'unknown'; // "unknown" | "unclaimed" | "active"
+  String _instanceName = '';
   bool _isInitialized = false;
 
   // MFA challenge state — set when login returns mfa_required.
@@ -49,6 +96,7 @@ class AuthService extends ChangeNotifier {
   String? get accessToken => _accessToken;
   bool get isLoggedIn => _accessToken != null;
   String get setupState => _setupState;
+  String get instanceName => _instanceName;
   bool get isInitialized => _isInitialized;
 
   /// True when login succeeded but a second factor is required.
@@ -63,6 +111,7 @@ class AuthService extends ChangeNotifier {
       if (resp.statusCode == 200) {
         final data = json.decode(resp.body) as Map<String, dynamic>;
         _setupState = (data['state'] as String?) ?? 'unknown';
+        _instanceName = (data['instance_name'] as String?) ?? '';
       }
     } catch (_) {
       _setupState = 'unknown';
@@ -90,6 +139,28 @@ class AuthService extends ChangeNotifier {
     }
   }
 
+  /// Queries which MFA methods are available for the given email.
+  /// Does not require a password — used to decide which login step to show.
+  Future<IdentifyResult> identify(String email) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/identify'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'email': email}),
+    );
+
+    if (resp.statusCode != 200) {
+      // On any error, fall back to password-only flow.
+      return IdentifyResult(hasPasskey: false, hasTOTP: false, hasMFA: false);
+    }
+
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    return IdentifyResult(
+      hasPasskey: data['has_passkey'] == true,
+      hasTOTP: data['has_totp'] == true,
+      hasMFA: data['has_mfa'] == true,
+    );
+  }
+
   /// Logs in with email + password. On success, either stores the access token
   /// or sets [mfaPending] if a second factor is required.
   /// Throws [AuthException] on failure.
@@ -102,6 +173,7 @@ class AuthService extends ChangeNotifier {
         'password': password,
         'platform': 'web',
         'device_name': detectBrowserName(),
+        'fingerprint': getDeviceFingerprint(),
       }),
     );
 
@@ -204,6 +276,49 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Signs in with a passkey alone (passwordless).
+  /// Calls the dedicated passwordless passkey endpoints — no password required.
+  /// Throws [AuthException] on failure.
+  Future<void> signInWithPasskey(String email) async {
+    // Step 1: Begin the passkey login ceremony with just the email.
+    final beginResp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/passkeys/passwordless/begin'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({'email': email}),
+    );
+    if (beginResp.statusCode != 200) {
+      throw AuthException('Failed to start passkey login');
+    }
+    final assertionOptions =
+        json.decode(beginResp.body) as Map<String, dynamic>;
+
+    // Step 2: Prompt the browser authenticator.
+    final credential = await webauthn.getCredential(assertionOptions);
+
+    // Step 3: Send assertion + device info to finish (no mfa_token needed).
+    final finishBody = <String, dynamic>{
+      ...credential,
+      'email': email,
+      'fingerprint': getDeviceFingerprint(),
+      'device_name': detectBrowserName(),
+      'platform': 'web',
+    };
+    final finishResp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/passkeys/passwordless/finish'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode(finishBody),
+    );
+    if (finishResp.statusCode != 200) {
+      throw AuthException('Passkey verification failed');
+    }
+
+    final data2 = json.decode(finishResp.body) as Map<String, dynamic>;
+    _accessToken = data2['access_token'] as String?;
+    _mfaToken = null;
+    _mfaMethods = [];
+    notifyListeners();
+  }
+
   /// Clears the pending MFA challenge — returns to the login screen.
   void cancelMFA() {
     _mfaToken = null;
@@ -230,7 +345,12 @@ class AuthService extends ChangeNotifier {
   /// Logs out, clearing the session on the server and in memory.
   Future<void> logout() async {
     try {
-      await http.post(Uri.parse('$_baseUrl/api/luma/auth/logout'));
+      await http.post(
+        Uri.parse('$_baseUrl/api/luma/auth/logout'),
+        headers: {
+          if (_accessToken != null) 'Authorization': 'Bearer $_accessToken',
+        },
+      );
     } catch (_) {}
     _accessToken = null;
     onSessionCleared?.call();
@@ -266,4 +386,18 @@ class AuthException implements Exception {
 
 class SessionExpiredException implements Exception {
   const SessionExpiredException();
+}
+
+/// The result of calling [AuthService.identify] — tells the login screen
+/// which authentication step to present.
+class IdentifyResult {
+  final bool hasPasskey;
+  final bool hasTOTP;
+  final bool hasMFA;
+
+  const IdentifyResult({
+    required this.hasPasskey,
+    required this.hasTOTP,
+    required this.hasMFA,
+  });
 }

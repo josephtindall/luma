@@ -64,3 +64,17 @@ type ChallengeResult struct {
 	MFAToken string   // raw opaque token — hand to client
 	Methods  []string // e.g. ["totp", "passkey"]
 }
+
+// RecoveryCode represents a row in auth.recovery_codes.
+type RecoveryCode struct {
+	ID        string
+	UserID    string
+	CodeHash  string
+	UsedAt    *time.Time
+	CreatedAt time.Time
+}
+
+// IsUsed returns true if the recovery code has been consumed.
+func (c *RecoveryCode) IsUsed() bool {
+	return c.UsedAt != nil
+}

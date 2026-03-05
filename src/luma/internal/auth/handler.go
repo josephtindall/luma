@@ -44,6 +44,7 @@ func (h *Handler) SetupRoutes() chi.Router {
 // AuthRoutes returns a router for /api/luma/auth/* endpoints.
 func (h *Handler) AuthRoutes() chi.Router {
 	r := chi.NewRouter()
+	r.Post("/identify", h.proxySetup("POST", "/api/auth/identify"))
 	r.Post("/login", h.login)
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
@@ -54,6 +55,10 @@ func (h *Handler) AuthRoutes() chi.Router {
 	// Passkey login (unauthenticated).
 	r.Post("/passkeys/login/begin", h.proxySetup("POST", "/api/auth/passkeys/login/begin"))
 	r.Post("/passkeys/login/finish", h.sessionIssuerProxy("/api/auth/passkeys/login/finish"))
+
+	// Passwordless passkey login (unauthenticated — no password required).
+	r.Post("/passkeys/passwordless/begin", h.proxySetup("POST", "/api/auth/passkeys/passwordless/begin"))
+	r.Post("/passkeys/passwordless/finish", h.sessionIssuerProxy("/api/auth/passkeys/passwordless/finish"))
 	return r
 }
 
@@ -80,6 +85,10 @@ func (h *Handler) UserRoutes() chi.Router {
 	r.Post("/me/mfa/totp/confirm", h.proxyAuth("POST", "/api/auth/mfa/totp/confirm"))
 	r.Delete("/me/mfa/totp/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/mfa/totp/", "id"))
 
+	// Recovery Codes.
+	r.Post("/me/mfa/recovery-codes", h.proxyAuth("POST", "/api/auth/users/me/mfa/recovery-codes"))
+	r.Get("/me/mfa/recovery-codes/count", h.proxyAuth("GET", "/api/auth/users/me/mfa/recovery-codes/count"))
+
 	// Passkey management.
 	r.Post("/me/passkeys/register/begin", h.proxyAuth("POST", "/api/auth/passkeys/register/begin"))
 	r.Post("/me/passkeys/register/finish", h.proxyAuth("POST", "/api/auth/passkeys/register/finish"))
@@ -101,7 +110,7 @@ func (h *Handler) getMe(w http.ResponseWriter, r *http.Request) {
 
 // status probes auth service state.
 // auth service 503 → {"state":"unclaimed"}
-// auth service 401 → {"state":"active"}
+// auth service 401 → {"state":"active","instance_name":"..."}
 // Connection error/timeout → HTTP 503 {"error":"auth service unavailable"}
 // Unexpected status → HTTP 502
 func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
@@ -122,7 +131,22 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 	case http.StatusServiceUnavailable: // 503 — UNCLAIMED or SETUP
 		writeJSON(w, http.StatusOK, map[string]string{"state": "unclaimed"})
 	case http.StatusUnauthorized: // 401 — ACTIVE
-		writeJSON(w, http.StatusOK, map[string]string{"state": "active"})
+		// Fetch instance name from health endpoint.
+		result := map[string]string{"state": "active"}
+		if hReq, err := http.NewRequestWithContext(r.Context(), http.MethodGet, h.authURL+"/api/auth/health", nil); err == nil {
+			if hResp, err := h.client.Do(hReq); err == nil {
+				defer hResp.Body.Close()
+				if hResp.StatusCode == http.StatusOK {
+					var health map[string]string
+					if json.NewDecoder(hResp.Body).Decode(&health) == nil {
+						if name, ok := health["instance_name"]; ok && name != "" {
+							result["instance_name"] = name
+						}
+					}
+				}
+			}
+		}
+		writeJSON(w, http.StatusOK, result)
 	default:
 		writeJSON(w, http.StatusBadGateway, map[string]string{"error": fmt.Sprintf("unexpected auth status: %d", resp.StatusCode)})
 	}
@@ -366,6 +390,9 @@ func (h *Handler) logout(w http.ResponseWriter, r *http.Request) {
 
 	if cookie := r.Header.Get("Cookie"); cookie != "" {
 		req.Header.Set("Cookie", cookie)
+	}
+	if auth := r.Header.Get("Authorization"); auth != "" {
+		req.Header.Set("Authorization", auth)
 	}
 
 	resp, err := h.client.Do(req)

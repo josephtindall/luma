@@ -40,8 +40,17 @@ type TokenPair struct {
 // LoginResult is the outcome of a login attempt. Either Pair is set (no MFA)
 // or MFARequired is true and MFAToken/MFAMethods are set.
 type LoginResult struct {
-	Pair       *TokenPair
+	Pair        *TokenPair
 	MFARequired bool
 	MFAToken    string   // raw opaque token — only set when MFARequired
 	MFAMethods  []string // e.g. ["totp", "passkey"]
+}
+
+// IdentifyResult tells the frontend which authentication steps to present
+// after the user enters their email. For unknown emails, all fields are false
+// to prevent email enumeration.
+type IdentifyResult struct {
+	HasPasskey bool `json:"has_passkey"`
+	HasTOTP    bool `json:"has_totp"`
+	HasMFA     bool `json:"has_mfa"`
 }

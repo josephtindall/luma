@@ -315,5 +315,75 @@ func scanPasskey(row pgx.Row) (*mfa.Passkey, error) {
 	return p, err
 }
 
+// ── Recovery Codes ──────────────────────────────────────────────────────────
+
+func (r *Repository) ReplaceRecoveryCodes(ctx context.Context, userID string, codeHashes []string) error {
+	tx, err := r.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("mfa.postgres.ReplaceRecoveryCodes begin: %w", err)
+	}
+	defer tx.Rollback(ctx)
+
+	// Delete existing unused codes
+	_, err = tx.Exec(ctx, `DELETE FROM auth.recovery_codes WHERE user_id = $1 AND used_at IS NULL`, userID)
+	if err != nil {
+		return fmt.Errorf("mfa.postgres.ReplaceRecoveryCodes delete: %w", err)
+	}
+
+	// Insert new codes (using pgx.CopyFrom for efficiency, or just simple inserts since it's only 8 items)
+	// For simplicity, we'll use a loop of Execs, as the batch is small.
+	const insertQ = `INSERT INTO auth.recovery_codes (user_id, code_hash) VALUES ($1, $2)`
+	for _, hash := range codeHashes {
+		if _, err := tx.Exec(ctx, insertQ, userID, hash); err != nil {
+			return fmt.Errorf("mfa.postgres.ReplaceRecoveryCodes insert: %w", err)
+		}
+	}
+
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("mfa.postgres.ReplaceRecoveryCodes commit: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) GetRecoveryCodeByHash(ctx context.Context, userID, codeHash string) (*mfa.RecoveryCode, error) {
+	const q = `
+		SELECT id, user_id, code_hash, used_at, created_at
+		FROM auth.recovery_codes
+		WHERE user_id = $1 AND code_hash = $2`
+
+	var code mfa.RecoveryCode
+	err := r.db.QueryRow(ctx, q, userID, codeHash).Scan(
+		&code.ID, &code.UserID, &code.CodeHash, &code.UsedAt, &code.CreatedAt,
+	)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, nil // Not an error, just not found
+	}
+	if err != nil {
+		return nil, fmt.Errorf("mfa.postgres.GetRecoveryCodeByHash: %w", err)
+	}
+	return &code, nil
+}
+
+func (r *Repository) ConsumeRecoveryCode(ctx context.Context, id string) error {
+	const q = `UPDATE auth.recovery_codes SET used_at = NOW() WHERE id = $1 AND used_at IS NULL`
+	cmd, err := r.db.Exec(ctx, q, id)
+	if err != nil {
+		return fmt.Errorf("mfa.postgres.ConsumeRecoveryCode: %w", err)
+	}
+	if cmd.RowsAffected() == 0 {
+		return errors.New("mfa.postgres.ConsumeRecoveryCode: already used or not found")
+	}
+	return nil
+}
+
+func (r *Repository) CountUnusedRecoveryCodes(ctx context.Context, userID string) (int, error) {
+	const q = `SELECT COUNT(*) FROM auth.recovery_codes WHERE user_id = $1 AND used_at IS NULL`
+	var count int
+	if err := r.db.QueryRow(ctx, q, userID).Scan(&count); err != nil {
+		return 0, fmt.Errorf("mfa.postgres.CountUnusedRecoveryCodes: %w", err)
+	}
+	return count, nil
+}
+
 // ensure we implement the interface.
 var _ mfa.Repository = (*Repository)(nil)

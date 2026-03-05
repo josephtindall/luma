@@ -4,18 +4,39 @@ import '../../models/user.dart';
 import '../../services/user_service.dart';
 import '../../services/webauthn_interop.dart' as webauthn;
 import '../../widgets/user_avatar.dart';
+import '../login/login_email_store.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends StatefulWidget {
   final UserService userService;
 
   const SettingsScreen({super.key, required this.userService});
+
+  @override
+  State<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends State<SettingsScreen> {
+  bool _hasTOTP = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Load initial TOTP state.
+    widget.userService.loadTOTPApps().then((apps) {
+      if (mounted) setState(() => _hasTOTP = apps.isNotEmpty);
+    });
+  }
+
+  void _onTOTPChanged(bool hasTOTP) {
+    setState(() => _hasTOTP = hasTOTP);
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(title: const Text('Settings')),
       body: ListenableBuilder(
-        listenable: userService,
+        listenable: widget.userService,
         builder: (context, _) {
           return SingleChildScrollView(
             padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
@@ -24,19 +45,30 @@ class SettingsScreen extends StatelessWidget {
                 constraints: const BoxConstraints(maxWidth: 600),
                 child: Column(
                   children: [
-                    _ProfileSection(userService: userService),
+                    _ProfileSection(userService: widget.userService),
                     const SizedBox(height: 24),
-                    _PasswordSection(userService: userService),
+                    _PasswordSection(userService: widget.userService),
                     const SizedBox(height: 24),
-                    _TOTPSection(userService: userService),
+                    _TOTPSection(
+                      userService: widget.userService,
+                      onTOTPChanged: _onTOTPChanged,
+                    ),
                     const SizedBox(height: 24),
-                    _PasskeysSection(userService: userService),
+                    _PasskeysSection(
+                      userService: widget.userService,
+                      hasTOTP: _hasTOTP,
+                    ),
                     const SizedBox(height: 24),
-                    _PreferencesSection(userService: userService),
+                    _RecoveryCodesSection(
+                      userService: widget.userService,
+                      hasTOTP: _hasTOTP,
+                    ),
                     const SizedBox(height: 24),
-                    _DevicesSection(userService: userService),
+                    _PreferencesSection(userService: widget.userService),
                     const SizedBox(height: 24),
-                    _AuditSection(userService: userService),
+                    _DevicesSection(userService: widget.userService),
+                    const SizedBox(height: 24),
+                    _AuditSection(userService: widget.userService),
                   ],
                 ),
               ),
@@ -94,12 +126,20 @@ class _ProfileSectionState extends State<_ProfileSection> {
   }
 
   Future<void> _save() async {
+    final oldEmail = widget.userService.profile?.email;
+    final newEmail = _emailCtrl.text.trim();
+
     setState(() => _saving = true);
     try {
       await widget.userService.updateProfile(
         displayName: _nameCtrl.text.trim(),
-        email: _emailCtrl.text.trim(),
+        email: newEmail,
       );
+
+      if (oldEmail != null && oldEmail != newEmail) {
+        LoginEmailStore().replaceEmail(oldEmail, newEmail);
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated')),
@@ -293,8 +333,9 @@ class _PasswordSectionState extends State<_PasswordSection> {
 
 class _TOTPSection extends StatefulWidget {
   final UserService userService;
+  final ValueChanged<bool>? onTOTPChanged;
 
-  const _TOTPSection({required this.userService});
+  const _TOTPSection({required this.userService, this.onTOTPChanged});
 
   @override
   State<_TOTPSection> createState() => _TOTPSectionState();
@@ -328,7 +369,10 @@ class _TOTPSectionState extends State<_TOTPSection> {
 
   void _refresh() {
     setState(() {
-      _future = widget.userService.loadTOTPApps();
+      _future = widget.userService.loadTOTPApps().then((apps) {
+        widget.onTOTPChanged?.call(apps.isNotEmpty);
+        return apps;
+      });
     });
   }
 
@@ -355,6 +399,12 @@ class _TOTPSectionState extends State<_TOTPSection> {
     final code = _codeCtrl.text.trim();
     if (code.length != 6 || _pendingId == null) return;
 
+    // Capture current TOTP app count before confirming.
+    List<TOTPApp>? currentApps;
+    try {
+      currentApps = await widget.userService.loadTOTPApps();
+    } catch (_) {}
+
     setState(() => _confirming = true);
     try {
       await widget.userService.confirmTOTP(_pendingId!, code);
@@ -366,6 +416,102 @@ class _TOTPSectionState extends State<_TOTPSection> {
       _nameCtrl.clear();
       _codeCtrl.clear();
       _refresh();
+
+      // If this was the first TOTP app, auto-generate recovery codes.
+      final isFirstApp = (currentApps == null || currentApps.isEmpty);
+      if (isFirstApp && mounted) {
+        try {
+          final codes = await widget.userService.generateRecoveryCodes();
+          if (mounted) {
+            await showDialog<void>(
+              context: context,
+              barrierDismissible: false,
+              builder: (ctx) => AlertDialog(
+                title: const Text('Recovery codes generated'),
+                content: SizedBox(
+                  width: 400,
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Theme.of(ctx).colorScheme.errorContainer,
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.warning_amber_rounded,
+                                color: Theme.of(ctx).colorScheme.error),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                'Save these codes in a safe place. If you lose access '
+                                'to your authenticator app and use all 8 codes, you '
+                                'will need to regenerate them or risk losing your '
+                                'account forever.',
+                                style: TextStyle(
+                                    color: Theme.of(ctx)
+                                        .colorScheme
+                                        .onErrorContainer),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color:
+                              Theme.of(ctx).colorScheme.surfaceContainerHighest,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                              color: Theme.of(ctx).colorScheme.outline),
+                        ),
+                        child: SelectableText(
+                          codes
+                              .asMap()
+                              .entries
+                              .map((e) {
+                                final i = e.key;
+                                final code = e.value;
+                                // 2-column layout: odd-indexed codes get leading tab
+                                if (i % 2 == 0 && i < codes.length - 1) {
+                                  return '${code.padRight(28)}${codes[i + 1]}';
+                                } else if (i % 2 == 0) {
+                                  return code;
+                                }
+                                return null;
+                              })
+                              .where((l) => l != null)
+                              .join('\n'),
+                          style: const TextStyle(
+                            fontFamily: 'monospace',
+                            fontSize: 16,
+                            height: 1.6,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                actions: [
+                  FilledButton(
+                    onPressed: () => Navigator.pop(ctx),
+                    child: const Text('I\'ve saved these codes'),
+                  ),
+                ],
+              ),
+            );
+          }
+        } catch (_) {
+          // Recovery code generation failed — user can do it manually later.
+        }
+      }
+
+      widget.onTOTPChanged?.call(true);
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Authenticator app added')),
@@ -594,8 +740,9 @@ class _TOTPSectionState extends State<_TOTPSection> {
 
 class _PasskeysSection extends StatefulWidget {
   final UserService userService;
+  final bool hasTOTP;
 
-  const _PasskeysSection({required this.userService});
+  const _PasskeysSection({required this.userService, required this.hasTOTP});
 
   @override
   State<_PasskeysSection> createState() => _PasskeysSectionState();
@@ -656,12 +803,27 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
   }
 
   Future<void> _revoke(Passkey passkey) async {
+    final passwordCtrl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         title: const Text('Remove passkey'),
-        content: Text(
-            'Remove "${passkey.name}"? You won\'t be able to sign in with it.'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+                'Remove "${passkey.name}"? You won\'t be able to sign in with it. Enter your password to confirm.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: passwordCtrl,
+              obscureText: true,
+              decoration: const InputDecoration(
+                labelText: 'Password',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
         actions: [
           TextButton(
               onPressed: () => Navigator.pop(ctx, false),
@@ -672,12 +834,17 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
         ],
       ),
     );
-    if (confirmed != true) return;
+    if (confirmed != true || passwordCtrl.text.isEmpty) {
+      passwordCtrl.dispose();
+      return;
+    }
 
     try {
-      await widget.userService.revokePasskey(passkey.id);
+      await widget.userService.revokePasskey(passkey.id, passwordCtrl.text);
+      passwordCtrl.dispose();
       _refresh();
     } catch (e) {
+      passwordCtrl.dispose();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text('Error: $e')),
@@ -723,32 +890,60 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
               },
             ),
             const SizedBox(height: 12),
-            Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    controller: _nameCtrl,
-                    decoration: const InputDecoration(
-                      labelText: 'Passkey nickname (optional)',
-                      hintText: 'e.g. MacBook Touch ID',
-                      border: OutlineInputBorder(),
+            if (!widget.hasTOTP) ...[
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Add an authenticator app first to enable passkey registration.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ] else ...[
+              Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _nameCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Passkey nickname (optional)',
+                        hintText: 'e.g. MacBook Touch ID',
+                        border: OutlineInputBorder(),
+                      ),
                     ),
                   ),
-                ),
-                const SizedBox(width: 12),
-                FilledButton.icon(
-                  onPressed: _registering ? null : _addPasskey,
-                  icon: const Icon(Icons.add),
-                  label: _registering
-                      ? const SizedBox(
-                          width: 16,
-                          height: 16,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Text('Add passkey'),
-                ),
-              ],
-            ),
+                  const SizedBox(width: 12),
+                  FilledButton.icon(
+                    onPressed: _registering ? null : _addPasskey,
+                    icon: const Icon(Icons.add),
+                    label: _registering
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Add passkey'),
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -770,6 +965,239 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
 
   String _formatDate(DateTime dt) {
     return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Recovery Codes
+// ---------------------------------------------------------------------------
+
+class _RecoveryCodesSection extends StatefulWidget {
+  final UserService userService;
+  final bool hasTOTP;
+
+  const _RecoveryCodesSection(
+      {required this.userService, required this.hasTOTP});
+
+  @override
+  State<_RecoveryCodesSection> createState() => _RecoveryCodesSectionState();
+}
+
+class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
+  int? _count;
+  bool _loading = true;
+  bool _generating = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  @override
+  void didUpdateWidget(covariant _RecoveryCodesSection oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.hasTOTP != oldWidget.hasTOTP) {
+      _refresh();
+    }
+  }
+
+  Future<void> _refresh() async {
+    setState(() => _loading = true);
+    try {
+      final count = await widget.userService.getRecoveryCodesCount();
+      if (mounted) {
+        setState(() {
+          _count = count;
+          _loading = false;
+        });
+      }
+    } catch (e) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _generate() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Generate new recovery codes?'),
+        content: const Text(
+            'This will immediately invalidate any existing recovery codes you have saved. Are you sure?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx, false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(ctx, true),
+            child: const Text('Generate'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    if (!mounted) return;
+    setState(() => _generating = true);
+
+    try {
+      final codes = await widget.userService.generateRecoveryCodes();
+      if (!mounted) return;
+
+      await showDialog(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('Save your recovery codes'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                  'These codes can be used to sign in if you lose your authenticator app or passkeys.'),
+              const SizedBox(height: 8),
+              const Text(
+                'Copy or download them now. They will not be shown again.',
+                style:
+                    TextStyle(fontWeight: FontWeight.bold, color: Colors.red),
+              ),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: SelectableText(
+                  codes
+                      .asMap()
+                      .entries
+                      .map((e) {
+                        final i = e.key;
+                        final code = e.value;
+                        if (i % 2 == 0 && i < codes.length - 1) {
+                          return '${code.padRight(28)}${codes[i + 1]}';
+                        } else if (i % 2 == 0) {
+                          return code;
+                        }
+                        return null;
+                      })
+                      .where((l) => l != null)
+                      .join('\n'),
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                        fontFamily: 'monospace',
+                        height: 1.5,
+                      ),
+                ),
+              ),
+            ],
+          ),
+          actions: [
+            FilledButton.icon(
+              onPressed: () {
+                // In a real app we'd trigger a file download using universal_html
+                // or similar, but for now we instruct the user to copy.
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                      content: Text('Please select and copy the codes above')),
+                );
+              },
+              icon: const Icon(Icons.copy),
+              label: const Text('Copy'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('I saved them'),
+            ),
+          ],
+        ),
+      );
+
+      _refresh();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error generating codes: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _generating = false);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Recovery codes',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              'Use a recovery code to sign in if you lose access to your other MFA methods.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+            if (!widget.hasTOTP)
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Theme.of(context).colorScheme.surfaceContainerHighest,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Row(
+                  children: [
+                    Icon(Icons.lock_outline,
+                        size: 20,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Text(
+                        'Add an authenticator app first to enable recovery codes.',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .onSurfaceVariant,
+                            ),
+                      ),
+                    ),
+                  ],
+                ),
+              )
+            else if (_loading)
+              const CircularProgressIndicator()
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _count == 0
+                        ? 'No active recovery codes.'
+                        : '$_count unused codes remaining.',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _generating ? null : _generate,
+                    icon: _generating
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh),
+                    label:
+                        Text(_count == 0 ? 'Generate codes' : 'Replace codes'),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
   }
 }
 

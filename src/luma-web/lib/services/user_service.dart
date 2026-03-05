@@ -31,7 +31,7 @@ class UserService extends ChangeNotifier {
       'display_name': displayName,
       'email': email,
     });
-    if (resp.statusCode != 200) {
+    if (resp.statusCode != 200 && resp.statusCode != 204) {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['error'] ?? 'Failed to update profile');
     }
@@ -166,7 +166,32 @@ class UserService extends ChangeNotifier {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['error'] ?? 'Invalid code');
     }
-    await loadProfile(); // refresh mfaEnabled state
+    await loadProfile();
+  }
+
+  // ── Recovery Codes ──────────────────────────────────────────────────────
+
+  /// Generates a new batch of recovery codes, invalidating any existing ones.
+  Future<List<String>> generateRecoveryCodes() async {
+    final resp = await _api.post('/api/luma/user/me/mfa/recovery-codes', {});
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to generate recovery codes');
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    final codes = data['codes'] as List<dynamic>? ?? [];
+    return codes.map((c) => c.toString()).toList();
+  }
+
+  /// Returns the number of unused recovery codes remaining.
+  Future<int> getRecoveryCodesCount() async {
+    final resp = await _api.get('/api/luma/user/me/mfa/recovery-codes/count');
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to load recovery codes count');
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    return data['count'] as int? ?? 0;
   }
 
   /// Removes a specific TOTP app. Requires password confirmation.
@@ -195,10 +220,14 @@ class UserService extends ChangeNotifier {
         .toList();
   }
 
-  Future<void> revokePasskey(String passkeyId) async {
-    final resp = await _api.delete('/api/luma/user/me/passkeys/$passkeyId');
+  Future<void> revokePasskey(String passkeyId, String password) async {
+    final resp =
+        await _api.deleteWithBody('/api/luma/user/me/passkeys/$passkeyId', {
+      'password': password,
+    });
     if (resp.statusCode != 200 && resp.statusCode != 204) {
-      throw Exception('Failed to revoke passkey');
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to revoke passkey');
     }
     await loadProfile();
   }

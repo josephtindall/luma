@@ -6,7 +6,6 @@ import 'services/api_client.dart';
 import 'services/user_service.dart';
 import 'screens/setup/setup_wizard_screen.dart';
 import 'screens/login/login_screen.dart';
-import 'screens/login/mfa_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/settings/settings_screen.dart';
 
@@ -24,19 +23,12 @@ GoRouter buildRouter(
         return state.uri.path == '/setup' ? null : '/setup';
       }
 
-      // MFA pending — force to /mfa screen.
-      if (authService.mfaPending) {
-        return state.uri.path == '/mfa' ? null : '/mfa';
-      }
-
       if (!authService.isLoggedIn) {
         return state.uri.path == '/login' ? null : '/login';
       }
 
-      // Logged in — bounce away from login/setup/mfa
-      if (state.uri.path == '/login' ||
-          state.uri.path == '/setup' ||
-          state.uri.path == '/mfa') {
+      // Logged in — bounce away from login/setup
+      if (state.uri.path == '/login' || state.uri.path == '/setup') {
         return '/home';
       }
 
@@ -49,18 +41,12 @@ GoRouter buildRouter(
       ),
       GoRoute(
         path: '/setup',
-        builder: (_, __) => SetupWizardScreen(auth: authService, userService: userService),
+        builder: (_, __) =>
+            SetupWizardScreen(auth: authService, userService: userService),
       ),
       GoRoute(
         path: '/login',
         builder: (_, __) => LoginScreen(
-          auth: authService,
-          userService: userService,
-        ),
-      ),
-      GoRoute(
-        path: '/mfa',
-        builder: (_, __) => MFAScreen(
           auth: authService,
           userService: userService,
         ),
