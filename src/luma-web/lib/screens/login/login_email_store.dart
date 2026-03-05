@@ -40,6 +40,18 @@ class LoginEmailStore {
     } catch (_) {}
   }
 
+  /// Replaces an old email with a new one in-place (e.g. after email change).
+  void replaceEmail(String oldEmail, String newEmail) {
+    try {
+      final emails = getEmails();
+      final idx = emails.indexOf(oldEmail);
+      if (idx != -1) {
+        emails[idx] = newEmail;
+      }
+      _save(emails);
+    } catch (_) {}
+  }
+
   void _save(List<String> emails) {
     final storage = globalContext['localStorage'] as JSObject?;
     if (storage == null) return;

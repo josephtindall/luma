@@ -4,6 +4,7 @@ import '../../models/user.dart';
 import '../../services/user_service.dart';
 import '../../services/webauthn_interop.dart' as webauthn;
 import '../../widgets/user_avatar.dart';
+import '../login/login_email_store.dart';
 
 class SettingsScreen extends StatefulWidget {
   final UserService userService;
@@ -125,12 +126,20 @@ class _ProfileSectionState extends State<_ProfileSection> {
   }
 
   Future<void> _save() async {
+    final oldEmail = widget.userService.profile?.email;
+    final newEmail = _emailCtrl.text.trim();
+
     setState(() => _saving = true);
     try {
       await widget.userService.updateProfile(
         displayName: _nameCtrl.text.trim(),
-        email: _emailCtrl.text.trim(),
+        email: newEmail,
       );
+
+      if (oldEmail != null && oldEmail != newEmail) {
+        LoginEmailStore().replaceEmail(oldEmail, newEmail);
+      }
+
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('Profile updated')),
