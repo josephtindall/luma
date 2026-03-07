@@ -25,7 +25,8 @@ class ApiClient {
   Future<http.Response> patch(String path, Map<String, dynamic> body) =>
       _send('PATCH', path, body);
   Future<http.Response> delete(String path) => _send('DELETE', path, null);
-  Future<http.Response> deleteWithBody(String path, Map<String, dynamic> body) =>
+  Future<http.Response> deleteWithBody(
+          String path, Map<String, dynamic> body) =>
       _send('DELETE', path, body);
 
   Future<http.Response> _send(
@@ -70,14 +71,14 @@ class ApiClient {
       case 'GET':
         return http.get(uri, headers: headers);
       case 'POST':
-        return http.post(uri, headers: headers,
-            body: body != null ? json.encode(body) : null);
+        return http.post(uri,
+            headers: headers, body: body != null ? json.encode(body) : null);
       case 'PUT':
-        return http.put(uri, headers: headers,
-            body: body != null ? json.encode(body) : null);
+        return http.put(uri,
+            headers: headers, body: body != null ? json.encode(body) : null);
       case 'PATCH':
-        return http.patch(uri, headers: headers,
-            body: body != null ? json.encode(body) : null);
+        return http.patch(uri,
+            headers: headers, body: body != null ? json.encode(body) : null);
       case 'DELETE':
         if (body != null) {
           final request = http.Request('DELETE', uri)

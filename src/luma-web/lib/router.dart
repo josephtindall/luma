@@ -8,6 +8,8 @@ import 'screens/setup/setup_wizard_screen.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/settings/settings_screen.dart';
+import 'screens/admin/admin_users_screen.dart';
+import 'screens/main_layout.dart';
 
 GoRouter buildRouter(
   AuthService authService,
@@ -51,17 +53,29 @@ GoRouter buildRouter(
           userService: userService,
         ),
       ),
-      GoRoute(
-        path: '/home',
-        builder: (_, __) => HomeScreen(
-          api: apiClient,
+      ShellRoute(
+        builder: (_, __, child) => MainLayout(
           auth: authService,
           userService: userService,
+          child: child,
         ),
-      ),
-      GoRoute(
-        path: '/settings',
-        builder: (_, __) => SettingsScreen(userService: userService),
+        routes: [
+          GoRoute(
+            path: '/home',
+            builder: (_, __) => HomeScreen(
+              api: apiClient,
+            ),
+          ),
+          GoRoute(
+            path: '/settings',
+            builder: (_, __) => SettingsScreen(userService: userService),
+          ),
+          GoRoute(
+            path: '/admin/users',
+            builder: (_, __) =>
+                AdminUsersScreen(userService: userService),
+          ),
+        ],
       ),
     ],
   );

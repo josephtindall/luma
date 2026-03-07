@@ -99,6 +99,30 @@ func (h *Handler) ChangePassword(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ListUsers handles GET /api/auth/admin/users — owner only.
+// Returns {"users":[...],"total":N}.
+func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+	if claims.Role != "builtin:instance-owner" {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
+		return
+	}
+
+	users, err := h.svc.ListUsers(r.Context(), 500, 0)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to list users")
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"users": users,
+		"total": len(users),
+	})
+}
+
 // LockUser handles POST /api/auth/admin/users/{id}/lock — owner only.
 func (h *Handler) LockUser(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())

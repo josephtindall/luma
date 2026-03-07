@@ -55,6 +55,33 @@ func (u *User) ToPublic() *PublicUser {
 	}
 }
 
+// AdminUser is the admin-facing projection of a user. Includes lock status.
+// Returned on GET /api/auth/admin/users.
+type AdminUser struct {
+	ID             string    `json:"id"`
+	Email          string    `json:"email"`
+	DisplayName    string    `json:"display_name"`
+	InstanceRoleID string    `json:"instance_role_id"`
+	AvatarSeed     string    `json:"avatar_seed,omitempty"`
+	MFAEnabled     bool      `json:"mfa_enabled"`
+	IsLocked       bool      `json:"is_locked"`
+	CreatedAt      time.Time `json:"created_at"`
+}
+
+// ToAdmin converts a User to its admin-facing form.
+func (u *User) ToAdmin() *AdminUser {
+	return &AdminUser{
+		ID:             u.ID,
+		Email:          u.Email,
+		DisplayName:    u.DisplayName,
+		InstanceRoleID: u.InstanceRoleID,
+		AvatarSeed:     u.AvatarSeed,
+		MFAEnabled:     u.MFAEnabled,
+		IsLocked:       u.IsLocked(),
+		CreatedAt:      u.CreatedAt,
+	}
+}
+
 // UpdateProfileParams holds validated fields for PUT /api/auth/users/me/profile.
 type UpdateProfileParams struct {
 	DisplayName string

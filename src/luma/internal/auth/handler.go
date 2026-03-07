@@ -62,6 +62,18 @@ func (h *Handler) AuthRoutes() chi.Router {
 	return r
 }
 
+// AdminRoutes returns a router for /api/luma/admin/* endpoints.
+// All routes require a valid Bearer token; the auth service enforces owner-only
+// access on each path.
+func (h *Handler) AdminRoutes() chi.Router {
+	r := chi.NewRouter()
+	r.Get("/users", h.proxyAuth("GET", "/api/auth/admin/users"))
+	r.Post("/users/{id}/lock", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/users/", "id", "/lock"))
+	r.Delete("/users/{id}/lock", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/lock"))
+	r.Delete("/users/{id}/sessions", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/sessions"))
+	return r
+}
+
 // UserRoutes returns a router for /api/luma/user/* endpoints.
 // These proxy to the auth service's /users/me and related endpoints. The auth
 // service enforces ownership on /users/me paths, so no authz.RequireCan() is needed.
@@ -191,6 +203,40 @@ func (h *Handler) proxyAuthWithParam(method, authPathPrefix, paramName string) h
 		}
 
 		req, err := http.NewRequestWithContext(r.Context(), method, h.authURL+authPathPrefix+paramVal, r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+
+		resp, err := h.client.Do(req)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
+			return
+		}
+		defer resp.Body.Close()
+
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
+	}
+}
+
+// proxyAuthWithParamAndSuffix returns a handler that builds an auth service path as
+// prefix + urlParam + suffix, forwarding the request with the caller's Authorization header.
+// Used for admin paths like /api/auth/admin/users/{id}/lock.
+func (h *Handler) proxyAuthWithParamAndSuffix(method, authPathPrefix, paramName, suffix string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		paramVal := chi.URLParam(r, paramName)
+		if paramVal == "" || strings.ContainsAny(paramVal, "/\\") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid " + paramName})
+			return
+		}
+
+		req, err := http.NewRequestWithContext(r.Context(), method, h.authURL+authPathPrefix+paramVal+suffix, r.Body)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return

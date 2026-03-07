@@ -42,4 +42,8 @@ type Repository interface {
 	// invitation as accepted — all inside a single transaction.
 	// Returns the new user's UUID.
 	RegisterAtomic(ctx context.Context, params RegisterParams) (string, error)
+
+	// List returns all users ordered by created_at descending.
+	// Used by admin endpoints only.
+	List(ctx context.Context, limit, offset int) ([]*User, error)
 }

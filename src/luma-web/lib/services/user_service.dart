@@ -260,6 +260,45 @@ class UserService extends ChangeNotifier {
     await loadProfile(); // refresh mfaEnabled state
   }
 
+  // ── Admin: user management (owner only) ────────────────────────────────
+
+  Future<List<AdminUserRecord>> listAdminUsers() async {
+    final resp = await _api.get('/api/luma/admin/users');
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to load users');
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    final items = (data['users'] as List<dynamic>? ?? []);
+    return items
+        .map((e) => AdminUserRecord.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> lockUser(String userId) async {
+    final resp = await _api.post('/api/luma/admin/users/$userId/lock', {});
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to lock user');
+    }
+  }
+
+  Future<void> unlockUser(String userId) async {
+    final resp = await _api.delete('/api/luma/admin/users/$userId/lock');
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to unlock user');
+    }
+  }
+
+  Future<void> revokeUserSessions(String userId) async {
+    final resp = await _api.delete('/api/luma/admin/users/$userId/sessions');
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to revoke sessions');
+    }
+  }
+
   void clear() {
     _profile = null;
     _preferences = null;

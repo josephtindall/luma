@@ -3,6 +3,7 @@ class UserProfile {
   final String email;
   final String displayName;
   final String avatarSeed;
+  final String instanceRoleId;
   final bool mfaEnabled;
   final DateTime createdAt;
 
@@ -11,9 +12,12 @@ class UserProfile {
     required this.email,
     required this.displayName,
     required this.avatarSeed,
+    required this.instanceRoleId,
     required this.mfaEnabled,
     required this.createdAt,
   });
+
+  bool get isOwner => instanceRoleId == 'builtin:instance-owner';
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
@@ -21,7 +25,45 @@ class UserProfile {
       email: _str(json['email']),
       displayName: _str(json['display_name']),
       avatarSeed: _str(json['avatar_seed']),
+      instanceRoleId: _str(json['instance_role_id']),
       mfaEnabled: _bool(json['mfa_enabled']),
+      createdAt: _dt(json['created_at']),
+    );
+  }
+}
+
+class AdminUserRecord {
+  final String id;
+  final String email;
+  final String displayName;
+  final String avatarSeed;
+  final String instanceRoleId;
+  final bool mfaEnabled;
+  final bool isLocked;
+  final DateTime createdAt;
+
+  const AdminUserRecord({
+    required this.id,
+    required this.email,
+    required this.displayName,
+    required this.avatarSeed,
+    required this.instanceRoleId,
+    required this.mfaEnabled,
+    required this.isLocked,
+    required this.createdAt,
+  });
+
+  bool get isOwner => instanceRoleId == 'builtin:instance-owner';
+
+  factory AdminUserRecord.fromJson(Map<String, dynamic> json) {
+    return AdminUserRecord(
+      id: _str(json['id']),
+      email: _str(json['email']),
+      displayName: _str(json['display_name']),
+      avatarSeed: _str(json['avatar_seed']),
+      instanceRoleId: _str(json['instance_role_id']),
+      mfaEnabled: _bool(json['mfa_enabled']),
+      isLocked: _bool(json['is_locked']),
       createdAt: _dt(json['created_at']),
     );
   }

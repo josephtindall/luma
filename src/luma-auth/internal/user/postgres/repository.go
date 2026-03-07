@@ -211,6 +211,36 @@ func (r *Repository) RegisterAtomic(ctx context.Context, params user.RegisterPar
 	return userID, nil
 }
 
+// List returns all users ordered by created_at descending.
+func (r *Repository) List(ctx context.Context, limit, offset int) ([]*user.User, error) {
+	const q = `
+		SELECT id, email, display_name, password_hash, instance_role_id,
+		       COALESCE(avatar_seed, ''), mfa_enabled, failed_login_attempts, locked_at,
+		       COALESCE(locked_reason, ''), created_at, updated_at
+		FROM auth.users
+		ORDER BY created_at DESC
+		LIMIT $1 OFFSET $2`
+
+	rows, err := r.db.Query(ctx, q, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("user.postgres.List: %w", err)
+	}
+	defer rows.Close()
+
+	var users []*user.User
+	for rows.Next() {
+		u, err := scanUser(rows)
+		if err != nil {
+			return nil, fmt.Errorf("user.postgres.List scan: %w", err)
+		}
+		users = append(users, u)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("user.postgres.List rows: %w", err)
+	}
+	return users, nil
+}
+
 // scanUser reads a auth.users row from a pgx.Row.
 func scanUser(row pgx.Row) (*user.User, error) {
 	u := &user.User{}

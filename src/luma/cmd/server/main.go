@@ -127,6 +127,7 @@ func run() error {
 		r.Use(ensureVaultMw)
 		r.Mount("/vaults", vaultHandler.Routes())
 		r.Mount("/user", authHandler.UserRoutes())
+		r.Mount("/admin", authHandler.AdminRoutes())
 	})
 
 	// Static file serving — Flutter web SPA (when LUMA_STATIC_DIR is set)

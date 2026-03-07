@@ -133,6 +133,20 @@ func (s *Service) LockAccount(ctx context.Context, id, requesterID string) error
 	return nil
 }
 
+// ListUsers returns all users as admin-safe projections, ordered by creation
+// date descending. Admin-only operation — callers must verify owner role.
+func (s *Service) ListUsers(ctx context.Context, limit, offset int) ([]*AdminUser, error) {
+	users, err := s.repo.List(ctx, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("user.Service.ListUsers: %w", err)
+	}
+	out := make([]*AdminUser, len(users))
+	for i, u := range users {
+		out[i] = u.ToAdmin()
+	}
+	return out, nil
+}
+
 // UnlockAccount clears the lock on a user — owner-only operation.
 // requesterID identifies who performed the unlock (for audit purposes).
 func (s *Service) UnlockAccount(ctx context.Context, id, requesterID string) error {

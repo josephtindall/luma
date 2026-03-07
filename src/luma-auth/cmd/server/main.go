@@ -251,6 +251,7 @@ func run() error {
 		r.Get("/api/auth/invitations", invHandler.List)
 		r.Delete("/api/auth/invitations/{id}", invHandler.Revoke)
 
+		r.Get("/api/auth/admin/users", userHandler.ListUsers)
 		r.Post("/api/auth/admin/users/{id}/lock", userHandler.LockUser)
 		r.Delete("/api/auth/admin/users/{id}/lock", userHandler.UnlockUser)
 		r.Delete("/api/auth/admin/users/{id}/sessions", sessionHandler.RevokeUserSessions)
