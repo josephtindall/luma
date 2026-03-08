@@ -357,6 +357,54 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Fetches invitation metadata from the join endpoint.
+  /// Returns {invitation_id, email, note} on success.
+  /// Throws [AuthException] if the token is invalid or expired.
+  Future<Map<String, dynamic>> lookupInvite(String token) async {
+    final resp = await http.get(
+      Uri.parse('$_baseUrl/api/luma/auth/join?token=$token'),
+    );
+    if (resp.statusCode != 200) {
+      throw AuthException('Invitation not found or expired');
+    }
+    return json.decode(resp.body) as Map<String, dynamic>;
+  }
+
+  /// Registers a new user via invitation and stores the access token.
+  /// Throws [AuthException] on failure.
+  Future<void> register({
+    required String invitationId,
+    required String email,
+    required String password,
+    required String displayName,
+  }) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/register'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'invitation_id': invitationId,
+        'email': email,
+        'password': password,
+        'display_name': displayName,
+        'platform': 'web',
+        'device_name': detectBrowserName(),
+        'fingerprint': getDeviceFingerprint(),
+      }),
+    );
+    if (resp.statusCode != 201) {
+      if (resp.statusCode == 400) {
+        final data = json.decode(resp.body) as Map<String, dynamic>;
+        throw AuthException(
+            (data['message'] ?? data['error'] ?? 'Registration failed')
+                .toString());
+      }
+      throw AuthException('Registration failed');
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    _accessToken = data['access_token'] as String?;
+    notifyListeners();
+  }
+
   /// Sets the access token and marks the instance as active.
   /// Used after setup completes — the owner endpoint already returns a token.
   void activateSession(String accessToken) {

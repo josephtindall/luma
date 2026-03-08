@@ -299,6 +299,59 @@ class UserService extends ChangeNotifier {
     }
   }
 
+  /// Returns all invitations (all statuses) for the owner's admin view.
+  Future<List<InvitationRecord>> listInvitations() async {
+    final resp = await _api.get('/api/luma/admin/invitations');
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to load invitations');
+    }
+    final data = json.decode(resp.body);
+    final List<dynamic> items;
+    if (data is List) {
+      items = data;
+    } else if (data is Map<String, dynamic>) {
+      items = _unwrapList(data, ['invitations', 'data']);
+    } else {
+      items = [];
+    }
+    return items
+        .map((e) => InvitationRecord.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  /// Revokes a pending invitation by ID.
+  Future<void> revokeInvitation(String id) async {
+    final resp = await _api.delete('/api/luma/admin/invitations/$id');
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to revoke invitation');
+    }
+  }
+
+  /// Creates an invitation for [email] and returns the result including
+  /// the raw token (extracted from the auth service's join_url).
+  Future<InvitationCreateResult> createInvitation(String email) async {
+    final resp = await _api.post('/api/luma/admin/invitations', {
+      'email': email,
+    });
+    if (resp.statusCode != 201) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to create invitation');
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    // The auth service embeds the raw token in join_url.
+    // We extract it and let the Flutter client build the correct Luma URL.
+    final rawJoinUrl = data['join_url'] as String? ?? '';
+    final token = Uri.tryParse(rawJoinUrl)?.queryParameters['token'] ?? '';
+    return InvitationCreateResult(
+      id: data['id'] as String? ?? '',
+      token: token,
+      expiresAt: DateTime.tryParse(data['expires_at'] as String? ?? '') ??
+          DateTime.now().add(const Duration(days: 7)),
+    );
+  }
+
   void clear() {
     _profile = null;
     _preferences = null;

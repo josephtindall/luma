@@ -76,6 +76,7 @@ func (m *mockUserRepo) SetMFAEnabled(_ context.Context, _ string, _ bool) error 
 func (m *mockUserRepo) RegisterAtomic(_ context.Context, _ user.RegisterParams) (string, error) {
 	return m.registerID, m.registerErr
 }
+func (m *mockUserRepo) List(_ context.Context, _, _ int) ([]*user.User, error) { return nil, nil }
 
 // ── Mock: device.Repository ───────────────────────────────────────────────────
 

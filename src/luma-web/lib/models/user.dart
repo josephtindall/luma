@@ -69,6 +69,67 @@ class AdminUserRecord {
   }
 }
 
+class InvitationCreateResult {
+  final String id;
+  final String token; // raw token extracted from the auth service's join_url
+  final DateTime expiresAt;
+
+  const InvitationCreateResult({
+    required this.id,
+    required this.token,
+    required this.expiresAt,
+  });
+}
+
+class InvitationRecord {
+  final String id;
+  final String email;
+  final String note;
+  final String status; // "pending", "accepted", "revoked"
+  final DateTime expiresAt;
+  final DateTime? acceptedAt;
+  final DateTime? revokedAt;
+  final DateTime createdAt;
+
+  const InvitationRecord({
+    required this.id,
+    required this.email,
+    required this.note,
+    required this.status,
+    required this.expiresAt,
+    required this.acceptedAt,
+    required this.revokedAt,
+    required this.createdAt,
+  });
+
+  /// True if pending and the expiry time has not passed.
+  bool get isPendingValid =>
+      status == 'pending' && DateTime.now().isBefore(expiresAt);
+
+  /// True if pending but the expiry time has passed.
+  bool get isExpired =>
+      status == 'pending' && DateTime.now().isAfter(expiresAt);
+
+  bool get isAccepted => status == 'accepted';
+  bool get isRevoked => status == 'revoked';
+
+  /// Pending invites (valid or expired) can be revoked.
+  bool get canRevoke => status == 'pending';
+
+  factory InvitationRecord.fromJson(Map<String, dynamic> json) {
+    return InvitationRecord(
+      id: _str(json['id']),
+      email: _str(json['email']),
+      note: _str(json['note']),
+      status: _str(json['status']),
+      expiresAt: _dt(json['expires_at']),
+      acceptedAt: _dtOpt(json['accepted_at']),
+      revokedAt: _dtOpt(json['revoked_at']),
+      createdAt: _dt(json['created_at']),
+    );
+  }
+}
+
 class UserPreferences {
   final String theme;
   final String timezone;
@@ -247,4 +308,12 @@ DateTime _dt(dynamic value) {
     return DateTime.tryParse(value) ?? DateTime.now();
   }
   return DateTime.now();
+}
+
+/// Safely parses an optional DateTime (returns null if value is null/empty).
+DateTime? _dtOpt(dynamic value) {
+  if (value is String && value.isNotEmpty) {
+    return DateTime.tryParse(value);
+  }
+  return null;
 }

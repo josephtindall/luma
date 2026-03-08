@@ -9,6 +9,7 @@ import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/admin/admin_users_screen.dart';
+import 'screens/register/register_screen.dart';
 import 'screens/main_layout.dart';
 
 GoRouter buildRouter(
@@ -26,11 +27,17 @@ GoRouter buildRouter(
       }
 
       if (!authService.isLoggedIn) {
-        return state.uri.path == '/login' ? null : '/login';
+        // Allow join/register flow without being authenticated
+        if (state.uri.path == '/login' || state.uri.path == '/join') {
+          return null;
+        }
+        return '/login';
       }
 
-      // Logged in — bounce away from login/setup
-      if (state.uri.path == '/login' || state.uri.path == '/setup') {
+      // Logged in — bounce away from login/setup/join
+      if (state.uri.path == '/login' ||
+          state.uri.path == '/setup' ||
+          state.uri.path == '/join') {
         return '/home';
       }
 
@@ -51,6 +58,14 @@ GoRouter buildRouter(
         builder: (_, __) => LoginScreen(
           auth: authService,
           userService: userService,
+        ),
+      ),
+      GoRoute(
+        path: '/join',
+        builder: (context, state) => RegisterScreen(
+          auth: authService,
+          userService: userService,
+          token: state.uri.queryParameters['token'] ?? '',
         ),
       ),
       ShellRoute(

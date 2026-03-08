@@ -13,7 +13,8 @@ type Repository interface {
 	// GetByID returns an invitation by UUID.
 	GetByID(ctx context.Context, id string) (*Invitation, error)
 
-	// List returns all non-revoked invitations (for the owner's admin view).
+	// List returns all invitations (all statuses) ordered by creation date DESC,
+	// for the owner's admin view.
 	List(ctx context.Context) ([]*Invitation, error)
 
 	// Accept transitions an invitation from pending to accepted.

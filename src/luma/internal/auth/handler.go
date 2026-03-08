@@ -49,6 +49,10 @@ func (h *Handler) AuthRoutes() chi.Router {
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
 
+	// Invitation join + registration (unauthenticated).
+	r.Get("/join", h.proxySetupWithQuery("GET", "/api/auth/join"))
+	r.Post("/register", h.register)
+
 	// MFA challenge verification (unauthenticated — issues session tokens).
 	r.Post("/mfa/verify", h.sessionIssuerProxy("/api/auth/mfa/verify"))
 
@@ -71,6 +75,9 @@ func (h *Handler) AdminRoutes() chi.Router {
 	r.Post("/users/{id}/lock", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/users/", "id", "/lock"))
 	r.Delete("/users/{id}/lock", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/lock"))
 	r.Delete("/users/{id}/sessions", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/sessions"))
+	r.Post("/invitations", h.proxyAuth("POST", "/api/auth/invitations"))
+	r.Get("/invitations", h.proxyAuth("GET", "/api/auth/invitations"))
+	r.Delete("/invitations/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/invitations/", "id"))
 	return r
 }
 
@@ -492,6 +499,76 @@ func (h *Handler) sessionIssuerProxy(authPath string) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		w.Write(body) //nolint:errcheck
 	}
+}
+
+// proxySetupWithQuery pipes the request to auth service, forwarding the raw query string.
+// Used for unauthenticated GET endpoints whose parameters are in the query string (e.g. join).
+func (h *Handler) proxySetupWithQuery(method, authPath string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		target := h.authURL + authPath
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		req, err := http.NewRequestWithContext(r.Context(), method, target, r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+
+		resp, err := h.client.Do(req)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
+			return
+		}
+		defer resp.Body.Close()
+
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
+	}
+}
+
+// register forwards the invitation registration request to auth service, rewrites the
+// refresh cookie Path, and returns the access token on 201.
+func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.authURL+"/api/auth/register", r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+
+	resp, err := h.client.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
+		return
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "invalid auth response"})
+		return
+	}
+
+	rewriteCookies(w, resp, "/api/auth/refresh", "/api/luma/auth/refresh")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write(body) //nolint:errcheck
 }
 
 // rewriteCookies reads Set-Cookie headers from the auth service response via resp.Cookies(),
