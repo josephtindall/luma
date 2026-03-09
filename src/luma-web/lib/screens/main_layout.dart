@@ -29,6 +29,28 @@ void _saveSidebarState(bool expanded) {
   } catch (_) {}
 }
 
+bool _loadAdminState() {
+  try {
+    final storage = globalContext['localStorage'] as JSObject?;
+    if (storage == null) return true;
+    final raw = (storage.callMethod<JSAny?>(
+            'getItem'.toJS, 'luma_admin_expanded'.toJS) as JSString?)
+        ?.toDart;
+    return raw != 'false'; // default expanded
+  } catch (_) {
+    return true;
+  }
+}
+
+void _saveAdminState(bool expanded) {
+  try {
+    final storage = globalContext['localStorage'] as JSObject?;
+    if (storage == null) return;
+    storage.callMethod<JSAny?>(
+        'setItem'.toJS, 'luma_admin_expanded'.toJS, expanded.toString().toJS);
+  } catch (_) {}
+}
+
 class MainLayout extends StatefulWidget {
   final Widget child;
   final AuthService auth;
@@ -47,12 +69,14 @@ class MainLayout extends StatefulWidget {
 
 class _MainLayoutState extends State<MainLayout> {
   late bool _isSidebarExpanded;
+  late bool _isAdminExpanded;
   bool _isHoveringLogo = false;
 
   @override
   void initState() {
     super.initState();
     _isSidebarExpanded = _loadSidebarState();
+    _isAdminExpanded = _loadAdminState();
   }
 
   void _toggleSidebar() {
@@ -132,16 +156,7 @@ class _MainLayoutState extends State<MainLayout> {
                           if (widget.userService.profile?.isOwner != true) {
                             return const SizedBox.shrink();
                           }
-                          return _buildNavItem(
-                            icon: Icons.admin_panel_settings_outlined,
-                            activeIcon: Icons.admin_panel_settings,
-                            label: 'Admin',
-                            isSelected: GoRouterState.of(context)
-                                .uri
-                                .path
-                                .startsWith('/admin'),
-                            onTap: () => context.go('/admin/users'),
-                          );
+                          return _buildAdminSection(context);
                         },
                       ),
                       // Removed duplicate "Settings" list item here as requested
@@ -305,6 +320,181 @@ class _MainLayoutState extends State<MainLayout> {
           },
         );
       },
+    );
+  }
+
+  Widget _buildAdminSection(BuildContext context) {
+    final path = GoRouterState.of(context).uri.path;
+
+    if (!_isSidebarExpanded) {
+      // Collapsed sidebar: 3 icon-only items
+      return Column(
+        children: [
+          _buildNavItem(
+            icon: Icons.people_outline,
+            activeIcon: Icons.people,
+            label: 'Users',
+            isSelected: path == '/admin/users',
+            onTap: () => context.go('/admin/users'),
+          ),
+          _buildNavItem(
+            icon: Icons.mail_outline,
+            activeIcon: Icons.mail,
+            label: 'Invitations',
+            isSelected: path == '/admin/invites',
+            onTap: () => context.go('/admin/invites'),
+          ),
+          _buildNavItem(
+            icon: Icons.tune_outlined,
+            activeIcon: Icons.tune,
+            label: 'Instance',
+            isSelected: path == '/admin/settings',
+            onTap: () => context.go('/admin/settings'),
+          ),
+        ],
+      );
+    }
+
+    // Expanded sidebar: collapsible Admin group
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isAdminActive = path.startsWith('/admin');
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        // Group header
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+          child: Material(
+            color: Colors.transparent,
+            borderRadius: BorderRadius.circular(8),
+            child: InkWell(
+              borderRadius: BorderRadius.circular(8),
+              hoverColor: colorScheme.surfaceContainerHighest,
+              onTap: () {
+                setState(() => _isAdminExpanded = !_isAdminExpanded);
+                _saveAdminState(_isAdminExpanded);
+              },
+              child: Container(
+                height: 44,
+                padding: const EdgeInsets.symmetric(horizontal: 12),
+                child: Row(
+                  children: [
+                    Icon(
+                      isAdminActive
+                          ? Icons.admin_panel_settings
+                          : Icons.admin_panel_settings_outlined,
+                      size: 20,
+                      color: isAdminActive
+                          ? colorScheme.onSecondaryContainer
+                          : colorScheme.onSurfaceVariant,
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        'Admin',
+                        style: theme.textTheme.bodyMedium?.copyWith(
+                          color: isAdminActive
+                              ? colorScheme.onSecondaryContainer
+                              : colorScheme.onSurface,
+                          fontWeight: isAdminActive
+                              ? FontWeight.w600
+                              : FontWeight.normal,
+                        ),
+                      ),
+                    ),
+                    Icon(
+                      _isAdminExpanded
+                          ? Icons.expand_less
+                          : Icons.expand_more,
+                      size: 16,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ),
+        // Sub-items
+        if (_isAdminExpanded) ...[
+          _buildSubNavItem(
+            icon: Icons.people_outline,
+            activeIcon: Icons.people,
+            label: 'Users',
+            isSelected: path == '/admin/users',
+            onTap: () => context.go('/admin/users'),
+          ),
+          _buildSubNavItem(
+            icon: Icons.mail_outline,
+            activeIcon: Icons.mail,
+            label: 'Invitations',
+            isSelected: path == '/admin/invites',
+            onTap: () => context.go('/admin/invites'),
+          ),
+          _buildSubNavItem(
+            icon: Icons.tune_outlined,
+            activeIcon: Icons.tune,
+            label: 'Instance',
+            isSelected: path == '/admin/settings',
+            onTap: () => context.go('/admin/settings'),
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildSubNavItem({
+    required IconData icon,
+    required IconData activeIcon,
+    required String label,
+    required bool isSelected,
+    required VoidCallback onTap,
+  }) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    return Padding(
+      padding: const EdgeInsets.only(left: 28, right: 12, top: 2, bottom: 2),
+      child: Material(
+        color: isSelected ? colorScheme.secondaryContainer : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          onTap: onTap,
+          hoverColor: colorScheme.surfaceContainerHighest,
+          child: Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 12),
+            child: Row(
+              children: [
+                Icon(
+                  isSelected ? activeIcon : icon,
+                  size: 18,
+                  color: isSelected
+                      ? colorScheme.onSecondaryContainer
+                      : colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 12),
+                Expanded(
+                  child: Text(
+                    label,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: isSelected
+                          ? colorScheme.onSecondaryContainer
+                          : colorScheme.onSurface,
+                      fontWeight:
+                          isSelected ? FontWeight.w600 : FontWeight.normal,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
     );
   }
 

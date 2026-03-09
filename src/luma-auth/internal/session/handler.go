@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -12,19 +13,26 @@ import (
 	"github.com/josephtindall/luma-auth/pkg/middleware"
 )
 
+// ForceChangeTokenCreator issues a short-lived token for the force-password-change flow.
+// Satisfied by passwordreset.Service.
+type ForceChangeTokenCreator interface {
+	CreateForceChangeToken(ctx context.Context, userID string) (string, error)
+}
+
 // RefreshCookieName is the name of the HttpOnly cookie used to store
 // the refresh token. Shared with bootstrap/handler.go for initial token issuance.
 const RefreshCookieName = "auth_refresh"
 
 // Handler serves auth endpoints.
 type Handler struct {
-	svc          *Service
-	secureCookie bool // false only in tests
+	svc           *Service
+	passwordReset ForceChangeTokenCreator // may be nil if feature not wired
+	secureCookie  bool                    // false only in tests
 }
 
 // NewHandler constructs the session handler.
-func NewHandler(svc *Service, secureCookie bool) *Handler {
-	return &Handler{svc: svc, secureCookie: secureCookie}
+func NewHandler(svc *Service, passwordReset ForceChangeTokenCreator, secureCookie bool) *Handler {
+	return &Handler{svc: svc, passwordReset: passwordReset, secureCookie: secureCookie}
 }
 
 // Register handles POST /api/auth/register.
@@ -128,6 +136,19 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			"mfa_required": true,
 			"mfa_token":    result.MFAToken,
 			"methods":      result.MFAMethods,
+		})
+		return
+	}
+
+	if result.PasswordChangeRequired && h.passwordReset != nil {
+		token, err := h.passwordReset.CreateForceChangeToken(r.Context(), result.UserID)
+		if err != nil {
+			httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create change token")
+			return
+		}
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
+			"password_change_required": true,
+			"change_token":             token,
 		})
 		return
 	}

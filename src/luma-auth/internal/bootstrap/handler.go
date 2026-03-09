@@ -10,6 +10,7 @@ import (
 	"github.com/josephtindall/luma-auth/internal/session"
 	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
 	"github.com/josephtindall/luma-auth/pkg/httputil"
+	"github.com/josephtindall/luma-auth/pkg/middleware"
 )
 
 // Handler serves the setup wizard API endpoints.
@@ -151,6 +152,80 @@ func (h *Handler) CreateOwner(w http.ResponseWriter, r *http.Request) {
 		"access_token": pair.AccessToken,
 		"user_id":      userID,
 	})
+}
+
+// GetInstanceSettings handles GET /api/auth/admin/instance-settings — owner only.
+func (h *Handler) GetInstanceSettings(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+	if claims.Role != "builtin:instance-owner" {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
+		return
+	}
+
+	state, err := h.svc.GetSettings(r.Context())
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, instanceSettingsResponse(state))
+}
+
+// UpdateInstanceSettings handles PATCH /api/auth/admin/instance-settings — owner only.
+func (h *Handler) UpdateInstanceSettings(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+	if claims.Role != "builtin:instance-owner" {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
+		return
+	}
+
+	var req struct {
+		Name                     *string `json:"name"`
+		PasswordMinLength        *int    `json:"password_min_length"`
+		PasswordRequireUppercase *bool   `json:"password_require_uppercase"`
+		PasswordRequireLowercase *bool   `json:"password_require_lowercase"`
+		PasswordRequireNumbers   *bool   `json:"password_require_numbers"`
+		PasswordRequireSymbols   *bool   `json:"password_require_symbols"`
+		PasswordHistoryCount     *int    `json:"password_history_count"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid body")
+		return
+	}
+
+	state, err := h.svc.UpdateSettings(r.Context(), InstanceSettingsParams{
+		Name:                     req.Name,
+		PasswordMinLength:        req.PasswordMinLength,
+		PasswordRequireUppercase: req.PasswordRequireUppercase,
+		PasswordRequireLowercase: req.PasswordRequireLowercase,
+		PasswordRequireNumbers:   req.PasswordRequireNumbers,
+		PasswordRequireSymbols:   req.PasswordRequireSymbols,
+		PasswordHistoryCount:     req.PasswordHistoryCount,
+	})
+	if err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), errorCode(err), err.Error())
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, instanceSettingsResponse(state))
+}
+
+func instanceSettingsResponse(s *InstanceState) map[string]any {
+	return map[string]any{
+		"name":                       s.Name,
+		"password_min_length":        s.PasswordMinLength,
+		"password_require_uppercase": s.PasswordRequireUppercase,
+		"password_require_lowercase": s.PasswordRequireLowercase,
+		"password_require_numbers":   s.PasswordRequireNumbers,
+		"password_require_symbols":   s.PasswordRequireSymbols,
+		"password_history_count":     s.PasswordHistoryCount,
+	}
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

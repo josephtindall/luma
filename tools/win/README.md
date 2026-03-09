@@ -10,7 +10,7 @@ No prior experience required — just follow the steps in order.
 You need three programs installed. If you already have them, skip ahead.
 
 **Docker Desktop**
-This is what runs the database, the cache, and the Haven identity service.
+This is what runs the database, the cache, and the luma-auth identity service.
 Think of it as a box that runs small isolated programs so they don't interfere with your computer.
 Download from: https://www.docker.com/products/docker-desktop
 
@@ -83,7 +83,7 @@ If it fails, read the last error message — it will usually tell you exactly wh
 .\tools\win\run.ps1
 ```
 
-This starts everything: the database, the cache, Haven (the identity service), and Luma itself.
+This starts everything: the database, the cache, luma-auth (the identity service), and Luma itself.
 
 Once it is running you will see log lines streaming in the terminal. Leave this window open.
 Open your browser and go to:
@@ -123,7 +123,7 @@ only appears when the database is completely empty. To see it again:
 .\tools\win\run.ps1 -Fresh
 ```
 
-The `-Fresh` flag wipes the database before starting. Haven will start in "unclaimed" mode
+The `-Fresh` flag wipes the database before starting. luma-auth will start in "unclaimed" mode
 and print a one-time setup token in its logs. It looks like this:
 
 ```
@@ -136,7 +136,7 @@ and print a one-time setup token in its logs. It looks like this:
 Scroll up in the terminal to find it, or if you used `-Detach`, run:
 
 ```powershell
-docker compose -f docker-compose.dev.yml logs haven
+docker compose -f docker-compose.dev.yml logs luma-auth
 ```
 
 Open `http://localhost:8002`, paste the token into Step 1, and follow the wizard.
@@ -158,7 +158,7 @@ Stops containers and deletes compiled output. Good for freeing disk space or sta
 
 ### Full reset (wipe the database too)
 
-Deletes everything including the database. After this, Haven will be in "unclaimed" mode
+Deletes everything including the database. After this, luma-auth will be in "unclaimed" mode
 on the next start, exactly like a brand new install:
 
 ```powershell
@@ -184,7 +184,7 @@ Useful when you are actively editing Go code and want faster restarts than Docke
 .\tools\win\run.ps1 -DbOnly
 ```
 
-This starts only the database, cache, and Haven. The terminal will print the command
+This starts only the database, cache, and luma-auth. The terminal will print the command
 to run Luma directly on your machine. Open a second terminal window and paste it.
 
 ---

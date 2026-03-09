@@ -9,7 +9,10 @@ import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/admin/admin_users_screen.dart';
+import 'screens/admin/admin_invites_screen.dart';
+import 'screens/admin/admin_settings_screen.dart';
 import 'screens/register/register_screen.dart';
+import 'screens/auth/reset_password_screen.dart';
 import 'screens/main_layout.dart';
 
 GoRouter buildRouter(
@@ -26,18 +29,26 @@ GoRouter buildRouter(
         return state.uri.path == '/setup' ? null : '/setup';
       }
 
+      // Force-change pending — gate to reset-password screen.
+      if (authService.hasPasswordChangePending) {
+        return state.uri.path == '/reset-password' ? null : '/reset-password';
+      }
+
       if (!authService.isLoggedIn) {
-        // Allow join/register flow without being authenticated
-        if (state.uri.path == '/login' || state.uri.path == '/join') {
+        // Allow unauthenticated flows without being logged in.
+        if (state.uri.path == '/login' ||
+            state.uri.path == '/join' ||
+            state.uri.path == '/reset-password') {
           return null;
         }
         return '/login';
       }
 
-      // Logged in — bounce away from login/setup/join
+      // Logged in — bounce away from login/setup/join/reset-password.
       if (state.uri.path == '/login' ||
           state.uri.path == '/setup' ||
-          state.uri.path == '/join') {
+          state.uri.path == '/join' ||
+          state.uri.path == '/reset-password') {
         return '/home';
       }
 
@@ -68,6 +79,14 @@ GoRouter buildRouter(
           token: state.uri.queryParameters['token'] ?? '',
         ),
       ),
+      GoRoute(
+        path: '/reset-password',
+        builder: (context, state) => ResetPasswordScreen(
+          auth: authService,
+          userService: userService,
+          token: state.uri.queryParameters['token'],
+        ),
+      ),
       ShellRoute(
         builder: (_, __, child) => MainLayout(
           auth: authService,
@@ -87,8 +106,15 @@ GoRouter buildRouter(
           ),
           GoRoute(
             path: '/admin/users',
-            builder: (_, __) =>
-                AdminUsersScreen(userService: userService),
+            builder: (_, __) => AdminUsersScreen(userService: userService),
+          ),
+          GoRoute(
+            path: '/admin/invites',
+            builder: (_, __) => AdminInvitesScreen(userService: userService),
+          ),
+          GoRoute(
+            path: '/admin/settings',
+            builder: (_, __) => AdminSettingsScreen(userService: userService),
           ),
         ],
       ),

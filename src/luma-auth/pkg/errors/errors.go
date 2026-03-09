@@ -32,6 +32,7 @@ var (
 	ErrPasskeyLimitReached    = errors.New("passkey limit reached")    // 409
 	ErrWebAuthnSessionExpired = errors.New("webauthn session expired") // 400
 	ErrMFANotEnabled          = errors.New("mfa not enabled")          // 400
+	ErrPasswordReused         = errors.New("password was recently used") // 422
 )
 
 // HTTPStatus maps a sentinel error to its canonical HTTP status code.
@@ -84,6 +85,8 @@ func HTTPStatus(err error) int {
 		return http.StatusBadRequest
 	case errors.Is(err, ErrMFANotEnabled):
 		return http.StatusBadRequest
+	case errors.Is(err, ErrPasswordReused):
+		return http.StatusUnprocessableEntity
 	default:
 		return http.StatusInternalServerError
 	}
@@ -140,6 +143,8 @@ func ErrorCode(err error) string {
 		return "WEBAUTHN_SESSION_EXPIRED"
 	case errors.Is(err, ErrMFANotEnabled):
 		return "MFA_NOT_ENABLED"
+	case errors.Is(err, ErrPasswordReused):
+		return "PASSWORD_REUSED"
 	default:
 		return "INTERNAL_ERROR"
 	}

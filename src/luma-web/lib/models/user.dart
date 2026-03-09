@@ -40,6 +40,9 @@ class AdminUserRecord {
   final String instanceRoleId;
   final bool mfaEnabled;
   final bool isLocked;
+  final bool forcePasswordChange;
+  final int totpCount;
+  final int passkeyCount;
   final DateTime createdAt;
 
   const AdminUserRecord({
@@ -50,6 +53,9 @@ class AdminUserRecord {
     required this.instanceRoleId,
     required this.mfaEnabled,
     required this.isLocked,
+    required this.forcePasswordChange,
+    required this.totpCount,
+    required this.passkeyCount,
     required this.createdAt,
   });
 
@@ -64,7 +70,24 @@ class AdminUserRecord {
       instanceRoleId: _str(json['instance_role_id']),
       mfaEnabled: _bool(json['mfa_enabled']),
       isLocked: _bool(json['is_locked']),
+      forcePasswordChange: _bool(json['force_password_change']),
+      totpCount: (json['totp_count'] as int?) ?? 0,
+      passkeyCount: (json['passkey_count'] as int?) ?? 0,
       createdAt: _dt(json['created_at']),
+    );
+  }
+}
+
+class PasswordResetLinkResult {
+  final String token;
+  final DateTime expiresAt;
+
+  const PasswordResetLinkResult({required this.token, required this.expiresAt});
+
+  factory PasswordResetLinkResult.fromJson(Map<String, dynamic> json) {
+    return PasswordResetLinkResult(
+      token: _str(json['token']),
+      expiresAt: _dt(json['expires_at']),
     );
   }
 }

@@ -87,6 +87,9 @@ class AuthService extends ChangeNotifier {
   String? _mfaToken;
   List<String> _mfaMethods = [];
 
+  // Force-change state — set when login returns password_change_required.
+  String? _forceChangeToken;
+
   /// Called when the session is cleared (logout, expiry) so dependent services
   /// can drop cached state. Set from main.dart to avoid circular imports.
   VoidCallback? onSessionCleared;
@@ -102,6 +105,12 @@ class AuthService extends ChangeNotifier {
   /// True when login succeeded but a second factor is required.
   bool get mfaPending => _mfaToken != null;
   List<String> get mfaMethods => _mfaMethods;
+
+  /// True when login requires a password change before issuing a session.
+  bool get hasPasswordChangePending => _forceChangeToken != null;
+
+  /// The short-lived token used to authorize the force-change reset request.
+  String? get forceChangeToken => _forceChangeToken;
 
   /// Called from main.dart before runApp. Probes auth service state and attempts
   /// silent token refresh if the instance is active.
@@ -198,9 +207,42 @@ class AuthService extends ChangeNotifier {
       return;
     }
 
+    // Password change required — store the change token and redirect.
+    if (data['password_change_required'] == true) {
+      _forceChangeToken = data['change_token'] as String?;
+      notifyListeners();
+      return;
+    }
+
     _accessToken = data['access_token'] as String?;
     _mfaToken = null;
     _mfaMethods = [];
+    notifyListeners();
+  }
+
+  /// Resets the password using a one-time token (admin reset or force-change).
+  /// Issues a new session on success.
+  Future<void> resetPassword(String token, String newPassword) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/reset-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'token': token,
+        'new_password': newPassword,
+        'platform': 'web',
+        'device_name': detectBrowserName(),
+        'fingerprint': getDeviceFingerprint(),
+      }),
+    );
+    if (resp.statusCode != 200) {
+      final data = json.decode(resp.body) as Map<String, dynamic>;
+      throw AuthException(
+          (data['message'] ?? data['error'] ?? 'Password reset failed')
+              .toString());
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    _accessToken = data['access_token'] as String?;
+    _forceChangeToken = null;
     notifyListeners();
   }
 
@@ -419,6 +461,7 @@ class AuthService extends ChangeNotifier {
     _accessToken = null;
     _mfaToken = null;
     _mfaMethods = [];
+    _forceChangeToken = null;
     onSessionCleared?.call();
     notifyListeners();
   }

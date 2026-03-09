@@ -8,11 +8,11 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$RepoRoot  = Resolve-Path (Join-Path (Join-Path $PSScriptRoot "..") "..")
+$RepoRoot = Resolve-Path (Join-Path (Join-Path $PSScriptRoot "..") "..")
 $WebOutDir = Join-Path (Join-Path $RepoRoot "artifacts") "web"
 
 function Write-Step($msg) { Write-Host "`n>> $msg" -ForegroundColor Cyan }
-function Write-Ok($msg)   { Write-Host "   $msg" -ForegroundColor Green }
+function Write-Ok($msg) { Write-Host "   $msg" -ForegroundColor Green }
 function Write-Warn($msg) { Write-Host "   $msg" -ForegroundColor Yellow }
 function Write-Info($msg) { Write-Host "   $msg" -ForegroundColor DarkGray }
 
@@ -25,19 +25,19 @@ function Assert-Tool($name) {
 Assert-Tool "docker"
 
 $composeFile = if ($Prod) { "docker-compose.yml" } else { "docker-compose.dev.yml" }
-$mode        = if ($Prod) { "production" } else { "development" }
+$mode = if ($Prod) { "production" } else { "development" }
 
 if ($Prod -and -not (Test-Path (Join-Path $RepoRoot ".env"))) {
     Write-Host ""
     Write-Host "!! No .env file found -- production mode requires real secrets." -ForegroundColor Red
     Write-Host "   Copy .env.example to .env, then fill in:" -ForegroundColor Yellow
-    Write-Host "     LUMA_DB_PASS, HAVEN_JWT_SIGNING_KEY, LUMA_PUBLIC_URL" -ForegroundColor Yellow
+    Write-Host "     LUMA_DB_PASS, LUMA_JWT_SIGNING_KEY, LUMA_PUBLIC_URL" -ForegroundColor Yellow
     Write-Host ""
 }
 
 Push-Location $RepoRoot
 try {
-   if ($Fresh) {
+    if ($Fresh) {
         $cleanScript = Join-Path $PSScriptRoot "clean.ps1"
         Write-Step "Cleaning stale artifacts and caches"
         & PowerShell -ExecutionPolicy Bypass -File $cleanScript -Data
@@ -48,7 +48,7 @@ try {
         & PowerShell -ExecutionPolicy Bypass -File $buildScript -Web
         if ($LASTEXITCODE -ne 0) { Write-Error "Flutter web build failed." }
 
-        Write-Warn "Haven will generate a new setup token on startup."
+        Write-Warn "Luma will generate a new setup token on startup."
         Write-Warn "Watch for it in the logs -- it looks like:"
         Write-Warn "  ========================================"
         Write-Warn "    Setup token: <base64url string>"
@@ -73,12 +73,12 @@ try {
     }
 
     $composeArgs = @("compose", "-f", $composeFile, "up")
-    if ($Detach)  { $composeArgs += "-d" }
-    if ($DbOnly)  { $composeArgs += @("postgres", "redis", "haven") }
+    if ($Detach) { $composeArgs += "-d" }
+    if ($DbOnly) { $composeArgs += @("postgres", "redis", "haven") }
 
     $label = $mode
-    if ($DbOnly)  { $label += " (infrastructure only -- Luma not started)" }
-    if ($Fresh)   { $label += " [FRESH -- Haven is UNCLAIMED]" }
+    if ($DbOnly) { $label += " (infrastructure only -- Luma not started)" }
+    if ($Fresh) { $label += " [FRESH -- Haven is UNCLAIMED]" }
 
     Write-Step "Starting Luma -- $label"
     Write-Info "Compose file : $composeFile"

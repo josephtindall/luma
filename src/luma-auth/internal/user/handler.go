@@ -123,6 +123,47 @@ func (h *Handler) ListUsers(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
+// AdminCreate handles POST /api/auth/admin/users — owner only.
+// Creates a user without an invitation. Returns 201 with the AdminUser projection.
+func (h *Handler) AdminCreate(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+	if claims.Role != "builtin:instance-owner" {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
+		return
+	}
+
+	var req struct {
+		Email               string `json:"email"`
+		DisplayName         string `json:"display_name"`
+		Password            string `json:"password"`
+		ForcePasswordChange bool   `json:"force_password_change"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid body")
+		return
+	}
+	if req.Email == "" || req.Password == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "email and password are required")
+		return
+	}
+
+	au, err := h.svc.AdminCreate(r.Context(), AdminCreateParams{
+		Email:               req.Email,
+		DisplayName:         req.DisplayName,
+		Password:            req.Password,
+		ForcePasswordChange: req.ForcePasswordChange,
+	}, claims.Subject)
+	if err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+	httputil.WriteJSON(w, http.StatusCreated, au)
+}
+
 // LockUser handles POST /api/auth/admin/users/{id}/lock — owner only.
 func (h *Handler) LockUser(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
@@ -165,3 +206,22 @@ func (h *Handler) UnlockUser(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// ForcePasswordChange handles POST /api/auth/admin/users/{id}/force-password-change — owner only.
+// Sets force_password_change = true and revokes all sessions for the user.
+func (h *Handler) ForcePasswordChange(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+	if claims.Role != "builtin:instance-owner" {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
+		return
+	}
+	id := chi.URLParam(r, "id")
+	if err := h.svc.SetForcePasswordChange(r.Context(), id, claims.Subject, true); err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

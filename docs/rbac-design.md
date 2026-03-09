@@ -1,8 +1,8 @@
-# RBAC Design — Haven + Luma
+# RBAC Design — luma-auth + Luma
 
 ## Overview
 
-RBAC spans both repos but is owned entirely by Haven. Luma never makes local permission decisions — it calls Haven's authz endpoint. The permission model can evolve in Haven without Luma changing any business logic.
+RBAC spans both repos but is owned entirely by luma-auth. Luma never makes local permission decisions — it calls luma-auth's authz endpoint. The permission model can evolve in luma-auth without Luma changing any business logic.
 
 ---
 
@@ -12,10 +12,10 @@ Evaluated in strict order. **Explicit deny at any level always wins and stops ev
 
 | Priority | Dimension | Owner |
 |----------|-----------|-------|
-| 1 — most specific | Resource-level explicit permission | Haven DB |
-| 2 | Vault role policy | Haven DB |
-| 3 | Instance role policy | Haven DB |
-| 4 — least specific | Feature flag | Haven instance table |
+| 1 — most specific | Resource-level explicit permission | luma-auth DB |
+| 2 | Vault role policy | luma-auth DB |
+| 3 | Instance role policy | luma-auth DB |
+| 4 — least specific | Feature flag | luma-auth instance table |
 | — | Default | DENY |
 
 ### Evaluation Algorithm
@@ -45,7 +45,7 @@ Evaluated in strict order. **Explicit deny at any level always wins and stops ev
 
 ## Built-In Roles
 
-### Instance-Level (Haven)
+### Instance-Level (luma-auth)
 
 | Role ID | Name | Key Powers |
 |---------|------|-----------|
@@ -95,28 +95,28 @@ Every permission check uses one of these canonical strings. No other strings are
 
 ---
 
-## Database Schema — Haven
+## Database Schema — luma-auth
 
 ```sql
-CREATE TABLE haven.roles (
+CREATE TABLE auth.roles (
     id             TEXT PRIMARY KEY,
     name           TEXT        NOT NULL,
     description    TEXT,
     scope          TEXT        NOT NULL,  -- instance | vault
     is_builtin     BOOLEAN     NOT NULL DEFAULT false,
-    parent_role_id TEXT        REFERENCES haven.roles(id),
+    parent_role_id TEXT        REFERENCES auth.roles(id),
     created_by     UUID,
     created_at     TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-INSERT INTO haven.roles (id, name, scope, is_builtin) VALUES
+INSERT INTO auth.roles (id, name, scope, is_builtin) VALUES
     ('builtin:instance-owner',  'Owner',      'instance', true),
     ('builtin:instance-member', 'Member',     'instance', true),
     ('builtin:vault-admin',     'Vault Admin','vault',    true),
     ('builtin:vault-editor',    'Editor',     'vault',    true),
     ('builtin:vault-viewer',    'Viewer',     'vault',    true);
 
-CREATE TABLE haven.policies (
+CREATE TABLE auth.policies (
     id          UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     name        TEXT NOT NULL UNIQUE,
     description TEXT,
@@ -125,9 +125,9 @@ CREATE TABLE haven.policies (
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 
-CREATE TABLE haven.policy_statements (
+CREATE TABLE auth.policy_statements (
     id             UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
-    policy_id      UUID    NOT NULL REFERENCES haven.policies(id) ON DELETE CASCADE,
+    policy_id      UUID    NOT NULL REFERENCES auth.policies(id) ON DELETE CASCADE,
     effect         TEXT    NOT NULL,  -- allow | deny
     actions        TEXT[]  NOT NULL,
     resource_types TEXT[]  NOT NULL,
@@ -135,13 +135,13 @@ CREATE TABLE haven.policy_statements (
     position       INTEGER NOT NULL DEFAULT 0
 );
 
-CREATE TABLE haven.role_policies (
-    role_id   TEXT NOT NULL REFERENCES haven.roles(id)    ON DELETE CASCADE,
-    policy_id UUID NOT NULL REFERENCES haven.policies(id) ON DELETE CASCADE,
+CREATE TABLE auth.role_policies (
+    role_id   TEXT NOT NULL REFERENCES auth.roles(id)    ON DELETE CASCADE,
+    policy_id UUID NOT NULL REFERENCES auth.policies(id) ON DELETE CASCADE,
     PRIMARY KEY (role_id, policy_id)
 );
 
-CREATE TABLE haven.resource_permissions (
+CREATE TABLE auth.resource_permissions (
     id            UUID    PRIMARY KEY DEFAULT gen_random_uuid(),
     resource_type TEXT    NOT NULL,
     resource_id   TEXT    NOT NULL,
@@ -154,15 +154,15 @@ CREATE TABLE haven.resource_permissions (
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
 CREATE INDEX idx_resource_perms ON
-    haven.resource_permissions(resource_type, resource_id, subject_type, subject_id);
+    auth.resource_permissions(resource_type, resource_id, subject_type, subject_id);
 ```
 
 ---
 
-## Haven Authz API
+## luma-auth Authz API
 
 ```
-POST /api/haven/authz/check
+POST /api/auth/authz/check
 
 Request:
 {

@@ -26,7 +26,10 @@ func (r *Repository) Get(ctx context.Context) (*bootstrap.InstanceState, error) 
 	const q = `
 		SELECT id, name, locale, timezone, setup_state,
 		       setup_token_hash, setup_token_expires_at, setup_token_failures,
-		       activated_at, version
+		       activated_at, version,
+		       password_min_length, password_require_uppercase,
+		       password_require_lowercase, password_require_numbers,
+		       password_require_symbols, password_history_count
 		FROM auth.instance
 		LIMIT 1`
 
@@ -42,6 +45,12 @@ func (r *Repository) Get(ctx context.Context) (*bootstrap.InstanceState, error) 
 		&s.SetupTokenFailures,
 		&s.ActivatedAt,
 		&s.Version,
+		&s.PasswordMinLength,
+		&s.PasswordRequireUppercase,
+		&s.PasswordRequireLowercase,
+		&s.PasswordRequireNumbers,
+		&s.PasswordRequireSymbols,
+		&s.PasswordHistoryCount,
 	)
 	if err == pgx.ErrNoRows {
 		// Row hasn't been seeded yet — EnsureRow will create it.
@@ -51,6 +60,71 @@ func (r *Repository) Get(ctx context.Context) (*bootstrap.InstanceState, error) 
 		return nil, fmt.Errorf("bootstrap.postgres.Get: %w", err)
 	}
 	return s, nil
+}
+
+func (r *Repository) UpdateSettings(ctx context.Context, params bootstrap.InstanceSettingsParams) error {
+	// Build a dynamic UPDATE touching only the provided fields.
+	setClauses := []string{}
+	args := []any{}
+	i := 1
+
+	if params.Name != nil {
+		setClauses = append(setClauses, fmt.Sprintf("name = $%d", i))
+		args = append(args, *params.Name)
+		i++
+	}
+	if params.PasswordMinLength != nil {
+		setClauses = append(setClauses, fmt.Sprintf("password_min_length = $%d", i))
+		args = append(args, *params.PasswordMinLength)
+		i++
+	}
+	if params.PasswordRequireUppercase != nil {
+		setClauses = append(setClauses, fmt.Sprintf("password_require_uppercase = $%d", i))
+		args = append(args, *params.PasswordRequireUppercase)
+		i++
+	}
+	if params.PasswordRequireLowercase != nil {
+		setClauses = append(setClauses, fmt.Sprintf("password_require_lowercase = $%d", i))
+		args = append(args, *params.PasswordRequireLowercase)
+		i++
+	}
+	if params.PasswordRequireNumbers != nil {
+		setClauses = append(setClauses, fmt.Sprintf("password_require_numbers = $%d", i))
+		args = append(args, *params.PasswordRequireNumbers)
+		i++
+	}
+	if params.PasswordRequireSymbols != nil {
+		setClauses = append(setClauses, fmt.Sprintf("password_require_symbols = $%d", i))
+		args = append(args, *params.PasswordRequireSymbols)
+		i++
+	}
+	if params.PasswordHistoryCount != nil {
+		setClauses = append(setClauses, fmt.Sprintf("password_history_count = $%d", i))
+		args = append(args, *params.PasswordHistoryCount)
+		i++
+	}
+
+	if len(setClauses) == 0 {
+		return nil // nothing to update
+	}
+
+	q := "UPDATE auth.instance SET " + joinStrings(setClauses, ", ")
+	_, err := r.db.Exec(ctx, q, args...)
+	if err != nil {
+		return fmt.Errorf("bootstrap.postgres.UpdateSettings: %w", err)
+	}
+	return nil
+}
+
+func joinStrings(ss []string, sep string) string {
+	result := ""
+	for k, s := range ss {
+		if k > 0 {
+			result += sep
+		}
+		result += s
+	}
+	return result
 }
 
 func (r *Repository) EnsureRow(ctx context.Context) error {

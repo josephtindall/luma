@@ -94,7 +94,7 @@ Comments are the update feed for a task. Each comment is a block editor instance
 CREATE TABLE luma.task_comments (
     id           UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     task_id      UUID        NOT NULL REFERENCES luma.tasks(id) ON DELETE CASCADE,
-    author_id    TEXT        NOT NULL,  -- Haven user UUID
+    author_id    TEXT        NOT NULL,  -- luma-auth user UUID
     content      JSONB       NOT NULL,
     is_edited    BOOLEAN     NOT NULL DEFAULT false,
     edited_at    TIMESTAMPTZ,
@@ -115,10 +115,10 @@ CREATE TABLE luma.tasks (
     title        TEXT        NOT NULL,
     status_id    UUID        NOT NULL REFERENCES luma.task_statuses(id),
     description  JSONB       NOT NULL DEFAULT '{"blocks": []}',
-    assignee_id  TEXT,                   -- Haven user UUID, nullable
+    assignee_id  TEXT,                   -- luma-auth user UUID, nullable
     due_date     DATE,
     closed_at    TIMESTAMPTZ,
-    created_by   TEXT        NOT NULL,   -- Haven user UUID
+    created_by   TEXT        NOT NULL,   -- luma-auth user UUID
     updated_by   TEXT        NOT NULL,
     created_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     updated_at   TIMESTAMPTZ NOT NULL DEFAULT NOW()

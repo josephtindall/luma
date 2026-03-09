@@ -26,7 +26,8 @@ func New(db *pgxpool.Pool) *Repository {
 func (r *Repository) GetByID(ctx context.Context, id string) (*user.User, error) {
 	const q = `
 		SELECT id, email, display_name, password_hash, instance_role_id,
-		       COALESCE(avatar_seed, ''), mfa_enabled, failed_login_attempts, locked_at,
+		       COALESCE(avatar_seed, ''), mfa_enabled, force_password_change,
+		       failed_login_attempts, locked_at,
 		       COALESCE(locked_reason, ''), created_at, updated_at
 		FROM auth.users
 		WHERE id = $1`
@@ -44,7 +45,8 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*user.User, error)
 func (r *Repository) GetByEmail(ctx context.Context, email string) (*user.User, error) {
 	const q = `
 		SELECT id, email, display_name, password_hash, instance_role_id,
-		       COALESCE(avatar_seed, ''), mfa_enabled, failed_login_attempts, locked_at,
+		       COALESCE(avatar_seed, ''), mfa_enabled, force_password_change,
+		       failed_login_attempts, locked_at,
 		       COALESCE(locked_reason, ''), created_at, updated_at
 		FROM auth.users
 		WHERE email = $1`
@@ -64,11 +66,11 @@ func (r *Repository) GetByEmail(ctx context.Context, email string) (*user.User, 
 func (r *Repository) Create(ctx context.Context, u *user.User) error {
 	const q = `
 		INSERT INTO auth.users
-		    (id, email, display_name, password_hash, instance_role_id, avatar_seed)
-		VALUES ($1, $2, $3, $4, $5, $6)`
+		    (id, email, display_name, password_hash, instance_role_id, avatar_seed, force_password_change)
+		VALUES ($1, $2, $3, $4, $5, $6, $7)`
 
 	_, err := r.db.Exec(ctx, q,
-		u.ID, u.Email, u.DisplayName, u.PasswordHash, u.InstanceRoleID, u.AvatarSeed)
+		u.ID, u.Email, u.DisplayName, u.PasswordHash, u.InstanceRoleID, u.AvatarSeed, u.ForcePasswordChange)
 	if err != nil {
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == "23505" {
@@ -164,6 +166,15 @@ func (r *Repository) SetMFAEnabled(ctx context.Context, id string, enabled bool)
 	return nil
 }
 
+func (r *Repository) SetForcePasswordChange(ctx context.Context, id string, force bool) error {
+	const q = `UPDATE auth.users SET force_password_change = $2, updated_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, id, force)
+	if err != nil {
+		return fmt.Errorf("user.postgres.SetForcePasswordChange: %w", err)
+	}
+	return nil
+}
+
 // RegisterAtomic creates a new member user, their preferences row, and marks
 // the invitation as accepted — all inside a single transaction.
 func (r *Repository) RegisterAtomic(ctx context.Context, params user.RegisterParams) (string, error) {
@@ -215,7 +226,8 @@ func (r *Repository) RegisterAtomic(ctx context.Context, params user.RegisterPar
 func (r *Repository) List(ctx context.Context, limit, offset int) ([]*user.User, error) {
 	const q = `
 		SELECT id, email, display_name, password_hash, instance_role_id,
-		       COALESCE(avatar_seed, ''), mfa_enabled, failed_login_attempts, locked_at,
+		       COALESCE(avatar_seed, ''), mfa_enabled, force_password_change,
+		       failed_login_attempts, locked_at,
 		       COALESCE(locked_reason, ''), created_at, updated_at
 		FROM auth.users
 		ORDER BY created_at DESC
@@ -241,6 +253,92 @@ func (r *Repository) List(ctx context.Context, limit, offset int) ([]*user.User,
 	return users, nil
 }
 
+// ListWithCounts returns all users as AdminUser projections, including per-user
+// TOTP and passkey counts computed via LEFT JOINs.
+func (r *Repository) ListWithCounts(ctx context.Context, limit, offset int) ([]*user.AdminUser, error) {
+	const q = `
+		SELECT u.id, u.email, u.display_name, u.instance_role_id,
+		       COALESCE(u.avatar_seed, ''), u.mfa_enabled, u.force_password_change,
+		       u.locked_at IS NOT NULL AS is_locked, u.created_at,
+		       COUNT(DISTINCT ts.id) FILTER (WHERE ts.verified = true) AS totp_count,
+		       COUNT(DISTINCT p.id)  FILTER (WHERE p.revoked_at IS NULL) AS passkey_count
+		FROM auth.users u
+		LEFT JOIN auth.totp_secrets ts ON ts.user_id = u.id
+		LEFT JOIN auth.passkeys     p  ON p.user_id  = u.id
+		GROUP BY u.id, u.email, u.display_name, u.instance_role_id,
+		         u.avatar_seed, u.mfa_enabled, u.force_password_change,
+		         u.locked_at, u.created_at
+		ORDER BY u.created_at DESC
+		LIMIT $1 OFFSET $2`
+
+	rows, err := r.db.Query(ctx, q, limit, offset)
+	if err != nil {
+		return nil, fmt.Errorf("user.postgres.ListWithCounts: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*user.AdminUser
+	for rows.Next() {
+		au := &user.AdminUser{}
+		err := rows.Scan(
+			&au.ID,
+			&au.Email,
+			&au.DisplayName,
+			&au.InstanceRoleID,
+			&au.AvatarSeed,
+			&au.MFAEnabled,
+			&au.ForcePasswordChange,
+			&au.IsLocked,
+			&au.CreatedAt,
+			&au.TOTPCount,
+			&au.PasskeyCount,
+		)
+		if err != nil {
+			return nil, fmt.Errorf("user.postgres.ListWithCounts scan: %w", err)
+		}
+		out = append(out, au)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("user.postgres.ListWithCounts rows: %w", err)
+	}
+	return out, nil
+}
+
+func (r *Repository) AddPasswordHistory(ctx context.Context, userID, hash string) error {
+	const q = `INSERT INTO auth.password_history (user_id, hash) VALUES ($1, $2)`
+	if _, err := r.db.Exec(ctx, q, userID, hash); err != nil {
+		return fmt.Errorf("user.postgres.AddPasswordHistory: %w", err)
+	}
+	return nil
+}
+
+func (r *Repository) GetRecentPasswordHashes(ctx context.Context, userID string, count int) ([]string, error) {
+	const q = `
+		SELECT hash FROM auth.password_history
+		WHERE user_id = $1
+		ORDER BY created_at DESC
+		LIMIT $2`
+
+	rows, err := r.db.Query(ctx, q, userID, count)
+	if err != nil {
+		return nil, fmt.Errorf("user.postgres.GetRecentPasswordHashes: %w", err)
+	}
+	defer rows.Close()
+
+	var hashes []string
+	for rows.Next() {
+		var h string
+		if err := rows.Scan(&h); err != nil {
+			return nil, fmt.Errorf("user.postgres.GetRecentPasswordHashes scan: %w", err)
+		}
+		hashes = append(hashes, h)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("user.postgres.GetRecentPasswordHashes rows: %w", err)
+	}
+	return hashes, nil
+}
+
 // scanUser reads a auth.users row from a pgx.Row.
 func scanUser(row pgx.Row) (*user.User, error) {
 	u := &user.User{}
@@ -252,6 +350,7 @@ func scanUser(row pgx.Row) (*user.User, error) {
 		&u.InstanceRoleID,
 		&u.AvatarSeed,
 		&u.MFAEnabled,
+		&u.ForcePasswordChange,
 		&u.FailedLoginAttempts,
 		&u.LockedAt,
 		&u.LockedReason,

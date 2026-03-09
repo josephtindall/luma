@@ -4,7 +4,7 @@
 
 Flows are conditional branching playbooks. They guide a reader through a structured process where each Step contains rich content (using the same block editor as Pages) and zero or more exit paths leading to the next Step. A Step with no exits is the terminal point of a path through the Flow.
 
-Flows are built last because they are a superset of everything that comes before them: they use the block editor from Pages, they support mentions from the mention system, they generate audit events, and they can link to Tasks. Build order: Haven → Vaults → Pages → Tasks → Flows.
+Flows are built last because they are a superset of everything that comes before them: they use the block editor from Pages, they support mentions from the mention system, they generate audit events, and they can link to Tasks. Build order: luma-auth → Vaults → Pages → Tasks → Flows.
 
 ---
 

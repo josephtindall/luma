@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
+import '../models/instance_settings.dart';
 import '../models/user.dart';
 import 'api_client.dart';
 
@@ -260,6 +261,30 @@ class UserService extends ChangeNotifier {
     await loadProfile(); // refresh mfaEnabled state
   }
 
+  // ── Admin: instance settings (owner only) ──────────────────────────────
+
+  Future<InstanceSettings> getInstanceSettings() async {
+    final resp = await _api.get('/api/luma/admin/instance-settings');
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to load instance settings');
+    }
+    return InstanceSettings.fromJson(
+        json.decode(resp.body) as Map<String, dynamic>);
+  }
+
+  Future<InstanceSettings> updateInstanceSettings(
+      InstanceSettings settings) async {
+    final resp = await _api.patch(
+        '/api/luma/admin/instance-settings', settings.toJson());
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to update instance settings');
+    }
+    return InstanceSettings.fromJson(
+        json.decode(resp.body) as Map<String, dynamic>);
+  }
+
   // ── Admin: user management (owner only) ────────────────────────────────
 
   Future<List<AdminUserRecord>> listAdminUsers() async {
@@ -296,6 +321,68 @@ class UserService extends ChangeNotifier {
     if (resp.statusCode != 204 && resp.statusCode != 200) {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['error'] ?? 'Failed to revoke sessions');
+    }
+  }
+
+  /// Creates a new user directly (without invitation).
+  Future<AdminUserRecord> adminCreateUser({
+    required String email,
+    required String displayName,
+    required String password,
+    required bool forcePasswordChange,
+  }) async {
+    final resp = await _api.post('/api/luma/admin/users', {
+      'email': email,
+      'display_name': displayName,
+      'password': password,
+      'force_password_change': forcePasswordChange,
+    });
+    if (resp.statusCode != 201) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to create user');
+    }
+    return AdminUserRecord.fromJson(
+        json.decode(resp.body) as Map<String, dynamic>);
+  }
+
+  /// Forces the user to change their password on next login.
+  Future<void> adminForcePasswordChange(String userId) async {
+    final resp = await _api
+        .post('/api/luma/admin/users/$userId/force-password-change', {});
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to set force password change');
+    }
+  }
+
+  /// Creates a one-time password reset link for a user (admin-generated).
+  Future<PasswordResetLinkResult> adminCreatePasswordResetLink(
+      String userId) async {
+    final resp =
+        await _api.post('/api/luma/admin/users/$userId/password-reset', {});
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to create password reset link');
+    }
+    return PasswordResetLinkResult.fromJson(
+        json.decode(resp.body) as Map<String, dynamic>);
+  }
+
+  /// Removes all TOTP authenticator apps for a user.
+  Future<void> adminDeleteAllTOTP(String userId) async {
+    final resp = await _api.delete('/api/luma/admin/users/$userId/mfa/totp');
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to remove authenticator apps');
+    }
+  }
+
+  /// Revokes all passkeys for a user.
+  Future<void> adminRevokeAllPasskeys(String userId) async {
+    final resp = await _api.delete('/api/luma/admin/users/$userId/passkeys');
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to revoke passkeys');
     }
   }
 

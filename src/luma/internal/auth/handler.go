@@ -63,6 +63,9 @@ func (h *Handler) AuthRoutes() chi.Router {
 	// Passwordless passkey login (unauthenticated — no password required).
 	r.Post("/passkeys/passwordless/begin", h.proxySetup("POST", "/api/auth/passkeys/passwordless/begin"))
 	r.Post("/passkeys/passwordless/finish", h.sessionIssuerProxy("/api/auth/passkeys/passwordless/finish"))
+
+	// Password reset (unauthenticated — issues session tokens on success).
+	r.Post("/reset-password", h.sessionIssuerProxy("/api/auth/reset-password"))
 	return r
 }
 
@@ -72,9 +75,16 @@ func (h *Handler) AuthRoutes() chi.Router {
 func (h *Handler) AdminRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/users", h.proxyAuth("GET", "/api/auth/admin/users"))
+	r.Post("/users", h.proxyAuth("POST", "/api/auth/admin/users"))
 	r.Post("/users/{id}/lock", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/users/", "id", "/lock"))
 	r.Delete("/users/{id}/lock", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/lock"))
 	r.Delete("/users/{id}/sessions", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/sessions"))
+	r.Post("/users/{id}/force-password-change", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/users/", "id", "/force-password-change"))
+	r.Post("/users/{id}/password-reset", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/users/", "id", "/password-reset"))
+	r.Delete("/users/{id}/mfa/totp", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/mfa/totp"))
+	r.Delete("/users/{id}/passkeys", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/passkeys"))
+	r.Get("/instance-settings", h.proxyAuth("GET", "/api/auth/admin/instance-settings"))
+	r.Patch("/instance-settings", h.proxyAuth("PATCH", "/api/auth/admin/instance-settings"))
 	r.Post("/invitations", h.proxyAuth("POST", "/api/auth/invitations"))
 	r.Get("/invitations", h.proxyAuth("GET", "/api/auth/invitations"))
 	r.Delete("/invitations/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/invitations/", "id"))
@@ -371,6 +381,14 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 
 	// MFA required — forward the challenge response as-is (no cookies to rewrite).
 	if mfaRequired, _ := payload["mfa_required"].(bool); mfaRequired {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(body) //nolint:errcheck
+		return
+	}
+
+	// Password change required — forward as-is (no tokens issued yet).
+	if pwdChange, _ := payload["password_change_required"].(bool); pwdChange {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write(body) //nolint:errcheck

@@ -532,6 +532,50 @@ func (h *Handler) GetRecoveryCodesCount(w http.ResponseWriter, r *http.Request) 
 	})
 }
 
+// ── Admin operations (owner-only) ────────────────────────────────────────────
+
+// AdminDeleteAllTOTP handles DELETE /api/auth/admin/users/{id}/mfa/totp — owner only.
+// Removes all verified TOTP authenticator apps for the target user.
+func (h *Handler) AdminDeleteAllTOTP(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+	if claims.Role != "builtin:instance-owner" {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
+		return
+	}
+
+	userID := chi.URLParam(r, "id")
+	if err := h.svc.AdminDeleteAllTOTP(r.Context(), userID); err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// AdminRevokeAllPasskeys handles DELETE /api/auth/admin/users/{id}/passkeys — owner only.
+// Revokes all active passkeys for the target user.
+func (h *Handler) AdminRevokeAllPasskeys(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+	if claims.Role != "builtin:instance-owner" {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
+		return
+	}
+
+	userID := chi.URLParam(r, "id")
+	if err := h.svc.AdminRevokeAllPasskeys(r.Context(), userID); err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // ── Helpers ─────────────────────────────────────────────────────────────────
 
 const refreshCookieName = "auth_refresh"

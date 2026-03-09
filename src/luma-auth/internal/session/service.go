@@ -143,6 +143,12 @@ func (s *Service) Login(ctx context.Context, params LoginParams) (*LoginResult, 
 	// Reset the failure counter on success.
 	_ = s.users.ResetFailedLogins(ctx, u.ID)
 
+	// If force_password_change is set, block the normal login flow and return a
+	// signal so the handler can issue a short-lived change token instead of a session.
+	if u.ForcePasswordChange {
+		return &LoginResult{PasswordChangeRequired: true, UserID: u.ID}, nil
+	}
+
 	// Register or match the device.
 	dev, err := s.devices.GetByFingerprint(ctx, u.ID, params.Fingerprint)
 	if err != nil {

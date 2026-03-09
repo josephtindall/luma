@@ -156,6 +156,9 @@ class _LoginScreenState extends State<LoginScreen> {
         return;
       }
 
+      // Password change required — router handles the redirect.
+      if (widget.auth.hasPasswordChangePending) return;
+
       // No MFA — login complete.
       _emailStore.addEmail(_email);
       await _loadUserDataAndFinish();
@@ -184,6 +187,8 @@ class _LoginScreenState extends State<LoginScreen> {
       if (!widget.auth.mfaPending) {
         await widget.auth.login(_email, _passwordCtrl.text);
         if (!widget.auth.mfaPending) {
+          // Password change required — router handles the redirect.
+          if (widget.auth.hasPasswordChangePending) return;
           // No MFA actually required — done.
           _emailStore.addEmail(_email);
           await _loadUserDataAndFinish();

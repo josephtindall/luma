@@ -33,6 +33,8 @@ import (
 	mfapkg "github.com/josephtindall/luma-auth/internal/mfa"
 	mfapg "github.com/josephtindall/luma-auth/internal/mfa/postgres"
 	"github.com/josephtindall/luma-auth/internal/migrate"
+	passwordresetpkg "github.com/josephtindall/luma-auth/internal/passwordreset"
+	passwordresetpg "github.com/josephtindall/luma-auth/internal/passwordreset/postgres"
 	"github.com/josephtindall/luma-auth/internal/preferences"
 	prefpg "github.com/josephtindall/luma-auth/internal/preferences/postgres"
 	"github.com/josephtindall/luma-auth/internal/session"
@@ -142,6 +144,14 @@ func run() error {
 		cfg.JWTSigningKey,
 	)
 
+	// Wire session terminator into user service (avoids import cycle).
+	userSvc.SetSessions(sessionSvc)
+	// Wire password policy provider into user service (avoids import cycle).
+	userSvc.SetPolicy(bootstrapSvc)
+
+	passwordResetRepo := passwordresetpg.New(db)
+	passwordResetSvc := passwordresetpkg.NewService(passwordResetRepo, userRepo, userSvc)
+
 	authzAuthorizer := authz.NewDefaultAuthorizer(authzRepo, rdb)
 
 	// ── 7. Bootstrap initialisation ───────────────────────────────────────────
@@ -154,7 +164,8 @@ func run() error {
 	// ── 8. HTTP handlers ──────────────────────────────────────────────────────
 	bootstrapGate := bootstrap.NewBootstrapGate(bootstrapRepo)
 	bootstrapHandler := bootstrap.NewHandler(bootstrapSvc, sessionSvc)
-	sessionHandler := session.NewHandler(sessionSvc, true /* secureCookie */)
+	sessionHandler := session.NewHandler(sessionSvc, passwordResetSvc, true /* secureCookie */)
+	passwordResetHandler := passwordresetpkg.NewHandler(passwordResetSvc, sessionSvc, sessionSvc, true /* secureCookie */)
 	userHandler := user.NewHandler(userSvc, sessionSvc)
 	deviceHandler := device.NewHandler(deviceSvc, sessionSvc)
 	prefHandler := preferences.NewHandler(prefSvc)
@@ -199,6 +210,7 @@ func run() error {
 		r.Post("/api/auth/login", sessionHandler.Login)
 		r.Post("/api/auth/refresh", sessionHandler.Refresh)
 		r.Post("/api/auth/register", sessionHandler.Register)
+		r.Post("/api/auth/reset-password", passwordResetHandler.ResetPassword)
 		r.Post("/api/auth/mfa/verify", mfaHandler.VerifyMFA)
 		r.Post("/api/auth/passkeys/login/begin", mfaHandler.BeginLogin)
 		r.Post("/api/auth/passkeys/login/finish", mfaHandler.FinishLogin)
@@ -251,10 +263,18 @@ func run() error {
 		r.Get("/api/auth/invitations", invHandler.List)
 		r.Delete("/api/auth/invitations/{id}", invHandler.Revoke)
 
+		r.Get("/api/auth/admin/instance-settings", bootstrapHandler.GetInstanceSettings)
+		r.Patch("/api/auth/admin/instance-settings", bootstrapHandler.UpdateInstanceSettings)
+
 		r.Get("/api/auth/admin/users", userHandler.ListUsers)
+		r.Post("/api/auth/admin/users", userHandler.AdminCreate)
 		r.Post("/api/auth/admin/users/{id}/lock", userHandler.LockUser)
 		r.Delete("/api/auth/admin/users/{id}/lock", userHandler.UnlockUser)
 		r.Delete("/api/auth/admin/users/{id}/sessions", sessionHandler.RevokeUserSessions)
+		r.Post("/api/auth/admin/users/{id}/force-password-change", userHandler.ForcePasswordChange)
+		r.Post("/api/auth/admin/users/{id}/password-reset", passwordResetHandler.AdminCreateResetToken)
+		r.Delete("/api/auth/admin/users/{id}/mfa/totp", mfaHandler.AdminDeleteAllTOTP)
+		r.Delete("/api/auth/admin/users/{id}/passkeys", mfaHandler.AdminRevokeAllPasskeys)
 	})
 
 	// ── 10. Start server + graceful shutdown ──────────────────────────────────

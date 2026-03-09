@@ -2,7 +2,7 @@
 
 ## What This Repo Is
 
-Luma is a self-hosted collaborative workspace providing Pages (block-based documents), Tasks (action tracking), and Flows (conditional branching playbooks), all organized into Vaults. Authentication and identity are handled entirely by the Haven sidecar — Luma owns content, Haven owns identity.
+Luma is a self-hosted collaborative workspace providing Pages (block-based documents), Tasks (action tracking), and Flows (conditional branching playbooks), all organized into Vaults. Authentication and identity are handled entirely by the luma-auth sidecar — Luma owns content, luma-auth owns identity.
 
 ## Design Documents
 
@@ -11,7 +11,7 @@ Read the relevant document before writing any code for a feature. These are auth
 | Document | Covers |
 |----------|--------|
 | `docs/luma-overview.md` | Architecture, service map, tech stack, build phase order |
-| `docs/haven-design.md` | How Luma connects to Haven at runtime |
+| `docs/luma-auth-design.md` | How Luma connects to luma-auth at runtime |
 | `docs/rbac-design.md` | Permission model, action taxonomy, authz API calls |
 | `docs/vaults-design.md` | Vault types, membership, Personal Vault isolation |
 | `docs/urls-design.md` | URL scheme, short ID generation, routing |
@@ -48,12 +48,12 @@ luma/
         model.go, service.go, dispatcher.go
       search/
         service.go             # cross-feature Cmd+K search
-      haven/
-        client.go              # HTTP client for all Haven API calls
-        middleware.go          # validates Bearer token via Haven on every request
+      auth/
+        client.go              # HTTP client for all luma-auth API calls
+        middleware.go          # validates Bearer token via luma-auth on every request
     pkg/
       authz/
-        authz.go               # calls Haven /api/haven/authz/check
+        authz.go               # calls luma-auth /api/auth/authz/check
       shortid/
         shortid.go             # YouTube-style short ID generation
       editor/
@@ -93,7 +93,7 @@ luma/
 | Database | PostgreSQL 16 — `luma` schema |
 | Cache / Queue | Redis |
 | WebSocket | gorilla/websocket |
-| IAM | Haven sidecar (separate container) |
+| IAM | luma-auth sidecar (separate container) |
 
 ## Go Architecture Rules — Non-Negotiable
 
@@ -121,13 +121,13 @@ luma/
 - `context.Context` first parameter of every DB/network/filesystem function
 - Never stored in a struct
 
-## Haven Integration — Critical
+## luma-auth Integration — Critical
 
-Every authenticated Luma request requires two Haven calls. Both must happen. Neither can be skipped.
+Every authenticated Luma request requires two luma-auth calls. Both must happen. Neither can be skipped.
 
 ```go
 // Step 1: Validate the token on every authenticated request
-// internal/haven/middleware.go — applied to all protected routes
+// internal/auth/middleware.go — applied to all protected routes
 identity, err := m.client.ValidateToken(r.Context(), token)
 
 // Step 2: Check permission before every protected action
@@ -168,7 +168,7 @@ user:read    user:invite    user:edit    user:lock      user:unlock
 - `appflowy_editor` is the only editor component — the same widget is used for Pages content, Task descriptions, Task comments, Flow step content, and Flow step comments. Never duplicate it.
 - Block type definitions in `pkg/editor/blocks.dart` — imported everywhere, defined once
 - One shared `AuthInterceptor` on the HTTP client handles token refresh transparently
-- `OfflineProvider` wraps all API calls — serves SQLite cache when Haven is unreachable
+- `OfflineProvider` wraps all API calls — serves SQLite cache when luma-auth is unreachable
 - The `@` mention dropdown is one shared widget used identically in all three features
 - Column layouts collapse to single-column stacked on mobile automatically
 
@@ -187,7 +187,7 @@ Never manually construct or hardcode short IDs. Never reuse a short ID after a r
 
 ## Database Conventions
 
-- All tables in the `luma` schema — the DB user has no access to `haven` schema
+- All tables in the `luma` schema — the DB user has no access to `auth` schema
 - UUIDs for all primary keys: `gen_random_uuid()`
 - All timestamps: `TIMESTAMPTZ NOT NULL DEFAULT NOW()`
 - Soft deletes: `is_archived BOOLEAN NOT NULL DEFAULT false` + `archived_at TIMESTAMPTZ`
@@ -199,8 +199,8 @@ Never manually construct or hardcode short IDs. Never reuse a short ID after a r
 
 | Phase | What Gets Built | Gate |
 |-------|----------------|------|
-| 0 | Haven v1.0 | Must be in daily use 7 days before Phase 1 starts |
-| 1 | Vaults + Haven integration | Haven v1.0 complete |
+| 0 | luma-auth v1.0 | Must be in daily use 7 days before Phase 1 starts |
+| 1 | Vaults + luma-auth integration | luma-auth v1.0 complete |
 | 2 | Pages — editor, transclusion, revisions | Vaults working |
 | 3 | Tasks — full lifecycle, comments | Vaults + Pages working |
 | 4 | Flows — steps, branching, execution | Pages editor + Tasks working |
@@ -213,7 +213,7 @@ Never manually construct or hardcode short IDs. Never reuse a short ID after a r
 ## Commands
 
 ```bash
-# Start full stack (postgres + redis + haven + luma)
+# Start full stack (postgres + redis + luma-auth + luma)
 docker compose up
 
 # Start development (live reload)
