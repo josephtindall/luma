@@ -74,6 +74,7 @@ func (h *Handler) AuthRoutes() chi.Router {
 // access on each path.
 func (h *Handler) AdminRoutes() chi.Router {
 	r := chi.NewRouter()
+	r.Get("/access", h.proxyAuth("GET", "/api/auth/admin/access"))
 	r.Get("/users", h.proxyAuth("GET", "/api/auth/admin/users"))
 	r.Post("/users", h.proxyAuth("POST", "/api/auth/admin/users"))
 	r.Post("/users/{id}/lock", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/users/", "id", "/lock"))

@@ -1,22 +1,26 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../services/user_service.dart';
+
 class AdminLayout extends StatelessWidget {
   final Widget child;
+  final UserService userService;
 
-  const AdminLayout({super.key, required this.child});
+  const AdminLayout({super.key, required this.child, required this.userService});
 
   @override
   Widget build(BuildContext context) {
     final path = GoRouterState.of(context).uri.path;
     final colorScheme = Theme.of(context).colorScheme;
     final borderColor = colorScheme.outlineVariant.withAlpha(128);
+    final isOwner = userService.profile?.isOwner == true;
 
     final tabs = [
       _AdminTab(label: 'Users', route: '/admin/users'),
       _AdminTab(label: 'Invitations', route: '/admin/invites'),
-      _AdminTab(label: 'Groups', route: '/admin/groups'),
-      _AdminTab(label: 'Roles', route: '/admin/roles'),
+      if (isOwner) _AdminTab(label: 'Groups', route: '/admin/groups'),
+      if (isOwner) _AdminTab(label: 'Roles', route: '/admin/roles'),
       _AdminTab(label: 'Settings', route: '/admin/settings'),
     ];
 

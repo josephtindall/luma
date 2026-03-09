@@ -12,17 +12,33 @@ class UserService extends ChangeNotifier {
 
   UserProfile? _profile;
   UserPreferences? _preferences;
+  bool _hasAdminAccess = false;
 
   UserService(this._api);
 
   UserProfile? get profile => _profile;
   UserPreferences? get preferences => _preferences;
+  bool get hasAdminAccess => _hasAdminAccess;
 
   Future<void> loadProfile() async {
     final resp = await _api.get('/api/luma/user/me');
     if (resp.statusCode == 200) {
       _profile = UserProfile.fromJson(_unwrapUser(json.decode(resp.body)));
+      // Reload admin access whenever profile changes.
+      await _loadAdminAccess();
       notifyListeners();
+    }
+  }
+
+  Future<void> _loadAdminAccess() async {
+    if (_profile == null) { _hasAdminAccess = false; return; }
+    // Owners always have access; for others, probe the admin access endpoint.
+    if (_profile!.isOwner) { _hasAdminAccess = true; return; }
+    try {
+      final resp = await _api.get('/api/luma/admin/access');
+      _hasAdminAccess = resp.statusCode == 204;
+    } catch (_) {
+      _hasAdminAccess = false;
     }
   }
 
@@ -639,6 +655,7 @@ class UserService extends ChangeNotifier {
   void clear() {
     _profile = null;
     _preferences = null;
+    _hasAdminAccess = false;
     notifyListeners();
   }
 

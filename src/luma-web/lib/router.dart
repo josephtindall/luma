@@ -108,7 +108,7 @@ GoRouter buildRouter(
             builder: (_, __) => SettingsScreen(userService: userService),
           ),
           ShellRoute(
-            builder: (_, __, child) => AdminLayout(child: child),
+            builder: (_, __, child) => AdminLayout(userService: userService, child: child),
             routes: [
               GoRoute(
                 path: '/admin/users',

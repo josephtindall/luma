@@ -129,7 +129,7 @@ class _MainLayoutState extends State<MainLayout> {
                       ListenableBuilder(
                         listenable: widget.userService,
                         builder: (context, _) {
-                          if (widget.userService.profile?.isOwner != true) {
+                          if (!widget.userService.hasAdminAccess) {
                             return const SizedBox.shrink();
                           }
                           return _buildNavItem(

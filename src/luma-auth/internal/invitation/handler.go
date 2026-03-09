@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/josephtindall/luma-auth/internal/authz"
 	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
 	"github.com/josephtindall/luma-auth/pkg/httputil"
 	"github.com/josephtindall/luma-auth/pkg/middleware"
@@ -12,8 +13,9 @@ import (
 
 // Handler serves invitation endpoints.
 type Handler struct {
-	svc     *Service
-	baseURL string // AUTH_BASE_URL — used to build join links, e.g. https://auth.example.com
+	svc      *Service
+	baseURL  string // AUTH_BASE_URL — used to build join links, e.g. https://auth.example.com
+	authzSvc authz.Authorizer
 }
 
 // NewHandler constructs the invitation handler.
@@ -21,17 +23,39 @@ func NewHandler(svc *Service, baseURL string) *Handler {
 	return &Handler{svc: svc, baseURL: baseURL}
 }
 
-// Create handles POST /api/auth/invitations — owner only.
-func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
+// SetAuthorizer injects the authz evaluator.
+func (h *Handler) SetAuthorizer(a authz.Authorizer) { h.authzSvc = a }
+
+func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request, action string) bool {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return false
+	}
+	if claims.Role == "builtin:instance-owner" {
+		return true
+	}
+	if h.authzSvc == nil {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
+		return false
+	}
+	result, err := h.authzSvc.Check(r.Context(), authz.CheckRequest{
+		UserID: claims.Subject,
+		Action: action,
+	})
+	if err != nil || !result.Allowed {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
+		return false
+	}
+	return true
+}
+
+// Create handles POST /api/auth/invitations.
+func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePerm(w, r, "invitation:create") {
 		return
 	}
-	if claims.Role != "builtin:instance-owner" {
-		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
-		return
-	}
+	claims := middleware.ClaimsFromContext(r.Context())
 
 	var req struct {
 		Email string `json:"email"`
@@ -60,15 +84,9 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// List handles GET /api/auth/invitations — owner only.
+// List handles GET /api/auth/invitations.
 func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
-	claims := middleware.ClaimsFromContext(r.Context())
-	if claims == nil {
-		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
-		return
-	}
-	if claims.Role != "builtin:instance-owner" {
-		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
+	if !h.requirePerm(w, r, "invitation:list") {
 		return
 	}
 	invs, err := h.svc.List(r.Context())
@@ -79,15 +97,9 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, invs)
 }
 
-// Revoke handles DELETE /api/auth/invitations/{id} — owner only.
+// Revoke handles DELETE /api/auth/invitations/{id}.
 func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
-	claims := middleware.ClaimsFromContext(r.Context())
-	if claims == nil {
-		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
-		return
-	}
-	if claims.Role != "builtin:instance-owner" {
-		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
+	if !h.requirePerm(w, r, "invitation:revoke") {
 		return
 	}
 	id := chi.URLParam(r, "id")

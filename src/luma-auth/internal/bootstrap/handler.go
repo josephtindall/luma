@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/josephtindall/luma-auth/internal/authz"
 	"github.com/josephtindall/luma-auth/internal/session"
 	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
 	"github.com/josephtindall/luma-auth/pkg/httputil"
@@ -16,14 +17,42 @@ import (
 // Handler serves the setup wizard API endpoints.
 // All handlers call the Service — which re-checks state internally (third layer).
 type Handler struct {
-	svc    *Service
-	issuer session.Issuer
+	svc      *Service
+	issuer   session.Issuer
+	authzSvc authz.Authorizer
 }
 
 // NewHandler constructs the setup handler.
 // issuer is called after owner creation to issue the initial token pair.
 func NewHandler(svc *Service, issuer session.Issuer) *Handler {
 	return &Handler{svc: svc, issuer: issuer}
+}
+
+// SetAuthorizer injects the authz evaluator.
+func (h *Handler) SetAuthorizer(a authz.Authorizer) { h.authzSvc = a }
+
+func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request, action string) bool {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return false
+	}
+	if claims.Role == "builtin:instance-owner" {
+		return true
+	}
+	if h.authzSvc == nil {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
+		return false
+	}
+	result, err := h.authzSvc.Check(r.Context(), authz.CheckRequest{
+		UserID: claims.Subject,
+		Action: action,
+	})
+	if err != nil || !result.Allowed {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
+		return false
+	}
+	return true
 }
 
 // VerifyToken handles POST /api/setup/verify-token (Step 1).
@@ -154,15 +183,9 @@ func (h *Handler) CreateOwner(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// GetInstanceSettings handles GET /api/auth/admin/instance-settings — owner only.
+// GetInstanceSettings handles GET /api/auth/admin/instance-settings.
 func (h *Handler) GetInstanceSettings(w http.ResponseWriter, r *http.Request) {
-	claims := middleware.ClaimsFromContext(r.Context())
-	if claims == nil {
-		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
-		return
-	}
-	if claims.Role != "builtin:instance-owner" {
-		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
+	if !h.requirePerm(w, r, "instance:read") {
 		return
 	}
 
@@ -174,15 +197,9 @@ func (h *Handler) GetInstanceSettings(w http.ResponseWriter, r *http.Request) {
 	httputil.WriteJSON(w, http.StatusOK, instanceSettingsResponse(state))
 }
 
-// UpdateInstanceSettings handles PATCH /api/auth/admin/instance-settings — owner only.
+// UpdateInstanceSettings handles PATCH /api/auth/admin/instance-settings.
 func (h *Handler) UpdateInstanceSettings(w http.ResponseWriter, r *http.Request) {
-	claims := middleware.ClaimsFromContext(r.Context())
-	if claims == nil {
-		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
-		return
-	}
-	if claims.Role != "builtin:instance-owner" {
-		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
+	if !h.requirePerm(w, r, "instance:configure") {
 		return
 	}
 

@@ -185,6 +185,11 @@ func run() error {
 	authzHandler := authz.NewHandler(authzAuthorizer, auditSvc)
 	mfaHandler := mfapkg.NewHandler(mfaSvc, sessionSvc, sessionSvc, sessionSvc, true /* secureCookie */)
 
+	// Inject authz into handlers that support custom-role permission checks.
+	userHandler.SetAuthorizer(authzAuthorizer)
+	invHandler.SetAuthorizer(authzAuthorizer)
+	bootstrapHandler.SetAuthorizer(authzAuthorizer)
+
 	// ── 9. Router ─────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
 
@@ -274,6 +279,8 @@ func run() error {
 		r.Post("/api/auth/invitations", invHandler.Create)
 		r.Get("/api/auth/invitations", invHandler.List)
 		r.Delete("/api/auth/invitations/{id}", invHandler.Revoke)
+
+		r.Get("/api/auth/admin/access", userHandler.AdminAccess)
 
 		r.Get("/api/auth/admin/instance-settings", bootstrapHandler.GetInstanceSettings)
 		r.Patch("/api/auth/admin/instance-settings", bootstrapHandler.UpdateInstanceSettings)
