@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:qr_flutter/qr_flutter.dart';
 
+import '../../models/custom_role.dart';
 import '../../models/user.dart';
 import '../../services/user_service.dart';
 import '../../widgets/user_avatar.dart';
@@ -243,6 +244,66 @@ class _UserManageDialog extends StatefulWidget {
 class _UserManageDialogState extends State<_UserManageDialog> {
   bool _loading = false;
   PasswordResetLinkResult? _resetLink;
+
+  // Custom roles
+  List<CustomRoleRecord>? _userRoles;
+  List<CustomRoleRecord>? _allRoles;
+  String? _addRoleId;
+  bool _addingRole = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadCustomRoles();
+  }
+
+  Future<void> _loadCustomRoles() async {
+    try {
+      final results = await Future.wait([
+        widget.userService.getUserCustomRoles(widget.user.id),
+        widget.userService.listCustomRoles(),
+      ]);
+      if (mounted) {
+        setState(() {
+          _userRoles = results[0];
+          _allRoles = results[1];
+        });
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _removeCustomRole(String roleId) async {
+    try {
+      await widget.userService.removeCustomRoleFromUser(widget.user.id, roleId);
+      await _loadCustomRoles();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ));
+      }
+    }
+  }
+
+  Future<void> _assignCustomRole() async {
+    if (_addRoleId == null) return;
+    setState(() => _addingRole = true);
+    try {
+      await widget.userService.assignCustomRoleToUser(widget.user.id, _addRoleId!);
+      setState(() => _addRoleId = null);
+      await _loadCustomRoles();
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: Text(e.toString()),
+          backgroundColor: Theme.of(context).colorScheme.error,
+        ));
+      }
+    } finally {
+      if (mounted) setState(() => _addingRole = false);
+    }
+  }
 
   Future<void> _confirm({
     required String title,
@@ -541,6 +602,72 @@ class _UserManageDialogState extends State<_UserManageDialog> {
                                         .adminRevokeAllPasskeys(u.id),
                                   ),
                     ),
+                    const SizedBox(height: 20),
+                    _SectionHeader(label: 'Custom Roles'),
+                    const SizedBox(height: 8),
+                    if (_userRoles == null)
+                      const SizedBox(
+                        height: 24,
+                        child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+                      )
+                    else ...[
+                      if (_userRoles!.isEmpty)
+                        Text('No custom roles assigned.',
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: cs.onSurfaceVariant))
+                      else
+                        Wrap(
+                          spacing: 6,
+                          runSpacing: 4,
+                          children: _userRoles!.map((role) {
+                            return Chip(
+                              label: Text(role.name),
+                              deleteIcon: const Icon(Icons.close, size: 16),
+                              onDeleted: () => _removeCustomRole(role.id),
+                            );
+                          }).toList(),
+                        ),
+                      const SizedBox(height: 8),
+                      if (_allRoles != null) ...[
+                        Row(
+                          children: [
+                            Expanded(
+                              child: DropdownButtonFormField<String>(
+                                initialValue: _addRoleId,
+                                decoration: const InputDecoration(
+                                  labelText: 'Add role',
+                                  border: OutlineInputBorder(),
+                                  isDense: true,
+                                ),
+                                items: _allRoles!
+                                    .where((r) => _userRoles!
+                                        .every((ur) => ur.id != r.id))
+                                    .map((r) => DropdownMenuItem(
+                                          value: r.id,
+                                          child: Text(r.name),
+                                        ))
+                                    .toList(),
+                                onChanged: (v) =>
+                                    setState(() => _addRoleId = v),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            FilledButton(
+                              onPressed: (_addRoleId == null || _addingRole)
+                                  ? null
+                                  : _assignCustomRole,
+                              child: _addingRole
+                                  ? const SizedBox(
+                                      width: 16,
+                                      height: 16,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2))
+                                  : const Text('Assign'),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ],
                   ],
                 ),
               ),

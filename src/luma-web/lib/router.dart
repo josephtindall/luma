@@ -8,9 +8,12 @@ import 'screens/setup/setup_wizard_screen.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/settings/settings_screen.dart';
+import 'screens/admin/admin_layout.dart';
 import 'screens/admin/admin_users_screen.dart';
 import 'screens/admin/admin_invites_screen.dart';
 import 'screens/admin/admin_settings_screen.dart';
+import 'screens/admin/admin_groups_screen.dart';
+import 'screens/admin/admin_roles_screen.dart';
 import 'screens/register/register_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/main_layout.dart';
@@ -104,17 +107,30 @@ GoRouter buildRouter(
             path: '/settings',
             builder: (_, __) => SettingsScreen(userService: userService),
           ),
-          GoRoute(
-            path: '/admin/users',
-            builder: (_, __) => AdminUsersScreen(userService: userService),
-          ),
-          GoRoute(
-            path: '/admin/invites',
-            builder: (_, __) => AdminInvitesScreen(userService: userService),
-          ),
-          GoRoute(
-            path: '/admin/settings',
-            builder: (_, __) => AdminSettingsScreen(userService: userService),
+          ShellRoute(
+            builder: (_, __, child) => AdminLayout(child: child),
+            routes: [
+              GoRoute(
+                path: '/admin/users',
+                builder: (_, __) => AdminUsersScreen(userService: userService),
+              ),
+              GoRoute(
+                path: '/admin/invites',
+                builder: (_, __) => AdminInvitesScreen(userService: userService),
+              ),
+              GoRoute(
+                path: '/admin/groups',
+                builder: (_, __) => AdminGroupsScreen(userService: userService),
+              ),
+              GoRoute(
+                path: '/admin/roles',
+                builder: (_, __) => AdminRolesScreen(userService: userService),
+              ),
+              GoRoute(
+                path: '/admin/settings',
+                builder: (_, __) => AdminSettingsScreen(userService: userService),
+              ),
+            ],
           ),
         ],
       ),

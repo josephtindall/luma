@@ -33,6 +33,8 @@ var (
 	ErrWebAuthnSessionExpired = errors.New("webauthn session expired") // 400
 	ErrMFANotEnabled          = errors.New("mfa not enabled")          // 400
 	ErrPasswordReused         = errors.New("password was recently used") // 422
+	ErrGroupCycle             = errors.New("group cycle detected")       // 409
+	ErrGroupNotEmpty          = errors.New("group is not empty")         // 409
 )
 
 // HTTPStatus maps a sentinel error to its canonical HTTP status code.
@@ -87,6 +89,10 @@ func HTTPStatus(err error) int {
 		return http.StatusBadRequest
 	case errors.Is(err, ErrPasswordReused):
 		return http.StatusUnprocessableEntity
+	case errors.Is(err, ErrGroupCycle):
+		return http.StatusConflict
+	case errors.Is(err, ErrGroupNotEmpty):
+		return http.StatusConflict
 	default:
 		return http.StatusInternalServerError
 	}
@@ -145,6 +151,10 @@ func ErrorCode(err error) string {
 		return "MFA_NOT_ENABLED"
 	case errors.Is(err, ErrPasswordReused):
 		return "PASSWORD_REUSED"
+	case errors.Is(err, ErrGroupCycle):
+		return "GROUP_CYCLE"
+	case errors.Is(err, ErrGroupNotEmpty):
+		return "GROUP_NOT_EMPTY"
 	default:
 		return "INTERNAL_ERROR"
 	}

@@ -88,6 +88,32 @@ func (h *Handler) AdminRoutes() chi.Router {
 	r.Post("/invitations", h.proxyAuth("POST", "/api/auth/invitations"))
 	r.Get("/invitations", h.proxyAuth("GET", "/api/auth/invitations"))
 	r.Delete("/invitations/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/invitations/", "id"))
+
+	// User custom role assignments
+	r.Get("/users/{id}/custom-roles", h.proxyAuthTemplate("GET", "/api/auth/admin/users/{id}/custom-roles"))
+	r.Post("/users/{id}/custom-roles/{roleID}", h.proxyAuthTemplate("POST", "/api/auth/admin/users/{id}/custom-roles/{roleID}"))
+	r.Delete("/users/{id}/custom-roles/{roleID}", h.proxyAuthTemplate("DELETE", "/api/auth/admin/users/{id}/custom-roles/{roleID}"))
+
+	// Groups
+	r.Get("/groups", h.proxyAuth("GET", "/api/auth/admin/groups"))
+	r.Post("/groups", h.proxyAuth("POST", "/api/auth/admin/groups"))
+	r.Get("/groups/{id}", h.proxyAuthWithParam("GET", "/api/auth/admin/groups/", "id"))
+	r.Patch("/groups/{id}", h.proxyAuthWithParam("PATCH", "/api/auth/admin/groups/", "id"))
+	r.Delete("/groups/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/admin/groups/", "id"))
+	r.Post("/groups/{id}/members", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/groups/", "id", "/members"))
+	r.Delete("/groups/{id}/members/{type}/{memberID}", h.proxyAuthTemplate("DELETE", "/api/auth/admin/groups/{id}/members/{type}/{memberID}"))
+	r.Post("/groups/{id}/roles/{roleID}", h.proxyAuthTemplate("POST", "/api/auth/admin/groups/{id}/roles/{roleID}"))
+	r.Delete("/groups/{id}/roles/{roleID}", h.proxyAuthTemplate("DELETE", "/api/auth/admin/groups/{id}/roles/{roleID}"))
+
+	// Custom roles
+	r.Get("/custom-roles", h.proxyAuth("GET", "/api/auth/admin/custom-roles"))
+	r.Post("/custom-roles", h.proxyAuth("POST", "/api/auth/admin/custom-roles"))
+	r.Get("/custom-roles/{id}", h.proxyAuthWithParam("GET", "/api/auth/admin/custom-roles/", "id"))
+	r.Patch("/custom-roles/{id}", h.proxyAuthWithParam("PATCH", "/api/auth/admin/custom-roles/", "id"))
+	r.Delete("/custom-roles/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/admin/custom-roles/", "id"))
+	r.Put("/custom-roles/{id}/permissions/{action}", h.proxyAuthTemplate("PUT", "/api/auth/admin/custom-roles/{id}/permissions/{action}"))
+	r.Delete("/custom-roles/{id}/permissions/{action}", h.proxyAuthTemplate("DELETE", "/api/auth/admin/custom-roles/{id}/permissions/{action}"))
+
 	return r
 }
 
@@ -254,6 +280,52 @@ func (h *Handler) proxyAuthWithParamAndSuffix(method, authPathPrefix, paramName,
 		}
 
 		req, err := http.NewRequestWithContext(r.Context(), method, h.authURL+authPathPrefix+paramVal+suffix, r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+
+		resp, err := h.client.Do(req)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
+			return
+		}
+		defer resp.Body.Close()
+
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
+	}
+}
+
+// proxyAuthTemplate returns a handler that builds the auth service path from a template
+// containing {paramName} placeholders, substituting chi URL params for each.
+// Used for routes with multiple URL params (e.g. /groups/{id}/members/{type}/{memberID}).
+func (h *Handler) proxyAuthTemplate(method, authPathTemplate string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Replace all {param} placeholders with the corresponding chi URL param values.
+		path := authPathTemplate
+		for strings.Contains(path, "{") {
+			start := strings.Index(path, "{")
+			end := strings.Index(path[start:], "}")
+			if start < 0 || end < 0 {
+				break
+			}
+			end += start
+			paramName := path[start+1 : end]
+			paramVal := chi.URLParam(r, paramName)
+			if paramVal == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid " + paramName})
+				return
+			}
+			path = path[:start] + paramVal + path[end+1:]
+		}
+
+		req, err := http.NewRequestWithContext(r.Context(), method, h.authURL+path, r.Body)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return

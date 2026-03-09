@@ -1,6 +1,8 @@
 import 'dart:convert';
 import 'package:flutter/foundation.dart';
 
+import '../models/custom_role.dart';
+import '../models/group.dart';
 import '../models/instance_settings.dart';
 import '../models/user.dart';
 import 'api_client.dart';
@@ -437,6 +439,201 @@ class UserService extends ChangeNotifier {
       expiresAt: DateTime.tryParse(data['expires_at'] as String? ?? '') ??
           DateTime.now().add(const Duration(days: 7)),
     );
+  }
+
+  // ── Admin: groups ────────────────────────────────────────────────────────
+
+  Future<List<GroupRecord>> listGroups() async {
+    final resp = await _api.get('/api/luma/admin/groups');
+    if (resp.statusCode != 200) {
+      throw Exception('Failed to load groups');
+    }
+    final data = json.decode(resp.body);
+    final items = data is List ? data : (data as Map<String, dynamic>)['groups'] ?? data;
+    return (items as List<dynamic>)
+        .map((e) => GroupRecord.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<GroupRecord> getGroup(String id) async {
+    final resp = await _api.get('/api/luma/admin/groups/$id');
+    if (resp.statusCode != 200) throw Exception('Failed to load group');
+    return GroupRecord.fromJson(json.decode(resp.body) as Map<String, dynamic>);
+  }
+
+  Future<GroupRecord> createGroup(String name) async {
+    final resp = await _api.post('/api/luma/admin/groups', {'name': name});
+    if (resp.statusCode != 201) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['message'] ?? 'Failed to create group');
+    }
+    return GroupRecord.fromJson(json.decode(resp.body) as Map<String, dynamic>);
+  }
+
+  Future<GroupRecord> renameGroup(String id, String name) async {
+    final resp = await _api.patch('/api/luma/admin/groups/$id', {'name': name});
+    if (resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['message'] ?? 'Failed to rename group');
+    }
+    return GroupRecord.fromJson(json.decode(resp.body) as Map<String, dynamic>);
+  }
+
+  Future<void> deleteGroup(String id) async {
+    final resp = await _api.delete('/api/luma/admin/groups/$id');
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['message'] ?? 'Failed to delete group');
+    }
+  }
+
+  Future<void> addGroupMember(
+      String groupId, String memberType, String memberId) async {
+    final resp = await _api.post('/api/luma/admin/groups/$groupId/members', {
+      'member_type': memberType,
+      'member_id': memberId,
+    });
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['message'] ?? 'Failed to add member');
+    }
+  }
+
+  Future<void> removeGroupMember(
+      String groupId, String memberType, String memberId) async {
+    final resp = await _api
+        .delete('/api/luma/admin/groups/$groupId/members/$memberType/$memberId');
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['message'] ?? 'Failed to remove member');
+    }
+  }
+
+  Future<void> assignRoleToGroup(String groupId, String roleId) async {
+    final resp = await _api
+        .post('/api/luma/admin/groups/$groupId/roles/$roleId', {});
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['message'] ?? 'Failed to assign role');
+    }
+  }
+
+  Future<void> removeRoleFromGroup(String groupId, String roleId) async {
+    final resp =
+        await _api.delete('/api/luma/admin/groups/$groupId/roles/$roleId');
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['message'] ?? 'Failed to remove role');
+    }
+  }
+
+  // ── Admin: custom roles ──────────────────────────────────────────────────
+
+  Future<List<CustomRoleRecord>> listCustomRoles() async {
+    final resp = await _api.get('/api/luma/admin/custom-roles');
+    if (resp.statusCode != 200) throw Exception('Failed to load custom roles');
+    final data = json.decode(resp.body);
+    final items =
+        data is List ? data : (data as Map<String, dynamic>)['roles'] ?? data;
+    return (items as List<dynamic>)
+        .map((e) => CustomRoleRecord.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<CustomRoleRecord> getCustomRole(String id) async {
+    final resp = await _api.get('/api/luma/admin/custom-roles/$id');
+    if (resp.statusCode != 200) throw Exception('Failed to load custom role');
+    return CustomRoleRecord.fromJson(
+        json.decode(resp.body) as Map<String, dynamic>);
+  }
+
+  Future<CustomRoleRecord> createCustomRole(String name, {int? priority}) async {
+    final body = <String, dynamic>{'name': name};
+    if (priority != null) body['priority'] = priority;
+    final resp = await _api.post('/api/luma/admin/custom-roles', body);
+    if (resp.statusCode != 201) {
+      final b = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(b['message'] ?? 'Failed to create role');
+    }
+    return CustomRoleRecord.fromJson(
+        json.decode(resp.body) as Map<String, dynamic>);
+  }
+
+  Future<CustomRoleRecord> updateCustomRole(String id, String name,
+      {int? priority, bool clearPriority = false}) async {
+    final body = <String, dynamic>{'name': name};
+    if (clearPriority) {
+      body['priority'] = null;
+    } else if (priority != null) {
+      body['priority'] = priority;
+    }
+    final resp = await _api.patch('/api/luma/admin/custom-roles/$id', body);
+    if (resp.statusCode != 200) {
+      final b = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(b['message'] ?? 'Failed to update role');
+    }
+    return CustomRoleRecord.fromJson(
+        json.decode(resp.body) as Map<String, dynamic>);
+  }
+
+  Future<void> deleteCustomRole(String id) async {
+    final resp = await _api.delete('/api/luma/admin/custom-roles/$id');
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['message'] ?? 'Failed to delete role');
+    }
+  }
+
+  Future<void> setCustomRolePermission(
+      String roleId, String action, String effect) async {
+    final resp = await _api.put(
+      '/api/luma/admin/custom-roles/$roleId/permissions/$action',
+      {'effect': effect},
+    );
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['message'] ?? 'Failed to set permission');
+    }
+  }
+
+  Future<void> removeCustomRolePermission(String roleId, String action) async {
+    final resp = await _api
+        .delete('/api/luma/admin/custom-roles/$roleId/permissions/$action');
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['message'] ?? 'Failed to remove permission');
+    }
+  }
+
+  // ── Admin: user custom role assignments ──────────────────────────────────
+
+  Future<List<CustomRoleRecord>> getUserCustomRoles(String userId) async {
+    final resp =
+        await _api.get('/api/luma/admin/users/$userId/custom-roles');
+    if (resp.statusCode != 200) throw Exception('Failed to load user roles');
+    final data = json.decode(resp.body);
+    final List<dynamic> items = data is List<dynamic> ? data : [];
+    return items
+        .map((e) => CustomRoleRecord.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> assignCustomRoleToUser(String userId, String roleId) async {
+    final resp = await _api
+        .post('/api/luma/admin/users/$userId/custom-roles/$roleId', {});
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['message'] ?? 'Failed to assign role');
+    }
+  }
+
+  Future<void> removeCustomRoleFromUser(String userId, String roleId) async {
+    final resp = await _api
+        .delete('/api/luma/admin/users/$userId/custom-roles/$roleId');
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['message'] ?? 'Failed to remove role');
+    }
   }
 
   void clear() {

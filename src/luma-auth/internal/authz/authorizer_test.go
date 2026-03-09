@@ -25,6 +25,15 @@ func (m *mockAuthzRepo) GetResourcePermission(_ context.Context, _, _, _ string)
 func (m *mockAuthzRepo) IsFeatureEnabled(_ context.Context, _ string) (bool, error) {
 	return m.featureEnabled, nil
 }
+func (m *mockAuthzRepo) IsOwner(_ context.Context, _ string) (bool, error) {
+	return false, nil
+}
+func (m *mockAuthzRepo) GetCustomRolePermissionsForUser(_ context.Context, _, _ string) ([]CustomRolePerm, error) {
+	return nil, nil
+}
+func (m *mockAuthzRepo) InvalidateUserCache(_ context.Context, _ string) error {
+	return nil
+}
 
 func newTestAuthorizer(repo Repository) *DefaultAuthorizer {
 	return NewDefaultAuthorizer(repo, nil) // nil Redis — caching skipped in tests

@@ -9,7 +9,7 @@ import (
 // TestAuthz_GetInstanceRole_Owner verifies that an owner user gets the
 // owner-all policy statements seeded by migration 0003.
 func TestAuthz_GetInstanceRole_Owner(t *testing.T) {
-	repo := authzpg.New(testDB)
+	repo := authzpg.New(testDB, nil)
 	ownerID := insertOwnerUser(t, uniqueEmail())
 
 	stmts, err := repo.GetInstanceRole(bg(), ownerID)
@@ -32,7 +32,7 @@ func TestAuthz_GetInstanceRole_Owner(t *testing.T) {
 
 // TestAuthz_GetInstanceRole_Member verifies the member baseline policy.
 func TestAuthz_GetInstanceRole_Member(t *testing.T) {
-	repo := authzpg.New(testDB)
+	repo := authzpg.New(testDB, nil)
 	memberID := insertUser(t, uniqueEmail())
 
 	stmts, err := repo.GetInstanceRole(bg(), memberID)
@@ -59,7 +59,7 @@ func TestAuthz_GetInstanceRole_Member(t *testing.T) {
 // TestAuthz_GetInstanceRole_NoUserID_ReturnsEmpty verifies that an unknown
 // user ID produces an empty (not errored) result.
 func TestAuthz_GetInstanceRole_NoUserID_ReturnsEmpty(t *testing.T) {
-	repo := authzpg.New(testDB)
+	repo := authzpg.New(testDB, nil)
 	stmts, err := repo.GetInstanceRole(bg(), genUUID(t))
 	if err != nil {
 		t.Fatalf("GetInstanceRole: %v", err)
@@ -71,7 +71,7 @@ func TestAuthz_GetInstanceRole_NoUserID_ReturnsEmpty(t *testing.T) {
 
 // TestAuthz_GetVaultRole_AlwaysNil verifies the stub returns nil without error.
 func TestAuthz_GetVaultRole_AlwaysNil(t *testing.T) {
-	repo := authzpg.New(testDB)
+	repo := authzpg.New(testDB, nil)
 	stmts, err := repo.GetVaultRole(bg(), genUUID(t), genUUID(t))
 	if err != nil {
 		t.Fatalf("GetVaultRole: %v", err)
@@ -84,7 +84,7 @@ func TestAuthz_GetVaultRole_AlwaysNil(t *testing.T) {
 // TestAuthz_GetResourcePermission_NoRow_ReturnsNil verifies that when no
 // resource permission exists the method returns nil, nil.
 func TestAuthz_GetResourcePermission_NoRow_ReturnsNil(t *testing.T) {
-	repo := authzpg.New(testDB)
+	repo := authzpg.New(testDB, nil)
 	rp, err := repo.GetResourcePermission(bg(), genUUID(t), "page", genUUID(t))
 	if err != nil {
 		t.Fatalf("GetResourcePermission: %v", err)
@@ -96,7 +96,7 @@ func TestAuthz_GetResourcePermission_NoRow_ReturnsNil(t *testing.T) {
 
 // TestAuthz_GetResourcePermission_ReturnsRow verifies retrieval of a seeded row.
 func TestAuthz_GetResourcePermission_ReturnsRow(t *testing.T) {
-	repo := authzpg.New(testDB)
+	repo := authzpg.New(testDB, nil)
 	userID := insertUser(t, uniqueEmail())
 	grantedBy := insertOwnerUser(t, uniqueEmail())
 	resourceID := "page-" + randHex(4)
@@ -129,7 +129,7 @@ func TestAuthz_GetResourcePermission_ReturnsRow(t *testing.T) {
 // TestAuthz_GetResourcePermission_Expired_ReturnsNil verifies that an expired
 // permission is not returned.
 func TestAuthz_GetResourcePermission_Expired_ReturnsNil(t *testing.T) {
-	repo := authzpg.New(testDB)
+	repo := authzpg.New(testDB, nil)
 	userID := insertUser(t, uniqueEmail())
 	grantedBy := insertOwnerUser(t, uniqueEmail())
 	resourceID := "page-" + randHex(4)
@@ -154,7 +154,7 @@ func TestAuthz_GetResourcePermission_Expired_ReturnsNil(t *testing.T) {
 
 // TestAuthz_IsFeatureEnabled_AbsentKey_ReturnsTrue verifies the COALESCE default.
 func TestAuthz_IsFeatureEnabled_AbsentKey_ReturnsTrue(t *testing.T) {
-	repo := authzpg.New(testDB)
+	repo := authzpg.New(testDB, nil)
 	enabled, err := repo.IsFeatureEnabled(bg(), "nonexistent_feature_xyz")
 	if err != nil {
 		t.Fatalf("IsFeatureEnabled: %v", err)
@@ -166,7 +166,7 @@ func TestAuthz_IsFeatureEnabled_AbsentKey_ReturnsTrue(t *testing.T) {
 
 // TestAuthz_IsFeatureEnabled_ExplicitFalse verifies a disabled feature.
 func TestAuthz_IsFeatureEnabled_ExplicitFalse(t *testing.T) {
-	repo := authzpg.New(testDB)
+	repo := authzpg.New(testDB, nil)
 
 	// Write a disabled feature directly to the instance row.
 	testDB.Exec(bg(), `UPDATE auth.instance SET features = features || '{"test_flag": false}'::jsonb`) //nolint:errcheck
@@ -185,7 +185,7 @@ func TestAuthz_IsFeatureEnabled_ExplicitFalse(t *testing.T) {
 
 // TestAuthz_IsFeatureEnabled_ExplicitTrue verifies an explicitly enabled feature.
 func TestAuthz_IsFeatureEnabled_ExplicitTrue(t *testing.T) {
-	repo := authzpg.New(testDB)
+	repo := authzpg.New(testDB, nil)
 
 	testDB.Exec(bg(), `UPDATE auth.instance SET features = features || '{"test_flag2": true}'::jsonb`) //nolint:errcheck
 	t.Cleanup(func() {

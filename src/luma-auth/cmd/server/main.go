@@ -26,8 +26,12 @@ import (
 	authzpg "github.com/josephtindall/luma-auth/internal/authz/postgres"
 	"github.com/josephtindall/luma-auth/internal/bootstrap"
 	bootstrappg "github.com/josephtindall/luma-auth/internal/bootstrap/postgres"
+	"github.com/josephtindall/luma-auth/internal/customrole"
+	customrolepg "github.com/josephtindall/luma-auth/internal/customrole/postgres"
 	"github.com/josephtindall/luma-auth/internal/device"
 	devicepg "github.com/josephtindall/luma-auth/internal/device/postgres"
+	"github.com/josephtindall/luma-auth/internal/group"
+	grouppg "github.com/josephtindall/luma-auth/internal/group/postgres"
 	"github.com/josephtindall/luma-auth/internal/invitation"
 	invitationpg "github.com/josephtindall/luma-auth/internal/invitation/postgres"
 	mfapkg "github.com/josephtindall/luma-auth/internal/mfa"
@@ -99,7 +103,7 @@ func run() error {
 	prefRepo := prefpg.New(db)
 	invitationRepo := invitationpg.New(db)
 	bootstrapRepo := bootstrappg.New(db)
-	authzRepo := authzpg.New(db)
+	authzRepo := authzpg.New(db, rdb)
 	mfaRepo := mfapg.New(db)
 
 	// ── 5b. WebAuthn instance ─────────────────────────────────────────────────────
@@ -153,6 +157,14 @@ func run() error {
 	passwordResetSvc := passwordresetpkg.NewService(passwordResetRepo, userRepo, userSvc)
 
 	authzAuthorizer := authz.NewDefaultAuthorizer(authzRepo, rdb)
+
+	groupRepo := grouppg.New(db)
+	groupSvc := group.NewService(groupRepo)
+	groupHandler := group.NewHandler(groupSvc)
+
+	roleRepo := customrolepg.New(db)
+	roleSvc := customrole.NewService(roleRepo)
+	roleHandler := customrole.NewHandler(roleSvc)
 
 	// ── 7. Bootstrap initialisation ───────────────────────────────────────────
 	// Ensures the instance row exists. Prints the setup token to stdout when
@@ -275,6 +287,31 @@ func run() error {
 		r.Post("/api/auth/admin/users/{id}/password-reset", passwordResetHandler.AdminCreateResetToken)
 		r.Delete("/api/auth/admin/users/{id}/mfa/totp", mfaHandler.AdminDeleteAllTOTP)
 		r.Delete("/api/auth/admin/users/{id}/passkeys", mfaHandler.AdminRevokeAllPasskeys)
+
+		// User custom role assignments
+		r.Get("/api/auth/admin/users/{id}/custom-roles", roleHandler.ListUserCustomRoles)
+		r.Post("/api/auth/admin/users/{id}/custom-roles/{roleID}", roleHandler.AssignToUser)
+		r.Delete("/api/auth/admin/users/{id}/custom-roles/{roleID}", roleHandler.RemoveFromUser)
+
+		// Groups (owner-only — enforced inside handler)
+		r.Get("/api/auth/admin/groups", groupHandler.ListGroups)
+		r.Post("/api/auth/admin/groups", groupHandler.CreateGroup)
+		r.Get("/api/auth/admin/groups/{id}", groupHandler.GetGroup)
+		r.Patch("/api/auth/admin/groups/{id}", groupHandler.RenameGroup)
+		r.Delete("/api/auth/admin/groups/{id}", groupHandler.DeleteGroup)
+		r.Post("/api/auth/admin/groups/{id}/members", groupHandler.AddMember)
+		r.Delete("/api/auth/admin/groups/{id}/members/{type}/{memberID}", groupHandler.RemoveMember)
+		r.Post("/api/auth/admin/groups/{id}/roles/{roleID}", groupHandler.AssignRole)
+		r.Delete("/api/auth/admin/groups/{id}/roles/{roleID}", groupHandler.RemoveRole)
+
+		// Custom roles (owner-only — enforced inside handler)
+		r.Get("/api/auth/admin/custom-roles", roleHandler.ListRoles)
+		r.Post("/api/auth/admin/custom-roles", roleHandler.CreateRole)
+		r.Get("/api/auth/admin/custom-roles/{id}", roleHandler.GetRole)
+		r.Patch("/api/auth/admin/custom-roles/{id}", roleHandler.UpdateRole)
+		r.Delete("/api/auth/admin/custom-roles/{id}", roleHandler.DeleteRole)
+		r.Put("/api/auth/admin/custom-roles/{id}/permissions/{action}", roleHandler.SetPermission)
+		r.Delete("/api/auth/admin/custom-roles/{id}/permissions/{action}", roleHandler.RemovePermission)
 	})
 
 	// ── 10. Start server + graceful shutdown ──────────────────────────────────
