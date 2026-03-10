@@ -94,7 +94,15 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
                   itemBuilder: (_, i) {
                     final g = _groups![i];
                     return ListTile(
-                      title: Text(g.name),
+                      title: Row(
+                        children: [
+                          Text(g.name),
+                          if (g.isSystem) ...[
+                            const SizedBox(width: 8),
+                            const _SystemBadge(),
+                          ],
+                        ],
+                      ),
                       subtitle: Text('${g.memberCount} member${g.memberCount == 1 ? '' : 's'}'
                           ' · ${g.roleIds.length} role${g.roleIds.length == 1 ? '' : 's'}'),
                       trailing: OutlinedButton(
@@ -317,7 +325,9 @@ class _GroupManageDialogState extends State<_GroupManageDialog> {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final detail = _detail;
-    final canDelete = (detail?.memberCount ?? 1) == 0;
+    final isSystem = detail?.isSystem ?? false;
+    final noMemberControl = detail?.noMemberControl ?? false;
+    final canDelete = (detail?.memberCount ?? 1) == 0 && !isSystem;
 
     return Dialog(
       child: ConstrainedBox(
@@ -365,13 +375,19 @@ class _GroupManageDialogState extends State<_GroupManageDialog> {
                                     OutlinedButton(onPressed: _rename, child: const Text('Rename')),
                                   ],
                                 ),
+                                if (isSystem) ...[
+                                  const SizedBox(height: 8),
+                                  const _SystemBadge(large: true),
+                                ],
                                 const SizedBox(height: 8),
                                 OutlinedButton.icon(
                                   onPressed: canDelete ? _delete : null,
                                   icon: const Icon(Icons.delete_outline, size: 16),
-                                  label: Text(canDelete
-                                      ? 'Delete group'
-                                      : 'Cannot delete (has members)'),
+                                  label: Text(isSystem
+                                      ? 'Cannot delete (system group)'
+                                      : canDelete
+                                          ? 'Delete group'
+                                          : 'Cannot delete (has members)'),
                                   style: OutlinedButton.styleFrom(
                                     foregroundColor: canDelete ? colorScheme.error : null,
                                   ),
@@ -380,7 +396,14 @@ class _GroupManageDialogState extends State<_GroupManageDialog> {
                                 // ── Members ─────────────────────────────
                                 Text('Members', style: Theme.of(context).textTheme.labelLarge),
                                 const SizedBox(height: 8),
-                                if (detail!.members.isEmpty)
+                                if (noMemberControl)
+                                  Text(
+                                    'Membership is managed automatically by the system.',
+                                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                          color: colorScheme.onSurfaceVariant,
+                                        ),
+                                  )
+                                else if (detail!.members.isEmpty)
                                   const Text('No members')
                                 else
                                   ...detail.members.map((m) => ListTile(
@@ -398,19 +421,21 @@ class _GroupManageDialogState extends State<_GroupManageDialog> {
                                       onPressed: () => _removeMember(m),
                                     ),
                                   )),
-                                const SizedBox(height: 8),
-                                _AddMemberRow(
-                                  allUsers: _allUsers ?? [],
-                                  allGroups: _allGroups ?? [],
-                                  existingMembers: detail.members,
-                                  onAddUser: _addUserMember,
-                                  onAddGroup: _addGroupMember,
-                                ),
+                                if (!noMemberControl) ...[
+                                  const SizedBox(height: 8),
+                                  _AddMemberRow(
+                                    allUsers: _allUsers ?? [],
+                                    allGroups: _allGroups ?? [],
+                                    existingMembers: detail!.members,
+                                    onAddUser: _addUserMember,
+                                    onAddGroup: _addGroupMember,
+                                  ),
+                                ],
                                 const Divider(height: 32),
                                 // ── Roles ────────────────────────────────
                                 Text('Assigned roles', style: Theme.of(context).textTheme.labelLarge),
                                 const SizedBox(height: 8),
-                                if (detail.roleIds.isEmpty)
+                                if (detail!.roleIds.isEmpty)
                                   const Text('No roles assigned')
                                 else
                                   ...detail.roleIds.map((rid) {
@@ -572,6 +597,40 @@ class _AddRoleRowState extends State<_AddRoleRow> {
                 },
         ),
       ],
+    );
+  }
+}
+
+class _SystemBadge extends StatelessWidget {
+  final bool large;
+  const _SystemBadge({this.large = false});
+
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: EdgeInsets.symmetric(
+          horizontal: large ? 10 : 6, vertical: large ? 4 : 2),
+      decoration: BoxDecoration(
+        color: colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline,
+              size: large ? 14 : 11,
+              color: colorScheme.onTertiaryContainer),
+          SizedBox(width: large ? 4 : 3),
+          Text(
+            'System',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onTertiaryContainer,
+                  fontSize: large ? 12 : null,
+                ),
+          ),
+        ],
+      ),
     );
   }
 }

@@ -78,6 +78,14 @@ func (r *Repository) Create(ctx context.Context, u *user.User) error {
 		}
 		return fmt.Errorf("user.postgres.Create: %w", err)
 	}
+
+	// Enrol the new user in the "Users" system group (best-effort).
+	const addToUsers = `
+		INSERT INTO auth.group_members (group_id, member_type, member_id)
+		VALUES ('00000000-0000-0000-0000-000000000003', 'user', $1)
+		ON CONFLICT DO NOTHING`
+	_, _ = r.db.Exec(ctx, addToUsers, u.ID)
+
 	return nil
 }
 
@@ -215,6 +223,13 @@ func (r *Repository) RegisterAtomic(ctx context.Context, params user.RegisterPar
 	if tag.RowsAffected() != 1 {
 		return "", pkgerrors.ErrTokenInvalid
 	}
+
+	// Enrol the new user in the "Users" system group (best-effort).
+	const addToUsers = `
+		INSERT INTO auth.group_members (group_id, member_type, member_id)
+		VALUES ('00000000-0000-0000-0000-000000000003', 'user', $1)
+		ON CONFLICT DO NOTHING`
+	_, _ = tx.Exec(ctx, addToUsers, userID)
 
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("user.postgres.RegisterAtomic commit: %w", err)

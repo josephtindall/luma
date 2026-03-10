@@ -33,8 +33,10 @@ var (
 	ErrWebAuthnSessionExpired = errors.New("webauthn session expired") // 400
 	ErrMFANotEnabled          = errors.New("mfa not enabled")          // 400
 	ErrPasswordReused         = errors.New("password was recently used") // 422
-	ErrGroupCycle             = errors.New("group cycle detected")       // 409
-	ErrGroupNotEmpty          = errors.New("group is not empty")         // 409
+	ErrGroupCycle             = errors.New("group cycle detected")              // 409
+	ErrGroupNotEmpty          = errors.New("group is not empty")               // 409
+	ErrGroupNoMemberControl   = errors.New("group membership is auto-managed") // 409
+	ErrSystemEntity           = errors.New("system entity cannot be modified") // 403
 )
 
 // HTTPStatus maps a sentinel error to its canonical HTTP status code.
@@ -93,6 +95,10 @@ func HTTPStatus(err error) int {
 		return http.StatusConflict
 	case errors.Is(err, ErrGroupNotEmpty):
 		return http.StatusConflict
+	case errors.Is(err, ErrGroupNoMemberControl):
+		return http.StatusConflict
+	case errors.Is(err, ErrSystemEntity):
+		return http.StatusForbidden
 	default:
 		return http.StatusInternalServerError
 	}
@@ -155,6 +161,10 @@ func ErrorCode(err error) string {
 		return "GROUP_CYCLE"
 	case errors.Is(err, ErrGroupNotEmpty):
 		return "GROUP_NOT_EMPTY"
+	case errors.Is(err, ErrGroupNoMemberControl):
+		return "GROUP_NO_MEMBER_CONTROL"
+	case errors.Is(err, ErrSystemEntity):
+		return "SYSTEM_ENTITY"
 	default:
 		return "INTERNAL_ERROR"
 	}

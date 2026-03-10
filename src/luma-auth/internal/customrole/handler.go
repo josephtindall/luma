@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/josephtindall/luma-auth/internal/authz"
 	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
 	"github.com/josephtindall/luma-auth/pkg/httputil"
 	"github.com/josephtindall/luma-auth/pkg/middleware"
@@ -12,7 +13,8 @@ import (
 
 // Handler serves custom role admin endpoints.
 type Handler struct {
-	svc *Service
+	svc      *Service
+	authzSvc authz.Authorizer
 }
 
 // NewHandler constructs the custom role handler.
@@ -20,14 +22,28 @@ func NewHandler(svc *Service) *Handler {
 	return &Handler{svc: svc}
 }
 
-func (h *Handler) requireOwner(w http.ResponseWriter, r *http.Request) bool {
+// SetAuthorizer injects the authz evaluator (called after construction in main).
+func (h *Handler) SetAuthorizer(a authz.Authorizer) { h.authzSvc = a }
+
+func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request) bool {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
 		return false
 	}
-	if claims.Role != "builtin:instance-owner" {
-		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
+	if claims.Role == "builtin:instance-owner" {
+		return true
+	}
+	if h.authzSvc == nil {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
+		return false
+	}
+	result, err := h.authzSvc.Check(r.Context(), authz.CheckRequest{
+		UserID: claims.Subject,
+		Action: "role:manage",
+	})
+	if err != nil || !result.Allowed {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
 		return false
 	}
 	return true
@@ -35,7 +51,7 @@ func (h *Handler) requireOwner(w http.ResponseWriter, r *http.Request) bool {
 
 // ListRoles handles GET /api/auth/admin/custom-roles.
 func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOwner(w, r) {
+	if !h.requirePerm(w, r) {
 		return
 	}
 	roles, err := h.svc.List(r.Context())
@@ -51,7 +67,7 @@ func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
 
 // CreateRole handles POST /api/auth/admin/custom-roles.
 func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOwner(w, r) {
+	if !h.requirePerm(w, r) {
 		return
 	}
 	var req struct {
@@ -72,7 +88,7 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 
 // GetRole handles GET /api/auth/admin/custom-roles/{id}.
 func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOwner(w, r) {
+	if !h.requirePerm(w, r) {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -86,7 +102,7 @@ func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
 
 // UpdateRole handles PATCH /api/auth/admin/custom-roles/{id}.
 func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOwner(w, r) {
+	if !h.requirePerm(w, r) {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -108,7 +124,7 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 
 // DeleteRole handles DELETE /api/auth/admin/custom-roles/{id}.
 func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOwner(w, r) {
+	if !h.requirePerm(w, r) {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -121,7 +137,7 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 
 // SetPermission handles PUT /api/auth/admin/custom-roles/{id}/permissions/{action}.
 func (h *Handler) SetPermission(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOwner(w, r) {
+	if !h.requirePerm(w, r) {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -146,7 +162,7 @@ func (h *Handler) SetPermission(w http.ResponseWriter, r *http.Request) {
 
 // RemovePermission handles DELETE /api/auth/admin/custom-roles/{id}/permissions/{action}.
 func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOwner(w, r) {
+	if !h.requirePerm(w, r) {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -180,7 +196,7 @@ func (h *Handler) ListUserCustomRoles(w http.ResponseWriter, r *http.Request) {
 
 // AssignToUser handles POST /api/auth/admin/users/{id}/custom-roles/{roleID}.
 func (h *Handler) AssignToUser(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOwner(w, r) {
+	if !h.requirePerm(w, r) {
 		return
 	}
 	userID := chi.URLParam(r, "id")
@@ -194,7 +210,7 @@ func (h *Handler) AssignToUser(w http.ResponseWriter, r *http.Request) {
 
 // RemoveFromUser handles DELETE /api/auth/admin/users/{id}/custom-roles/{roleID}.
 func (h *Handler) RemoveFromUser(w http.ResponseWriter, r *http.Request) {
-	if !h.requireOwner(w, r) {
+	if !h.requirePerm(w, r) {
 		return
 	}
 	userID := chi.URLParam(r, "id")

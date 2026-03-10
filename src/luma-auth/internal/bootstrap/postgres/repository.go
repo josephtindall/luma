@@ -29,7 +29,8 @@ func (r *Repository) Get(ctx context.Context) (*bootstrap.InstanceState, error) 
 		       activated_at, version,
 		       password_min_length, password_require_uppercase,
 		       password_require_lowercase, password_require_numbers,
-		       password_require_symbols, password_history_count
+		       password_require_symbols, password_history_count,
+		       content_width
 		FROM auth.instance
 		LIMIT 1`
 
@@ -51,6 +52,7 @@ func (r *Repository) Get(ctx context.Context) (*bootstrap.InstanceState, error) 
 		&s.PasswordRequireNumbers,
 		&s.PasswordRequireSymbols,
 		&s.PasswordHistoryCount,
+		&s.ContentWidth,
 	)
 	if err == pgx.ErrNoRows {
 		// Row hasn't been seeded yet — EnsureRow will create it.
@@ -101,6 +103,11 @@ func (r *Repository) UpdateSettings(ctx context.Context, params bootstrap.Instan
 	if params.PasswordHistoryCount != nil {
 		setClauses = append(setClauses, fmt.Sprintf("password_history_count = $%d", i))
 		args = append(args, *params.PasswordHistoryCount)
+		i++
+	}
+	if params.ContentWidth != nil {
+		setClauses = append(setClauses, fmt.Sprintf("content_width = $%d", i))
+		args = append(args, *params.ContentWidth)
 		i++
 	}
 
@@ -269,6 +276,22 @@ func (r *Repository) CreateOwnerAtomic(ctx context.Context, params bootstrap.Cre
 	if tag.RowsAffected() == 0 {
 		return "", fmt.Errorf("bootstrap.postgres.CreateOwnerAtomic: instance was not in SETUP state")
 	}
+
+	// Add the owner to the "Super Admins" system group (best-effort — group may
+	// not exist yet on fresh installs that haven't run migration 0011).
+	const addToSuperAdmins = `
+		INSERT INTO auth.group_members (group_id, member_type, member_id)
+		VALUES ('00000000-0000-0000-0000-000000000002', 'user', $1)
+		ON CONFLICT DO NOTHING`
+	_, _ = tx.Exec(ctx, addToSuperAdmins, userID)
+
+	// Add the owner to the "Users" system group (best-effort — group may
+	// not exist yet on fresh installs that haven't run migration 0012).
+	const addToUsers = `
+		INSERT INTO auth.group_members (group_id, member_type, member_id)
+		VALUES ('00000000-0000-0000-0000-000000000003', 'user', $1)
+		ON CONFLICT DO NOTHING`
+	_, _ = tx.Exec(ctx, addToUsers, userID)
 
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("bootstrap.postgres.CreateOwnerAtomic commit: %w", err)

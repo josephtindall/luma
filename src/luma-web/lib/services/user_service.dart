@@ -13,31 +13,63 @@ class UserService extends ChangeNotifier {
   UserProfile? _profile;
   UserPreferences? _preferences;
   bool _hasAdminAccess = false;
+  Map<String, bool> _adminCaps = {};
+  String _contentWidth = 'wide';
 
   UserService(this._api);
 
   UserProfile? get profile => _profile;
   UserPreferences? get preferences => _preferences;
   bool get hasAdminAccess => _hasAdminAccess;
+  String get contentWidth => _contentWidth;
+
+  // Fine-grained admin tab visibility — populated by _loadAdminCapabilities().
+  bool get canManageUsers => _adminCaps['user:read'] == true;
+  bool get canManageInvitations => _adminCaps['invitation:list'] == true;
+  bool get canManageInstanceSettings => _adminCaps['instance:read'] == true;
+  bool get canManageGroups => _adminCaps['group:manage'] == true;
+  bool get canManageRoles => _adminCaps['role:manage'] == true;
+  bool get isAdminOwner => _adminCaps['is_owner'] == true;
 
   Future<void> loadProfile() async {
     final resp = await _api.get('/api/luma/user/me');
     if (resp.statusCode == 200) {
       _profile = UserProfile.fromJson(_unwrapUser(json.decode(resp.body)));
-      // Reload admin access whenever profile changes.
-      await _loadAdminAccess();
+      await Future.wait([_loadAdminCapabilities(), _loadContentWidth()]);
       notifyListeners();
     }
   }
 
-  Future<void> _loadAdminAccess() async {
-    if (_profile == null) { _hasAdminAccess = false; return; }
-    // Owners always have access; for others, probe the admin access endpoint.
-    if (_profile!.isOwner) { _hasAdminAccess = true; return; }
+  Future<void> _loadContentWidth() async {
     try {
-      final resp = await _api.get('/api/luma/admin/access');
-      _hasAdminAccess = resp.statusCode == 204;
+      final resp = await _api.get('/api/luma/health');
+      if (resp.statusCode == 200) {
+        final data = json.decode(resp.body) as Map<String, dynamic>;
+        _contentWidth = data['content_width'] as String? ?? 'wide';
+      }
     } catch (_) {
+      _contentWidth = 'wide';
+    }
+  }
+
+  Future<void> _loadAdminCapabilities() async {
+    if (_profile == null) {
+      _hasAdminAccess = false;
+      _adminCaps = {};
+      return;
+    }
+    try {
+      final resp = await _api.get('/api/luma/admin/capabilities');
+      if (resp.statusCode == 200) {
+        final data = json.decode(resp.body) as Map<String, dynamic>;
+        _adminCaps = data.map((k, v) => MapEntry(k, v == true));
+        _hasAdminAccess = _adminCaps.values.any((v) => v);
+      } else {
+        _adminCaps = {};
+        _hasAdminAccess = false;
+      }
+    } catch (_) {
+      _adminCaps = {};
       _hasAdminAccess = false;
     }
   }
@@ -299,8 +331,11 @@ class UserService extends ChangeNotifier {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['error'] ?? 'Failed to update instance settings');
     }
-    return InstanceSettings.fromJson(
-        json.decode(resp.body) as Map<String, dynamic>);
+    final updated =
+        InstanceSettings.fromJson(json.decode(resp.body) as Map<String, dynamic>);
+    _contentWidth = updated.contentWidth;
+    notifyListeners();
+    return updated;
   }
 
   // ── Admin: user management (owner only) ────────────────────────────────
@@ -656,6 +691,8 @@ class UserService extends ChangeNotifier {
     _profile = null;
     _preferences = null;
     _hasAdminAccess = false;
+    _adminCaps = {};
+    _contentWidth = 'wide';
     notifyListeners();
   }
 

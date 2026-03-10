@@ -151,48 +151,45 @@ class _InvitationsContentState extends State<_InvitationsContent> {
         final all = snap.data ?? [];
         final visible = _applyFilter(all);
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 800),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Text('Invitations',
-                          style: Theme.of(context).textTheme.headlineSmall),
-                      const SizedBox(width: 12),
-                      Chip(label: Text('${visible.length}')),
-                      const Spacer(),
-                      FilledButton.icon(
-                        icon: const Icon(Icons.person_add_outlined),
-                        label: const Text('Create invite'),
-                        onPressed: widget.onCreateInvite,
-                      ),
-                    ],
+                  Chip(
+                    label: Text('Invitations (${visible.length})'),
+                    backgroundColor:
+                        Theme.of(context).colorScheme.secondaryContainer,
                   ),
-                  const SizedBox(height: 12),
-                  Wrap(
-                    spacing: 8,
-                    children: [
-                      _chip(context, null, 'All', all.length),
-                      _chip(context, 'pending', 'Pending',
-                          all.where((i) => i.isPendingValid).length),
-                      _chip(context, 'expired', 'Expired',
-                          all.where((i) => i.isExpired).length),
-                      _chip(context, 'accepted', 'Accepted',
-                          all.where((i) => i.isAccepted).length),
-                      _chip(context, 'revoked', 'Revoked',
-                          all.where((i) => i.isRevoked).length),
-                    ],
+                  const Spacer(),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.person_add_outlined),
+                    label: const Text('Create invite'),
+                    onPressed: widget.onCreateInvite,
                   ),
-                  const SizedBox(height: 16),
-                  if (visible.isEmpty)
-                    Center(
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 48),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Wrap(
+                spacing: 8,
+                children: [
+                  _chip(context, null, 'All', all.length),
+                  _chip(context, 'pending', 'Pending',
+                      all.where((i) => i.isPendingValid).length),
+                  _chip(context, 'expired', 'Expired',
+                      all.where((i) => i.isExpired).length),
+                  _chip(context, 'accepted', 'Accepted',
+                      all.where((i) => i.isAccepted).length),
+                  _chip(context, 'revoked', 'Revoked',
+                      all.where((i) => i.isRevoked).length),
+                ],
+              ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: visible.isEmpty
+                    ? Center(
                         child: Text(
                           'No invitations to show.',
                           style: Theme.of(context)
@@ -204,27 +201,19 @@ class _InvitationsContentState extends State<_InvitationsContent> {
                                     .onSurfaceVariant,
                               ),
                         ),
+                      )
+                    : ListView.separated(
+                        itemCount: visible.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(height: 1),
+                        itemBuilder: (_, i) => _InvitationRow(
+                          inv: visible[i],
+                          onRevoke: () => widget.onRevoke(visible[i]),
+                          onReinvite: () => widget.onReinvite(visible[i]),
+                        ),
                       ),
-                    )
-                  else
-                    Card(
-                      clipBehavior: Clip.antiAlias,
-                      child: Column(
-                        children: [
-                          for (int i = 0; i < visible.length; i++) ...[
-                            if (i > 0) const Divider(height: 1),
-                            _InvitationRow(
-                              inv: visible[i],
-                              onRevoke: () => widget.onRevoke(visible[i]),
-                              onReinvite: () => widget.onReinvite(visible[i]),
-                            ),
-                          ],
-                        ],
-                      ),
-                    ),
-                ],
               ),
-            ),
+            ],
           ),
         );
       },

@@ -2,11 +2,19 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'auth_service.dart';
 
+/// Thrown when the server returns 403 Forbidden.
+class PermissionDeniedException implements Exception {
+  const PermissionDeniedException();
+  @override
+  String toString() => 'You do not have permission to access this.';
+}
+
 /// HTTP client for Luma API calls.
 ///
 /// Attaches Authorization: Bearer on every request. On 401, attempts one
 /// silent refresh. If that fails, clears the session and throws
 /// [SessionExpiredException] so the router can redirect to /login.
+/// On 403, throws [PermissionDeniedException].
 class ApiClient {
   final String _baseUrl;
   final AuthService _authService;
@@ -47,6 +55,10 @@ class ApiClient {
         _authService.clearSession();
         throw const SessionExpiredException();
       }
+    }
+
+    if (resp.statusCode == 403) {
+      throw const PermissionDeniedException();
     }
 
     return resp;

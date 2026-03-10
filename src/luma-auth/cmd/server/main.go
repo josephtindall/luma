@@ -160,6 +160,7 @@ func run() error {
 
 	groupRepo := grouppg.New(db)
 	groupSvc := group.NewService(groupRepo)
+	groupSvc.SetCacheInvalidator(authzRepo)
 	groupHandler := group.NewHandler(groupSvc)
 
 	roleRepo := customrolepg.New(db)
@@ -189,6 +190,8 @@ func run() error {
 	userHandler.SetAuthorizer(authzAuthorizer)
 	invHandler.SetAuthorizer(authzAuthorizer)
 	bootstrapHandler.SetAuthorizer(authzAuthorizer)
+	groupHandler.SetAuthorizer(authzAuthorizer)
+	roleHandler.SetAuthorizer(authzAuthorizer)
 
 	// ── 9. Router ─────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -212,6 +215,7 @@ func run() error {
 			"status":        "ok",
 			"state":         string(state.SetupState),
 			"instance_name": state.Name,
+			"content_width": state.ContentWidth,
 		})
 	})
 
@@ -281,6 +285,7 @@ func run() error {
 		r.Delete("/api/auth/invitations/{id}", invHandler.Revoke)
 
 		r.Get("/api/auth/admin/access", userHandler.AdminAccess)
+		r.Get("/api/auth/admin/capabilities", userHandler.AdminCapabilities)
 
 		r.Get("/api/auth/admin/instance-settings", bootstrapHandler.GetInstanceSettings)
 		r.Patch("/api/auth/admin/instance-settings", bootstrapHandler.UpdateInstanceSettings)

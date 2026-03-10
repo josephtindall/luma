@@ -2,6 +2,9 @@ package customrole
 
 import (
 	"context"
+	"fmt"
+
+	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
 )
 
 // Service implements custom role business logic.
@@ -19,10 +22,24 @@ func (s *Service) Create(ctx context.Context, name string, priority *int) (*Cust
 }
 
 func (s *Service) Update(ctx context.Context, id, name string, priority *int) (*CustomRole, error) {
+	cr, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return nil, fmt.Errorf("customrole.Update: %w", err)
+	}
+	if cr.IsSystem {
+		return nil, pkgerrors.ErrSystemEntity
+	}
 	return s.repo.Update(ctx, id, name, priority)
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {
+	cr, err := s.repo.Get(ctx, id)
+	if err != nil {
+		return fmt.Errorf("customrole.Delete: %w", err)
+	}
+	if cr.IsSystem {
+		return pkgerrors.ErrSystemEntity
+	}
 	return s.repo.Delete(ctx, id)
 }
 
@@ -35,10 +52,24 @@ func (s *Service) List(ctx context.Context) ([]*CustomRoleWithDetails, error) {
 }
 
 func (s *Service) SetPermission(ctx context.Context, roleID, action, effect string) error {
+	cr, err := s.repo.Get(ctx, roleID)
+	if err != nil {
+		return fmt.Errorf("customrole.SetPermission: %w", err)
+	}
+	if cr.IsSystem {
+		return pkgerrors.ErrSystemEntity
+	}
 	return s.repo.SetPermission(ctx, roleID, action, effect)
 }
 
 func (s *Service) RemovePermission(ctx context.Context, roleID, action string) error {
+	cr, err := s.repo.Get(ctx, roleID)
+	if err != nil {
+		return fmt.Errorf("customrole.RemovePermission: %w", err)
+	}
+	if cr.IsSystem {
+		return pkgerrors.ErrSystemEntity
+	}
 	return s.repo.RemovePermission(ctx, roleID, action)
 }
 

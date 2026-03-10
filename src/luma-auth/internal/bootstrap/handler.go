@@ -211,10 +211,20 @@ func (h *Handler) UpdateInstanceSettings(w http.ResponseWriter, r *http.Request)
 		PasswordRequireNumbers   *bool   `json:"password_require_numbers"`
 		PasswordRequireSymbols   *bool   `json:"password_require_symbols"`
 		PasswordHistoryCount     *int    `json:"password_history_count"`
+		ContentWidth             *string `json:"content_width"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid body")
 		return
+	}
+	if req.ContentWidth != nil {
+		switch *req.ContentWidth {
+		case "narrow", "wide", "max":
+			// valid
+		default:
+			httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "content_width must be narrow, wide, or max")
+			return
+		}
 	}
 
 	state, err := h.svc.UpdateSettings(r.Context(), InstanceSettingsParams{
@@ -225,6 +235,7 @@ func (h *Handler) UpdateInstanceSettings(w http.ResponseWriter, r *http.Request)
 		PasswordRequireNumbers:   req.PasswordRequireNumbers,
 		PasswordRequireSymbols:   req.PasswordRequireSymbols,
 		PasswordHistoryCount:     req.PasswordHistoryCount,
+		ContentWidth:             req.ContentWidth,
 	})
 	if err != nil {
 		httputil.WriteError(w, pkgerrors.HTTPStatus(err), errorCode(err), err.Error())
@@ -242,6 +253,7 @@ func instanceSettingsResponse(s *InstanceState) map[string]any {
 		"password_require_numbers":   s.PasswordRequireNumbers,
 		"password_require_symbols":   s.PasswordRequireSymbols,
 		"password_history_count":     s.PasswordHistoryCount,
+		"content_width":              s.ContentWidth,
 	}
 }
 

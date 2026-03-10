@@ -11,17 +11,26 @@ class AdminLayout extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: userService,
+      builder: (context, _) => _buildContent(context),
+    );
+  }
+
+  Widget _buildContent(BuildContext context) {
     final path = GoRouterState.of(context).uri.path;
     final colorScheme = Theme.of(context).colorScheme;
     final borderColor = colorScheme.outlineVariant.withAlpha(128);
-    final isOwner = userService.profile?.isOwner == true;
 
     final tabs = [
-      _AdminTab(label: 'Users', route: '/admin/users'),
-      _AdminTab(label: 'Invitations', route: '/admin/invites'),
-      if (isOwner) _AdminTab(label: 'Groups', route: '/admin/groups'),
-      if (isOwner) _AdminTab(label: 'Roles', route: '/admin/roles'),
-      _AdminTab(label: 'Settings', route: '/admin/settings'),
+      if (userService.canManageUsers)
+        _AdminTab(label: 'Users', route: '/admin/users'),
+      if (userService.canManageInvitations)
+        _AdminTab(label: 'Invitations', route: '/admin/invites'),
+      if (userService.canManageGroups) _AdminTab(label: 'Groups', route: '/admin/groups'),
+      if (userService.canManageRoles) _AdminTab(label: 'Roles', route: '/admin/roles'),
+      if (userService.canManageInstanceSettings)
+        _AdminTab(label: 'Settings', route: '/admin/settings'),
     ];
 
     return Column(

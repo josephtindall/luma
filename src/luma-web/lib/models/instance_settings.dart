@@ -1,5 +1,6 @@
 class InstanceSettings {
   final String name;
+  final String contentWidth; // "narrow" | "wide" | "max"
   final int passwordMinLength;
   final bool passwordRequireUppercase;
   final bool passwordRequireLowercase;
@@ -9,6 +10,7 @@ class InstanceSettings {
 
   const InstanceSettings({
     required this.name,
+    required this.contentWidth,
     required this.passwordMinLength,
     required this.passwordRequireUppercase,
     required this.passwordRequireLowercase,
@@ -20,6 +22,7 @@ class InstanceSettings {
   factory InstanceSettings.fromJson(Map<String, dynamic> json) {
     return InstanceSettings(
       name: json['name'] as String? ?? '',
+      contentWidth: json['content_width'] as String? ?? 'wide',
       passwordMinLength: json['password_min_length'] as int? ?? 8,
       passwordRequireUppercase:
           json['password_require_uppercase'] as bool? ?? false,
@@ -33,6 +36,7 @@ class InstanceSettings {
 
   Map<String, dynamic> toJson() => {
         'name': name,
+        'content_width': contentWidth,
         'password_min_length': passwordMinLength,
         'password_require_uppercase': passwordRequireUppercase,
         'password_require_lowercase': passwordRequireLowercase,
@@ -43,6 +47,7 @@ class InstanceSettings {
 
   InstanceSettings copyWith({
     String? name,
+    String? contentWidth,
     int? passwordMinLength,
     bool? passwordRequireUppercase,
     bool? passwordRequireLowercase,
@@ -52,6 +57,7 @@ class InstanceSettings {
   }) {
     return InstanceSettings(
       name: name ?? this.name,
+      contentWidth: contentWidth ?? this.contentWidth,
       passwordMinLength: passwordMinLength ?? this.passwordMinLength,
       passwordRequireUppercase:
           passwordRequireUppercase ?? this.passwordRequireUppercase,

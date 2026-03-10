@@ -22,6 +22,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final _minLengthController = TextEditingController();
   final _historyCountController = TextEditingController();
 
+  String _contentWidth = 'wide';
   bool _requireUppercase = false;
   bool _requireLowercase = false;
   bool _requireNumbers = false;
@@ -58,6 +59,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
 
   void _applySettings(InstanceSettings s) {
     _nameController.text = s.name;
+    _contentWidth = s.contentWidth;
     _minLengthController.text = s.passwordMinLength.toString();
     _historyCountController.text = s.passwordHistoryCount.toString();
     _requireUppercase = s.passwordRequireUppercase;
@@ -90,6 +92,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       final updated = await widget.userService.updateInstanceSettings(
         InstanceSettings(
           name: _nameController.text.trim(),
+          contentWidth: _contentWidth,
           passwordMinLength: minLen,
           passwordRequireUppercase: _requireUppercase,
           passwordRequireLowercase: _requireLowercase,
@@ -153,6 +156,32 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 labelText: 'Instance name',
                 border: OutlineInputBorder(),
               ),
+            ),
+            const SizedBox(height: 20),
+            Text('Content width',
+                style: Theme.of(context).textTheme.bodyMedium),
+            const SizedBox(height: 8),
+            SegmentedButton<String>(
+              segments: const [
+                ButtonSegment(
+                  value: 'narrow',
+                  label: Text('Narrow'),
+                  tooltip: 'Smaller centered layout',
+                ),
+                ButtonSegment(
+                  value: 'wide',
+                  label: Text('Wide'),
+                  tooltip: 'Wider centered layout, good for 16:9 screens',
+                ),
+                ButtonSegment(
+                  value: 'max',
+                  label: Text('Max'),
+                  tooltip: 'Near full-width layout',
+                ),
+              ],
+              selected: {_contentWidth},
+              onSelectionChanged: (s) =>
+                  setState(() => _contentWidth = s.first),
             ),
             const SizedBox(height: 24),
 

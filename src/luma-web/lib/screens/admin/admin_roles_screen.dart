@@ -14,6 +14,7 @@ const _actionGroups = <String, List<String>>{
   'Instance': ['instance:read', 'instance:configure', 'instance:backup', 'instance:restore'],
   'Notifications': ['notification:read', 'notification:configure-own', 'notification:configure-all'],
   'Invitations': ['invitation:create', 'invitation:revoke', 'invitation:list'],
+  'Admin': ['group:manage', 'role:manage'],
 };
 
 class AdminRolesScreen extends StatefulWidget {
@@ -140,7 +141,15 @@ class _RoleRow extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(role.name, style: Theme.of(context).textTheme.bodyLarge),
+                Row(
+                  children: [
+                    Text(role.name, style: Theme.of(context).textTheme.bodyLarge),
+                    if (role.isSystem) ...[
+                      const SizedBox(width: 8),
+                      _SystemRoleBadge(),
+                    ],
+                  ],
+                ),
                 const SizedBox(height: 4),
                 Row(
                   children: [
@@ -170,9 +179,12 @@ class _RoleRow extends StatelessWidget {
               ],
             ),
           ),
-          OutlinedButton(
-            onPressed: onManage,
-            child: const Text('Manage'),
+          Tooltip(
+            message: role.isSystem ? 'System roles cannot be modified' : '',
+            child: OutlinedButton(
+              onPressed: role.isSystem ? null : onManage,
+              child: const Text('Manage'),
+            ),
           ),
         ],
       ),
@@ -729,6 +741,33 @@ class _EffectToggle extends StatelessWidget {
 // ---------------------------------------------------------------------------
 // Shared helpers
 // ---------------------------------------------------------------------------
+
+class _SystemRoleBadge extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final colorScheme = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: colorScheme.tertiaryContainer,
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.lock_outline, size: 11, color: colorScheme.onTertiaryContainer),
+          const SizedBox(width: 3),
+          Text(
+            'System',
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                  color: colorScheme.onTertiaryContainer,
+                ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 
 class _SectionHeader extends StatelessWidget {
   final String label;

@@ -7,10 +7,12 @@ import (
 
 // Group is the base group record.
 type Group struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID              string    `json:"id"`
+	Name            string    `json:"name"`
+	IsSystem        bool      `json:"is_system"`
+	NoMemberControl bool      `json:"no_member_control"`
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 }
 
 // GroupMember is one member entry (user or sub-group).

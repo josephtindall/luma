@@ -148,11 +148,25 @@ class _MainLayoutState extends State<MainLayout> {
                     ],
                   ),
                 ),
-                // Main Content
-                Expanded(
-                  child: ClipRect(
-                    child: widget.child,
-                  ),
+                // Main Content — width constrained by instance setting.
+                ListenableBuilder(
+                  listenable: widget.userService,
+                  builder: (ctx, _) {
+                    final cw = widget.userService.contentWidth;
+                    final Widget content = ClipRect(child: widget.child);
+                    if (cw == 'max') {
+                      return Expanded(child: content);
+                    }
+                    final maxWidth = cw == 'narrow' ? 740.0 : 1140.0;
+                    return Expanded(
+                      child: Center(
+                        child: ConstrainedBox(
+                          constraints: BoxConstraints(maxWidth: maxWidth),
+                          child: content,
+                        ),
+                      ),
+                    );
+                  },
                 ),
               ],
             ),

@@ -77,48 +77,43 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
         final users = snap.data ?? [];
 
-        return SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 16),
-          child: Center(
-            child: ConstrainedBox(
-              constraints: const BoxConstraints(maxWidth: 800),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
+        return Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
                 children: [
-                  Row(
-                    children: [
-                      Text('Users',
-                          style: Theme.of(context).textTheme.headlineSmall),
-                      const SizedBox(width: 12),
-                      Chip(label: Text('${users.length}')),
-                      const Spacer(),
-                      FilledButton.icon(
-                        icon: const Icon(Icons.person_add_outlined),
-                        label: const Text('Create user'),
-                        onPressed: _showCreateUserDialog,
-                      ),
-                    ],
+                  Chip(
+                    label: Text('Users (${users.length})'),
+                    backgroundColor:
+                        Theme.of(context).colorScheme.secondaryContainer,
                   ),
-                  const SizedBox(height: 16),
-                  Card(
-                    clipBehavior: Clip.antiAlias,
-                    child: Column(
-                      children: [
-                        for (int i = 0; i < users.length; i++) ...[
-                          if (i > 0) const Divider(height: 1),
-                          _UserRow(
-                            user: users[i],
-                            isSelf: widget.userService.profile?.id ==
-                                users[i].id,
-                            onManage: () => _showManageDialog(users[i]),
-                          ),
-                        ],
-                      ],
-                    ),
+                  const Spacer(),
+                  FilledButton.icon(
+                    icon: const Icon(Icons.person_add_outlined),
+                    label: const Text('Create user'),
+                    onPressed: _showCreateUserDialog,
                   ),
                 ],
               ),
-            ),
+              const SizedBox(height: 16),
+              Expanded(
+                child: users.isEmpty
+                    ? const Center(child: Text('No users yet'))
+                    : ListView.separated(
+                        itemCount: users.length,
+                        separatorBuilder: (_, __) =>
+                            const Divider(height: 1),
+                        itemBuilder: (_, i) => _UserRow(
+                          user: users[i],
+                          isSelf: widget.userService.profile?.id ==
+                              users[i].id,
+                          onManage: () => _showManageDialog(users[i]),
+                        ),
+                      ),
+              ),
+            ],
           ),
         );
       },

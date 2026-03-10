@@ -120,6 +120,7 @@ func run() error {
 
 	r.Route("/api/luma/setup", func(r chi.Router) { r.Mount("/", authHandler.SetupRoutes()) })
 	r.Route("/api/luma/auth", func(r chi.Router) { r.Mount("/", authHandler.AuthRoutes()) })
+	r.Get("/api/luma/health", authHandler.Health())
 
 	// Protected routes
 	r.Route("/api/luma", func(r chi.Router) {

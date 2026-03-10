@@ -37,6 +37,9 @@ type InstanceState struct {
 	PasswordRequireNumbers   bool
 	PasswordRequireSymbols   bool
 	PasswordHistoryCount     int
+	// ContentWidth controls the width of the main content area site-wide.
+	// Valid values: "narrow" | "wide" | "max". Defaults to "wide".
+	ContentWidth string
 }
 
 // InstanceSettingsParams holds fields for a partial PATCH of instance settings.
@@ -49,6 +52,7 @@ type InstanceSettingsParams struct {
 	PasswordRequireNumbers   *bool
 	PasswordRequireSymbols   *bool
 	PasswordHistoryCount     *int
+	ContentWidth             *string
 }
 
 // CreateOwnerParams carries all fields required to atomically create the

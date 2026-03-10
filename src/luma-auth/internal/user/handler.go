@@ -70,6 +70,36 @@ func (h *Handler) AdminAccess(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// AdminCapabilities handles GET /api/auth/admin/capabilities.
+// Returns a JSON map of admin action strings to booleans.
+// Used by the frontend to decide which admin tabs to show.
+func (h *Handler) AdminCapabilities(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+
+	isOwner := claims.Role == "builtin:instance-owner"
+	actions := []string{"user:read", "invitation:list", "instance:read", "group:manage", "role:manage"}
+	caps := map[string]any{"is_owner": isOwner}
+
+	for _, action := range actions {
+		if isOwner {
+			caps[action] = true
+		} else if h.authzSvc != nil {
+			result, err := h.authzSvc.Check(r.Context(), authz.CheckRequest{
+				UserID: claims.Subject,
+				Action: action,
+			})
+			caps[action] = err == nil && result.Allowed
+		} else {
+			caps[action] = false
+		}
+	}
+	httputil.WriteJSON(w, http.StatusOK, caps)
+}
+
 // GetUser handles GET /api/auth/users/{id}.
 func (h *Handler) GetUser(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")

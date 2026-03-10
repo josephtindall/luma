@@ -31,6 +31,12 @@ func NewHandler(httpClient *http.Client, authURL string, userIDFunc func(context
 	}
 }
 
+// Health proxies to the auth service health endpoint (unauthenticated).
+// Returns instance_name and content_width from the auth service.
+func (h *Handler) Health() http.HandlerFunc {
+	return h.proxySetup("GET", "/api/auth/health")
+}
+
 // SetupRoutes returns a router for /api/luma/setup/* endpoints.
 func (h *Handler) SetupRoutes() chi.Router {
 	r := chi.NewRouter()
@@ -75,6 +81,7 @@ func (h *Handler) AuthRoutes() chi.Router {
 func (h *Handler) AdminRoutes() chi.Router {
 	r := chi.NewRouter()
 	r.Get("/access", h.proxyAuth("GET", "/api/auth/admin/access"))
+	r.Get("/capabilities", h.proxyAuth("GET", "/api/auth/admin/capabilities"))
 	r.Get("/users", h.proxyAuth("GET", "/api/auth/admin/users"))
 	r.Post("/users", h.proxyAuth("POST", "/api/auth/admin/users"))
 	r.Post("/users/{id}/lock", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/users/", "id", "/lock"))
