@@ -94,6 +94,10 @@ class AuthService extends ChangeNotifier {
   // acknowledges the code on the recovery-code screen.
   String? _pendingRecoveryToken;
 
+  // Session expiry flag — set when an API call fails because the refresh
+  // token is also expired. Consumed once by the login screen to show a SnackBar.
+  bool _sessionJustExpired = false;
+
   /// Called when the session is cleared (logout, expiry) so dependent services
   /// can drop cached state. Set from main.dart to avoid circular imports.
   VoidCallback? onSessionCleared;
@@ -126,6 +130,20 @@ class AuthService extends ChangeNotifier {
   void acknowledgeRecoveryToken() {
     _pendingRecoveryToken = null;
     notifyListeners();
+  }
+
+  /// True when the session was cleared due to expiry (not explicit logout).
+  /// Consumed once by the login screen initState.
+  bool get sessionJustExpired => _sessionJustExpired;
+
+  /// Clears the expiry flag — call after showing the snackbar.
+  void clearSessionExpiredFlag() => _sessionJustExpired = false;
+
+  /// Clears the session and marks it as expired so the login screen
+  /// can show a contextual message. Called by ApiClient on refresh failure.
+  void clearSessionAsExpired() {
+    _sessionJustExpired = true;
+    clearSession();
   }
 
   /// Called from main.dart before runApp. Probes auth service state and attempts

@@ -66,6 +66,13 @@ GoRouter buildRouter(
         return '/home';
       }
 
+      // Guard admin routes — redirect to /home if user has no admin capabilities.
+      if (state.uri.path.startsWith('/admin') &&
+          userService.profile != null &&
+          !userService.hasAnyAdminAccess) {
+        return '/home';
+      }
+
       return null;
     },
     routes: [

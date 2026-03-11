@@ -222,6 +222,12 @@ func run() error {
 	r.Use(chimiddleware.Recoverer)
 	r.Use(pkgmiddleware.RequestID)
 	r.Use(pkgmiddleware.Logger)
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
+			next.ServeHTTP(w, r)
+		})
+	})
 	r.Use(bootstrapGate.Middleware) // enforced on every request
 
 	// ── Health (always reachable, all bootstrap states) ───────────────────────

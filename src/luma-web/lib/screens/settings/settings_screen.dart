@@ -173,6 +173,13 @@ class _ProfileSectionState extends State<_ProfileSection> {
     final oldEmail = widget.userService.profile?.email;
     final newEmail = _emailCtrl.text.trim();
 
+    if (newEmail.isNotEmpty &&
+        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(newEmail)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a valid email address')));
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       await widget.userService.updateProfile(
@@ -221,6 +228,7 @@ class _ProfileSectionState extends State<_ProfileSection> {
             const SizedBox(height: 16),
             TextField(
               controller: _nameCtrl,
+              maxLength: 64,
               decoration: const InputDecoration(
                 labelText: 'Display name',
                 border: OutlineInputBorder(),
@@ -966,6 +974,7 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
                   Expanded(
                     child: TextField(
                       controller: _nameCtrl,
+                      maxLength: 128,
                       decoration: const InputDecoration(
                         labelText: 'Passkey nickname (optional)',
                         hintText: 'e.g. MacBook Touch ID',

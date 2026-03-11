@@ -107,14 +107,15 @@ func (s *Service) ResetPassword(ctx context.Context, rawToken, newPassword strin
 		return "", pkgerrors.ErrTokenInvalid
 	}
 
+	// Consume the token first to prevent replay attacks.
+	// If the password change subsequently fails, the user must request a new link.
+	if err := s.repo.Consume(ctx, t.ID); err != nil {
+		return "", fmt.Errorf("passwordreset.Service.ResetPassword consume: %w", err)
+	}
+
 	// Change the password (validates minimum length internally).
 	if err := s.userSvc.SetPasswordDirect(ctx, t.UserID, newPassword); err != nil {
 		return "", fmt.Errorf("passwordreset.Service.ResetPassword set password: %w", err)
-	}
-
-	// Consume the token.
-	if err := s.repo.Consume(ctx, t.ID); err != nil {
-		return "", fmt.Errorf("passwordreset.Service.ResetPassword consume: %w", err)
 	}
 
 	// If this was a force-change token, clear the flag.

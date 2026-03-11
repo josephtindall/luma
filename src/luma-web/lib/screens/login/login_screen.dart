@@ -64,6 +64,21 @@ class _LoginScreenState extends State<LoginScreen> {
   IdentifyResult? _identified;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.auth.sessionJustExpired) {
+      widget.auth.clearSessionExpiredFlag();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(
+                  'Your session has expired. Please sign in again.')));
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();

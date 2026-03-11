@@ -79,7 +79,7 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 		DeviceName:   req.DeviceName,
 		Platform:     req.Platform,
 		Fingerprint:  req.Fingerprint,
-		UserAgent:    r.UserAgent(),
+		UserAgent:    truncateUA(r.UserAgent()),
 		IPAddress:    remoteIP(r),
 	})
 	if err != nil {
@@ -142,7 +142,7 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 		DeviceName:  req.DeviceName,
 		Platform:    req.Platform,
 		Fingerprint: req.Fingerprint,
-		UserAgent:   r.UserAgent(),
+		UserAgent:   truncateUA(r.UserAgent()),
 		IPAddress:   remoteIP(r),
 	})
 	if err != nil {
@@ -326,4 +326,13 @@ func remoteIP(r *http.Request) string {
 		return r.RemoteAddr // already just an IP (unusual but safe)
 	}
 	return host
+}
+
+// truncateUA limits the User-Agent string to 512 bytes to prevent an
+// oversized header from being stored in the audit log.
+func truncateUA(ua string) string {
+	if len(ua) > 512 {
+		return ua[:512]
+	}
+	return ua
 }

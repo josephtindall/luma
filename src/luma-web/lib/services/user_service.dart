@@ -36,6 +36,7 @@ class UserService extends ChangeNotifier {
   bool get isAdminOwner => _adminCaps['is_owner'] == true;
   bool get canViewAuditLog => _adminCaps['audit:read-all'] == true;
   bool get canExportAuditLog => _adminCaps['audit:export-all'] == true;
+  bool get hasAnyAdminAccess => _adminCaps.isNotEmpty;
 
   Future<void> loadProfile() async {
     final resp = await _api.get('/api/luma/user/me');
