@@ -1,0 +1,27 @@
+-- Drop everything in reverse dependency order.
+DROP TABLE IF EXISTS auth.group_custom_roles       CASCADE;
+DROP TABLE IF EXISTS auth.user_custom_roles        CASCADE;
+DROP TABLE IF EXISTS auth.custom_role_permissions  CASCADE;
+DROP TABLE IF EXISTS auth.custom_roles             CASCADE;
+DROP TABLE IF EXISTS auth.group_members            CASCADE;
+DROP TABLE IF EXISTS auth.groups                   CASCADE;
+DROP TABLE IF EXISTS auth.resource_permissions     CASCADE;
+DROP TABLE IF EXISTS auth.role_policies            CASCADE;
+DROP TABLE IF EXISTS auth.policy_statements        CASCADE;
+DROP TABLE IF EXISTS auth.policies                 CASCADE;
+DROP TABLE IF EXISTS auth.roles                    CASCADE;
+DROP TABLE IF EXISTS auth.invitations              CASCADE;
+DROP TABLE IF EXISTS auth.password_history         CASCADE;
+DROP TABLE IF EXISTS auth.password_reset_tokens    CASCADE;
+DROP TABLE IF EXISTS auth.recovery_tokens          CASCADE;
+DROP TABLE IF EXISTS auth.recovery_codes           CASCADE;
+DROP TABLE IF EXISTS auth.passkeys                 CASCADE;
+DROP TABLE IF EXISTS auth.mfa_challenges           CASCADE;
+DROP TABLE IF EXISTS auth.totp_secrets             CASCADE;
+DROP TABLE IF EXISTS auth.audit_log                CASCADE;
+DROP TABLE IF EXISTS auth.refresh_tokens           CASCADE;
+DROP TABLE IF EXISTS auth.devices                  CASCADE;
+DROP TABLE IF EXISTS auth.user_preferences         CASCADE;
+DROP TABLE IF EXISTS auth.users                    CASCADE;
+DROP TABLE IF EXISTS auth.instance                 CASCADE;
+DROP SCHEMA IF EXISTS auth;
