@@ -27,6 +27,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   bool _requireLowercase = false;
   bool _requireNumbers = false;
   bool _requireSymbols = false;
+  bool _showGithubButton = true;
+  bool _showDonateButton = true;
 
   @override
   void initState() {
@@ -66,6 +68,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     _requireLowercase = s.passwordRequireLowercase;
     _requireNumbers = s.passwordRequireNumbers;
     _requireSymbols = s.passwordRequireSymbols;
+    _showGithubButton = s.showGithubButton;
+    _showDonateButton = s.showDonateButton;
   }
 
   Future<void> _save() async {
@@ -99,6 +103,8 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
           passwordRequireNumbers: _requireNumbers,
           passwordRequireSymbols: _requireSymbols,
           passwordHistoryCount: histCount,
+          showGithubButton: _showGithubButton,
+          showDonateButton: _showDonateButton,
         ),
       );
       _applySettings(updated);
@@ -239,6 +245,21 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
                 keyboardType: TextInputType.number,
                 inputFormatters: [FilteringTextInputFormatter.digitsOnly],
               ),
+            ),
+            const SizedBox(height: 24),
+
+            // ── UI Settings ───────────────────────────────────────────────
+            _SectionHeader('UI Settings'),
+            const SizedBox(height: 12),
+            _BoolTile(
+              label: 'Show GitHub button in top bar',
+              value: _showGithubButton,
+              onChanged: (v) => setState(() => _showGithubButton = v),
+            ),
+            _BoolTile(
+              label: 'Show Donate button in top bar',
+              value: _showDonateButton,
+              onChanged: (v) => setState(() => _showDonateButton = v),
             ),
             const SizedBox(height: 32),
 

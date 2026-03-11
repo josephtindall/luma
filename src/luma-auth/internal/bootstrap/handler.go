@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/josephtindall/luma-auth/internal/audit"
 	"github.com/josephtindall/luma-auth/internal/authz"
 	"github.com/josephtindall/luma-auth/internal/session"
 	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
@@ -28,6 +29,7 @@ type Handler struct {
 	issuer   session.Issuer
 	authzSvc authz.Authorizer
 	recovery RecoveryTokenGenerator // may be nil if feature not wired
+	audit    audit.Service
 }
 
 // NewHandler constructs the setup handler.
@@ -41,6 +43,9 @@ func (h *Handler) SetAuthorizer(a authz.Authorizer) { h.authzSvc = a }
 
 // SetRecoveryGenerator injects the recovery token generator (called from main.go).
 func (h *Handler) SetRecoveryGenerator(g RecoveryTokenGenerator) { h.recovery = g }
+
+// SetAuditor injects the audit service.
+func (h *Handler) SetAuditor(a audit.Service) { h.audit = a }
 
 func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request, action string) bool {
 	claims := middleware.ClaimsFromContext(r.Context())
@@ -229,6 +234,8 @@ func (h *Handler) UpdateInstanceSettings(w http.ResponseWriter, r *http.Request)
 		PasswordRequireSymbols   *bool   `json:"password_require_symbols"`
 		PasswordHistoryCount     *int    `json:"password_history_count"`
 		ContentWidth             *string `json:"content_width"`
+		ShowGithubButton         *bool   `json:"show_github_button"`
+		ShowDonateButton         *bool   `json:"show_donate_button"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid body")
@@ -253,10 +260,29 @@ func (h *Handler) UpdateInstanceSettings(w http.ResponseWriter, r *http.Request)
 		PasswordRequireSymbols:   req.PasswordRequireSymbols,
 		PasswordHistoryCount:     req.PasswordHistoryCount,
 		ContentWidth:             req.ContentWidth,
+		ShowGithubButton:         req.ShowGithubButton,
+		ShowDonateButton:         req.ShowDonateButton,
 	})
 	if err != nil {
 		httputil.WriteError(w, pkgerrors.HTTPStatus(err), errorCode(err), err.Error())
 		return
+	}
+	if h.audit != nil {
+		claims := middleware.ClaimsFromContext(r.Context())
+		h.audit.WriteAsync(r.Context(), audit.Event{
+			UserID: claims.Subject,
+			Event:  audit.EventInstanceSettingsUpdated,
+			Metadata: map[string]any{
+				"name":                       req.Name,
+				"password_min_length":        req.PasswordMinLength,
+				"password_require_uppercase": req.PasswordRequireUppercase,
+				"password_require_lowercase": req.PasswordRequireLowercase,
+				"password_require_numbers":   req.PasswordRequireNumbers,
+				"password_require_symbols":   req.PasswordRequireSymbols,
+				"password_history_count":     req.PasswordHistoryCount,
+				"content_width":              req.ContentWidth,
+			},
+		})
 	}
 	httputil.WriteJSON(w, http.StatusOK, instanceSettingsResponse(state))
 }
@@ -271,7 +297,28 @@ func instanceSettingsResponse(s *InstanceState) map[string]any {
 		"password_require_symbols":   s.PasswordRequireSymbols,
 		"password_history_count":     s.PasswordHistoryCount,
 		"content_width":              s.ContentWidth,
+		"show_github_button":         s.ShowGithubButton,
+		"show_donate_button":         s.ShowDonateButton,
 	}
+}
+
+// GetPublicUISettings handles GET /api/auth/instance/ui (unauthenticated).
+// Returns only the fields needed for public UI rendering, with safe defaults on error.
+func (h *Handler) GetPublicUISettings(w http.ResponseWriter, r *http.Request) {
+	state, err := h.svc.GetSettings(r.Context())
+	if err != nil {
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
+			"show_github_button": true,
+			"show_donate_button": true,
+			"content_width":      "wide",
+		})
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string]any{
+		"show_github_button": state.ShowGithubButton,
+		"show_donate_button": state.ShowDonateButton,
+		"content_width":      state.ContentWidth,
+	})
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

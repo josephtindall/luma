@@ -15,6 +15,8 @@ class UserService extends ChangeNotifier {
   bool _hasAdminAccess = false;
   Map<String, bool> _adminCaps = {};
   String _contentWidth = 'wide';
+  bool _showGithubButton = true;
+  bool _showDonateButton = true;
 
   UserService(this._api);
 
@@ -22,6 +24,8 @@ class UserService extends ChangeNotifier {
   UserPreferences? get preferences => _preferences;
   bool get hasAdminAccess => _hasAdminAccess;
   String get contentWidth => _contentWidth;
+  bool get showGithubButton => _showGithubButton;
+  bool get showDonateButton => _showDonateButton;
 
   // Fine-grained admin tab visibility — populated by _loadAdminCapabilities().
   bool get canManageUsers => _adminCaps['user:read'] == true;
@@ -37,20 +41,24 @@ class UserService extends ChangeNotifier {
     final resp = await _api.get('/api/luma/user/me');
     if (resp.statusCode == 200) {
       _profile = UserProfile.fromJson(_unwrapUser(json.decode(resp.body)));
-      await Future.wait([_loadAdminCapabilities(), _loadContentWidth()]);
+      await Future.wait([_loadAdminCapabilities(), _loadPublicSettings()]);
       notifyListeners();
     }
   }
 
-  Future<void> _loadContentWidth() async {
+  Future<void> _loadPublicSettings() async {
     try {
-      final resp = await _api.get('/api/luma/health');
+      final resp = await _api.get('/api/luma/instance/ui');
       if (resp.statusCode == 200) {
         final data = json.decode(resp.body) as Map<String, dynamic>;
         _contentWidth = data['content_width'] as String? ?? 'wide';
+        _showGithubButton = data['show_github_button'] as bool? ?? true;
+        _showDonateButton = data['show_donate_button'] as bool? ?? true;
       }
     } catch (_) {
       _contentWidth = 'wide';
+      _showGithubButton = true;
+      _showDonateButton = true;
     }
   }
 
@@ -376,6 +384,8 @@ class UserService extends ChangeNotifier {
     final updated =
         InstanceSettings.fromJson(json.decode(resp.body) as Map<String, dynamic>);
     _contentWidth = updated.contentWidth;
+    _showGithubButton = updated.showGithubButton;
+    _showDonateButton = updated.showDonateButton;
     notifyListeners();
     return updated;
   }
@@ -749,6 +759,8 @@ class UserService extends ChangeNotifier {
     _hasAdminAccess = false;
     _adminCaps = {};
     _contentWidth = 'wide';
+    _showGithubButton = true;
+    _showDonateButton = true;
     notifyListeners();
   }
 

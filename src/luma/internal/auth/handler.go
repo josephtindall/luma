@@ -37,6 +37,12 @@ func (h *Handler) Health() http.HandlerFunc {
 	return h.proxySetup("GET", "/api/auth/health")
 }
 
+// PublicUISettings proxies to the auth service's public UI settings endpoint (unauthenticated).
+// Returns show_github_button, show_donate_button, and content_width.
+func (h *Handler) PublicUISettings() http.HandlerFunc {
+	return h.proxySetup("GET", "/api/auth/instance/ui")
+}
+
 // SetupRoutes returns a router for /api/luma/setup/* endpoints.
 func (h *Handler) SetupRoutes() chi.Router {
 	r := chi.NewRouter()

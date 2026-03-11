@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/josephtindall/luma-auth/internal/audit"
 	"github.com/josephtindall/luma-auth/internal/authz"
 	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
 	"github.com/josephtindall/luma-auth/pkg/httputil"
@@ -15,6 +16,7 @@ import (
 type Handler struct {
 	svc      *Service
 	authzSvc authz.Authorizer
+	audit    audit.Service
 }
 
 // NewHandler constructs the custom role handler.
@@ -24,6 +26,9 @@ func NewHandler(svc *Service) *Handler {
 
 // SetAuthorizer injects the authz evaluator (called after construction in main).
 func (h *Handler) SetAuthorizer(a authz.Authorizer) { h.authzSvc = a }
+
+// SetAuditor injects the audit service.
+func (h *Handler) SetAuditor(a audit.Service) { h.audit = a }
 
 func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request, action string) bool {
 	claims := middleware.ClaimsFromContext(r.Context())
@@ -84,6 +89,18 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	if h.audit != nil {
+		claims := middleware.ClaimsFromContext(r.Context())
+		h.audit.WriteAsync(r.Context(), audit.Event{
+			UserID: claims.Subject,
+			Event:  audit.EventRoleCreated,
+			Metadata: map[string]any{
+				"role_id":   cr.ID,
+				"role_name": cr.Name,
+				"priority":  req.Priority,
+			},
+		})
+	}
 	httputil.WriteJSON(w, http.StatusCreated, cr)
 }
 
@@ -121,6 +138,18 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	if h.audit != nil {
+		claims := middleware.ClaimsFromContext(r.Context())
+		h.audit.WriteAsync(r.Context(), audit.Event{
+			UserID: claims.Subject,
+			Event:  audit.EventRoleUpdated,
+			Metadata: map[string]any{
+				"role_id":   id,
+				"role_name": req.Name,
+				"priority":  req.Priority,
+			},
+		})
+	}
 	httputil.WriteJSON(w, http.StatusOK, cr)
 }
 
@@ -133,6 +162,16 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.Delete(r.Context(), id); err != nil {
 		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
 		return
+	}
+	if h.audit != nil {
+		claims := middleware.ClaimsFromContext(r.Context())
+		h.audit.WriteAsync(r.Context(), audit.Event{
+			UserID: claims.Subject,
+			Event:  audit.EventRoleDeleted,
+			Metadata: map[string]any{
+				"role_id": id,
+			},
+		})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -159,6 +198,18 @@ func (h *Handler) SetPermission(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	if h.audit != nil {
+		claims := middleware.ClaimsFromContext(r.Context())
+		h.audit.WriteAsync(r.Context(), audit.Event{
+			UserID: claims.Subject,
+			Event:  audit.EventRolePermissionSet,
+			Metadata: map[string]any{
+				"role_id": id,
+				"action":  action,
+				"effect":  req.Effect,
+			},
+		})
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -172,6 +223,17 @@ func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.RemovePermission(r.Context(), id, action); err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
+	}
+	if h.audit != nil {
+		claims := middleware.ClaimsFromContext(r.Context())
+		h.audit.WriteAsync(r.Context(), audit.Event{
+			UserID: claims.Subject,
+			Event:  audit.EventRolePermissionRemoved,
+			Metadata: map[string]any{
+				"role_id": id,
+				"action":  action,
+			},
+		})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
@@ -205,6 +267,17 @@ func (h *Handler) AssignToUser(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
 	}
+	if h.audit != nil {
+		claims := middleware.ClaimsFromContext(r.Context())
+		h.audit.WriteAsync(r.Context(), audit.Event{
+			UserID: claims.Subject,
+			Event:  audit.EventRoleAssignedToUser,
+			Metadata: map[string]any{
+				"role_id":    roleID,
+				"target_user_id": userID,
+			},
+		})
+	}
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -218,6 +291,17 @@ func (h *Handler) RemoveFromUser(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.RemoveFromUser(r.Context(), roleID, userID); err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
+	}
+	if h.audit != nil {
+		claims := middleware.ClaimsFromContext(r.Context())
+		h.audit.WriteAsync(r.Context(), audit.Event{
+			UserID: claims.Subject,
+			Event:  audit.EventRoleUnassignedFromUser,
+			Metadata: map[string]any{
+				"role_id":        roleID,
+				"target_user_id": userID,
+			},
+		})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

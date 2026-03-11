@@ -203,6 +203,14 @@ func run() error {
 	groupHandler.SetAuthorizer(authzAuthorizer)
 	roleHandler.SetAuthorizer(authzAuthorizer)
 
+	// Inject audit service into handlers that emit admin-action events.
+	invHandler.SetAuditor(auditSvc)
+	bootstrapHandler.SetAuditor(auditSvc)
+	groupHandler.SetAuditor(auditSvc)
+	roleHandler.SetAuditor(auditSvc)
+	passwordResetHandler.SetAuditor(auditSvc)
+	sessionHandler.SetAuditor(auditSvc)
+
 	auditHTTPHandler := audit.NewHandler(auditRepo, func(ctx context.Context, userID, action string) (bool, error) {
 		result, err := authzAuthorizer.Check(ctx, authz.CheckRequest{UserID: userID, Action: action})
 		return err == nil && result.Allowed, err
@@ -257,6 +265,9 @@ func run() error {
 
 	// ── Invitation join (unauthenticated — accessed before account creation) ──
 	r.Get("/api/auth/join", invHandler.Join)
+
+	// ── Public instance UI settings (unauthenticated) ─────────────────────────
+	r.Get("/api/auth/instance/ui", bootstrapHandler.GetPublicUISettings)
 
 	// ── Protected routes (Bearer token required) ──────────────────────────────
 	authMiddleware := pkgmiddleware.RequireAuth(cfg.JWTSigningKey, cfg.JWTSigningKeyPrev)

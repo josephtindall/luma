@@ -10,7 +10,7 @@ const _actionGroups = <String, List<String>>{
   'Flows': ['flow:read', 'flow:create', 'flow:edit', 'flow:delete', 'flow:publish', 'flow:execute', 'flow:comment'],
   'Vaults': ['vault:read', 'vault:create', 'vault:edit', 'vault:delete', 'vault:archive', 'vault:manage-members', 'vault:manage-roles'],
   'Users': ['user:read', 'user:invite', 'user:edit', 'user:delete', 'user:lock', 'user:unlock', 'user:revoke-sessions'],
-  'Audit': ['audit:read-own', 'audit:read-all'],
+  'Audit': ['audit:read-own', 'audit:read-all', 'audit:export-all'],
   'Instance': ['instance:read', 'instance:configure', 'instance:backup', 'instance:restore'],
   'Notifications': ['notification:read', 'notification:configure-own', 'notification:configure-all'],
   'Invitations': ['invitation:create', 'invitation:revoke', 'invitation:list'],

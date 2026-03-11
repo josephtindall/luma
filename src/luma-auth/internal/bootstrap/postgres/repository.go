@@ -30,7 +30,7 @@ func (r *Repository) Get(ctx context.Context) (*bootstrap.InstanceState, error) 
 		       password_min_length, password_require_uppercase,
 		       password_require_lowercase, password_require_numbers,
 		       password_require_symbols, password_history_count,
-		       content_width
+		       content_width, show_github_button, show_donate_button
 		FROM auth.instance
 		LIMIT 1`
 
@@ -53,6 +53,8 @@ func (r *Repository) Get(ctx context.Context) (*bootstrap.InstanceState, error) 
 		&s.PasswordRequireSymbols,
 		&s.PasswordHistoryCount,
 		&s.ContentWidth,
+		&s.ShowGithubButton,
+		&s.ShowDonateButton,
 	)
 	if err == pgx.ErrNoRows {
 		// Row hasn't been seeded yet — EnsureRow will create it.
@@ -108,6 +110,16 @@ func (r *Repository) UpdateSettings(ctx context.Context, params bootstrap.Instan
 	if params.ContentWidth != nil {
 		setClauses = append(setClauses, fmt.Sprintf("content_width = $%d", i))
 		args = append(args, *params.ContentWidth)
+		i++
+	}
+	if params.ShowGithubButton != nil {
+		setClauses = append(setClauses, fmt.Sprintf("show_github_button = $%d", i))
+		args = append(args, *params.ShowGithubButton)
+		i++
+	}
+	if params.ShowDonateButton != nil {
+		setClauses = append(setClauses, fmt.Sprintf("show_donate_button = $%d", i))
+		args = append(args, *params.ShowDonateButton)
 		i++
 	}
 

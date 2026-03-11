@@ -7,6 +7,8 @@ class InstanceSettings {
   final bool passwordRequireNumbers;
   final bool passwordRequireSymbols;
   final int passwordHistoryCount;
+  final bool showGithubButton;
+  final bool showDonateButton;
 
   const InstanceSettings({
     required this.name,
@@ -17,6 +19,8 @@ class InstanceSettings {
     required this.passwordRequireNumbers,
     required this.passwordRequireSymbols,
     required this.passwordHistoryCount,
+    required this.showGithubButton,
+    required this.showDonateButton,
   });
 
   factory InstanceSettings.fromJson(Map<String, dynamic> json) {
@@ -31,6 +35,8 @@ class InstanceSettings {
       passwordRequireNumbers: json['password_require_numbers'] as bool? ?? false,
       passwordRequireSymbols: json['password_require_symbols'] as bool? ?? false,
       passwordHistoryCount: json['password_history_count'] as int? ?? 0,
+      showGithubButton: json['show_github_button'] as bool? ?? true,
+      showDonateButton: json['show_donate_button'] as bool? ?? true,
     );
   }
 
@@ -43,6 +49,8 @@ class InstanceSettings {
         'password_require_numbers': passwordRequireNumbers,
         'password_require_symbols': passwordRequireSymbols,
         'password_history_count': passwordHistoryCount,
+        'show_github_button': showGithubButton,
+        'show_donate_button': showDonateButton,
       };
 
   InstanceSettings copyWith({
@@ -54,6 +62,8 @@ class InstanceSettings {
     bool? passwordRequireNumbers,
     bool? passwordRequireSymbols,
     int? passwordHistoryCount,
+    bool? showGithubButton,
+    bool? showDonateButton,
   }) {
     return InstanceSettings(
       name: name ?? this.name,
@@ -68,6 +78,8 @@ class InstanceSettings {
       passwordRequireSymbols:
           passwordRequireSymbols ?? this.passwordRequireSymbols,
       passwordHistoryCount: passwordHistoryCount ?? this.passwordHistoryCount,
+      showGithubButton: showGithubButton ?? this.showGithubButton,
+      showDonateButton: showDonateButton ?? this.showDonateButton,
     );
   }
 }

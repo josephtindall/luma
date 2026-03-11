@@ -1937,6 +1937,34 @@ class _DevicesSectionState extends State<_DevicesSection> {
     'user_registered' => (Icons.person_add, 'Account created'),
     'authz_denied' => (Icons.block, 'Access denied'),
     'token_reuse_detected' => (Icons.warning_amber, 'Token reuse detected'),
+    // Admin: user management
+    'admin_user_created' => (Icons.person_add, 'Admin: user created'),
+    'admin_force_password_change' => (Icons.password, 'Admin: force password change'),
+    'admin_password_reset_link' => (Icons.link, 'Admin: password reset link'),
+    'admin_sessions_revoked' => (Icons.device_hub, 'Admin: sessions revoked'),
+    'admin_totp_deleted' => (Icons.security, 'Admin: TOTP deleted'),
+    'admin_passkeys_revoked' => (Icons.fingerprint, 'Admin: passkeys revoked'),
+    // Admin: invitations
+    'invitation_created' => (Icons.mail_outline, 'Invitation created'),
+    'invitation_revoked' => (Icons.mail, 'Invitation revoked'),
+    // Admin: groups
+    'group_created' => (Icons.group_add, 'Group created'),
+    'group_renamed' => (Icons.drive_file_rename_outline, 'Group renamed'),
+    'group_deleted' => (Icons.group_remove, 'Group deleted'),
+    'group_member_added' => (Icons.person_add_alt, 'Group member added'),
+    'group_member_removed' => (Icons.person_remove, 'Group member removed'),
+    'group_role_assigned' => (Icons.badge, 'Group role assigned'),
+    'group_role_removed' => (Icons.badge, 'Group role removed'),
+    // Admin: custom roles
+    'role_created' => (Icons.admin_panel_settings, 'Role created'),
+    'role_updated' => (Icons.admin_panel_settings, 'Role updated'),
+    'role_deleted' => (Icons.admin_panel_settings, 'Role deleted'),
+    'role_permission_set' => (Icons.policy, 'Role permission set'),
+    'role_permission_removed' => (Icons.policy, 'Role permission removed'),
+    'role_assigned_to_user' => (Icons.manage_accounts, 'Role assigned to user'),
+    'role_unassigned_from_user' => (Icons.manage_accounts, 'Role unassigned from user'),
+    // Admin: instance
+    'instance_settings_updated' => (Icons.tune, 'Instance settings updated'),
     _ => (Icons.info_outline, event.replaceAll('_', ' ')),
   };
 }

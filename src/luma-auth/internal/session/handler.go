@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/josephtindall/luma-auth/internal/audit"
 	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
 	"github.com/josephtindall/luma-auth/pkg/httputil"
 	"github.com/josephtindall/luma-auth/pkg/middleware"
@@ -35,6 +36,7 @@ type Handler struct {
 	passwordReset ForceChangeTokenCreator // may be nil if feature not wired
 	recovery      RecoveryTokenGenerator  // may be nil if feature not wired
 	secureCookie  bool                    // false only in tests
+	audit         audit.Service
 }
 
 // NewHandler constructs the session handler.
@@ -44,6 +46,9 @@ func NewHandler(svc *Service, passwordReset ForceChangeTokenCreator, secureCooki
 
 // SetRecoveryGenerator injects the recovery token generator (called from main.go).
 func (h *Handler) SetRecoveryGenerator(g RecoveryTokenGenerator) { h.recovery = g }
+
+// SetAuditor injects the audit service.
+func (h *Handler) SetAuditor(a audit.Service) { h.audit = a }
 
 // Register handles POST /api/auth/register.
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -263,6 +268,15 @@ func (h *Handler) RevokeUserSessions(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.LogoutAll(r.Context(), targetID); err != nil {
 		httputil.WriteError(w, pkgerrors.HTTPStatus(err), errorCode(err), err.Error())
 		return
+	}
+	if h.audit != nil {
+		h.audit.WriteAsync(r.Context(), audit.Event{
+			UserID: claims.Subject,
+			Event:  audit.EventAdminSessionsRevoked,
+			Metadata: map[string]any{
+				"target_user_id": targetID,
+			},
+		})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

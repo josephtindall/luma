@@ -68,4 +68,37 @@ const (
 	EventPasskeyRegistered  = "passkey_registered"
 	EventPasskeyLogin       = "passkey_login"
 	EventPasskeyRevoked     = "passkey_revoked"
+
+	// Admin: user management
+	EventAdminUserCreated        = "admin_user_created"
+	EventAdminForcePasswordChange = "admin_force_password_change"
+	EventAdminPasswordResetLink  = "admin_password_reset_link"
+	EventAdminSessionsRevoked    = "admin_sessions_revoked"
+	EventAdminTOTPDeleted        = "admin_totp_deleted"
+	EventAdminPasskeysRevoked    = "admin_passkeys_revoked"
+
+	// Admin: invitations
+	EventInvitationCreated = "invitation_created"
+	EventInvitationRevoked = "invitation_revoked"
+
+	// Admin: groups
+	EventGroupCreated       = "group_created"
+	EventGroupRenamed       = "group_renamed"
+	EventGroupDeleted       = "group_deleted"
+	EventGroupMemberAdded   = "group_member_added"
+	EventGroupMemberRemoved = "group_member_removed"
+	EventGroupRoleAssigned  = "group_role_assigned"
+	EventGroupRoleRemoved   = "group_role_removed"
+
+	// Admin: custom roles
+	EventRoleCreated            = "role_created"
+	EventRoleUpdated            = "role_updated"
+	EventRoleDeleted            = "role_deleted"
+	EventRolePermissionSet      = "role_permission_set"
+	EventRolePermissionRemoved  = "role_permission_removed"
+	EventRoleAssignedToUser     = "role_assigned_to_user"
+	EventRoleUnassignedFromUser = "role_unassigned_from_user"
+
+	// Admin: instance
+	EventInstanceSettingsUpdated = "instance_settings_updated"
 )

@@ -262,6 +262,33 @@ class AuthService extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Resets the password using the 64-digit account recovery token.
+  /// Issues a new session on success. The user must provide a new password
+  /// as part of the recovery flow.
+  Future<void> resetWithAccountRecovery(
+      String email, String token, String newPassword) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/recovery/reset-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'email': email,
+        'token': token,
+        'new_password': newPassword,
+        'platform': 'web',
+        'device_name': detectBrowserName(),
+        'fingerprint': getDeviceFingerprint(),
+      }),
+    );
+    if (resp.statusCode != 200) {
+      final data = json.decode(resp.body) as Map<String, dynamic>;
+      throw AuthException(
+          (data['message'] ?? data['error'] ?? 'Recovery failed').toString());
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    _accessToken = data['access_token'] as String?;
+    notifyListeners();
+  }
+
   /// Verifies the MFA code against the pending challenge.
   /// Called from the MFA verification screen after [mfaPending] is true.
   /// Throws [AuthException] on failure.

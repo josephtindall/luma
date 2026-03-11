@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/josephtindall/luma-auth/internal/audit"
 	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
 	"github.com/josephtindall/luma-auth/pkg/httputil"
 	"github.com/josephtindall/luma-auth/pkg/middleware"
@@ -31,12 +32,16 @@ type Handler struct {
 	devices      DeviceEnsurer
 	sessions     SessionIssuer
 	secureCookie bool
+	audit        audit.Service
 }
 
 // NewHandler constructs the password-reset handler.
 func NewHandler(svc *Service, devices DeviceEnsurer, sessions SessionIssuer, secureCookie bool) *Handler {
 	return &Handler{svc: svc, devices: devices, sessions: sessions, secureCookie: secureCookie}
 }
+
+// SetAuditor injects the audit service.
+func (h *Handler) SetAuditor(a audit.Service) { h.audit = a }
 
 // AdminCreateResetToken handles POST /api/auth/admin/users/{id}/password-reset.
 // Owner-only. Returns {"token": "<raw>", "expires_at": "..."}.
@@ -57,7 +62,16 @@ func (h *Handler) AdminCreateResetToken(w http.ResponseWriter, r *http.Request) 
 		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
 		return
 	}
-
+	if h.audit != nil {
+		h.audit.WriteAsync(r.Context(), audit.Event{
+			UserID: claims.Subject,
+			Event:  audit.EventAdminPasswordResetLink,
+			Metadata: map[string]any{
+				"target_user_id": userID,
+				"expires_at":     expiresAt,
+			},
+		})
+	}
 	httputil.WriteJSON(w, http.StatusOK, map[string]any{
 		"token":      rawToken,
 		"expires_at": expiresAt,

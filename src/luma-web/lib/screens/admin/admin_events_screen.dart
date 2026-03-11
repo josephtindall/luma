@@ -33,6 +33,7 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
 
   static const _eventOptions = <(String?, String)>[
     (null, 'All event types'),
+    // Auth events
     ('login_success', 'Signed in'),
     ('login_failed', 'Failed sign-in'),
     ('logout', 'Signed out'),
@@ -54,6 +55,34 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
     ('account_unlocked', 'Account unlocked'),
     ('user_registered', 'Account created'),
     ('authz_denied', 'Access denied'),
+    // Admin: user management
+    ('admin_user_created', 'Admin: user created'),
+    ('admin_force_password_change', 'Admin: force password change'),
+    ('admin_password_reset_link', 'Admin: password reset link'),
+    ('admin_sessions_revoked', 'Admin: sessions revoked'),
+    ('admin_totp_deleted', 'Admin: TOTP deleted'),
+    ('admin_passkeys_revoked', 'Admin: passkeys revoked'),
+    // Admin: invitations
+    ('invitation_created', 'Invitation created'),
+    ('invitation_revoked', 'Invitation revoked'),
+    // Admin: groups
+    ('group_created', 'Group created'),
+    ('group_renamed', 'Group renamed'),
+    ('group_deleted', 'Group deleted'),
+    ('group_member_added', 'Group member added'),
+    ('group_member_removed', 'Group member removed'),
+    ('group_role_assigned', 'Group role assigned'),
+    ('group_role_removed', 'Group role removed'),
+    // Admin: custom roles
+    ('role_created', 'Role created'),
+    ('role_updated', 'Role updated'),
+    ('role_deleted', 'Role deleted'),
+    ('role_permission_set', 'Role permission set'),
+    ('role_permission_removed', 'Role permission removed'),
+    ('role_assigned_to_user', 'Role assigned to user'),
+    ('role_unassigned_from_user', 'Role unassigned from user'),
+    // Admin: instance
+    ('instance_settings_updated', 'Instance settings updated'),
   ];
 
   @override
@@ -498,6 +527,7 @@ class _DetailsPanel extends StatelessWidget {
     final e = event;
 
     final rows = <(String, String)>[
+      ('Occurred at', e.occurredAt.toLocal().toIso8601String().replaceFirst('T', ' ').split('.').first),
       if (e.userEmail != null) ('User email', e.userEmail!),
       if (e.userDisplayName != null) ('Display name', e.userDisplayName!),
       if (e.userId != null) ('User ID', e.userId!),

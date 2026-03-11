@@ -315,10 +315,10 @@ func (s *Service) AdminCreate(ctx context.Context, params AdminCreateParams, req
 
 	s.audit.WriteAsync(ctx, audit.Event{
 		UserID: u.ID,
-		Event:  audit.EventUserRegistered,
+		Event:  audit.EventAdminUserCreated,
 		Metadata: map[string]any{
 			"created_by": requesterID,
-			"via":        "admin_create",
+			"email":      u.Email,
 		},
 	})
 
@@ -336,9 +336,8 @@ func (s *Service) SetForcePasswordChange(ctx context.Context, targetID, requeste
 	}
 	s.audit.WriteAsync(ctx, audit.Event{
 		UserID: targetID,
-		Event:  audit.EventProfileUpdated,
+		Event:  audit.EventAdminForcePasswordChange,
 		Metadata: map[string]any{
-			"action":       "force_password_change",
 			"set_to":       force,
 			"requested_by": requesterID,
 		},

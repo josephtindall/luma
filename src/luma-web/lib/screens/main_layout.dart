@@ -3,6 +3,8 @@ import 'dart:js_interop_unsafe';
 import 'dart:math' as math;
 import 'dart:ui' as ui;
 
+import 'package:web/web.dart' as web;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
 import 'package:go_router/go_router.dart';
@@ -34,41 +36,6 @@ void _saveSidebarState(bool expanded) {
     storage.callMethod<JSAny?>(
         'setItem'.toJS, 'luma_sidebar_expanded'.toJS, expanded.toString().toJS);
   } catch (_) {}
-}
-
-// ── Email censor helper ───────────────────────────────────────────────────────
-
-/// Censors both the local part and domain label of an email address.
-/// `john.doe@example.com` → `j*******e@e*****e.com`
-String _censorEmail(String email) {
-  final atIdx = email.indexOf('@');
-  if (atIdx <= 0) return email;
-
-  final local = email.substring(0, atIdx);
-  final fullDomain = email.substring(atIdx + 1); // without '@'
-
-  String censorPart(String part) {
-    if (part.length <= 2) return part;
-    final first = part[0];
-    final last = part[part.length - 1];
-    final stars = '*' * (part.length - 2).clamp(3, 6);
-    return '$first$stars$last';
-  }
-
-  final censoredLocal = censorPart(local);
-
-  // Censor domain label, keep TLD (.com, .io, etc.) readable.
-  final lastDot = fullDomain.lastIndexOf('.');
-  final String censoredDomain;
-  if (lastDot > 0) {
-    final label = fullDomain.substring(0, lastDot);
-    final tld = fullDomain.substring(lastDot);
-    censoredDomain = '${censorPart(label)}$tld';
-  } else {
-    censoredDomain = censorPart(fullDomain);
-  }
-
-  return '$censoredLocal@$censoredDomain';
 }
 
 // ── MainLayout ────────────────────────────────────────────────────────────────
@@ -104,6 +71,33 @@ class _MainLayoutState extends State<MainLayout> {
   void initState() {
     super.initState();
     _isSidebarExpanded = _loadSidebarState();
+  }
+
+  void _showDonateDialog(BuildContext context) {
+    showDialog<void>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Support Luma'),
+        content: const Text(
+          'Thanks for using Luma! If you found this product helpful, '
+          'please consider making a donation to support development.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('No, thanks'),
+          ),
+          FilledButton(
+            onPressed: () {
+              Navigator.of(ctx).pop();
+              web.window
+                  .open('https://github.com/sponsors/josephtindall', '_blank');
+            },
+            child: const Text('Yes, donate'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _toggleSidebar() {
@@ -196,6 +190,44 @@ class _MainLayoutState extends State<MainLayout> {
                 children: [
                   _buildTopLeftBranding(),
                   const Spacer(),
+                  // GitHub + Donate buttons (conditionally shown)
+                  ListenableBuilder(
+                    listenable: widget.userService,
+                    builder: (context, _) => Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (widget.userService.showGithubButton)
+                          Tooltip(
+                            message: 'View on GitHub',
+                            child: IconButton(
+                              icon: const Icon(Icons.code, size: 20),
+                              onPressed: () => web.window.open(
+                                'https://github.com/josephtindall/luma',
+                                '_blank',
+                              ),
+                              style: IconButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                        if (widget.userService.showDonateButton)
+                          Tooltip(
+                            message: 'Donate to Support Development',
+                            child: IconButton(
+                              icon: const Icon(Icons.favorite_border, size: 20),
+                              onPressed: () => _showDonateDialog(context),
+                              style: IconButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(8),
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                   // Theme toggle (3-segment pill)
                   _ThemeToggleButton(
                     themeNotifier: widget.themeNotifier,
@@ -359,9 +391,7 @@ class _MainLayoutState extends State<MainLayout> {
       builder: (context, _) {
         final profile = widget.userService.profile;
         final name = profile?.displayName ?? 'Account';
-        final email = profile?.email;
         final seed = profile?.avatarSeed ?? '';
-        final censored = email != null ? _censorEmail(email) : null;
 
         return MenuAnchor(
           alignmentOffset: const Offset(0, 8),
@@ -404,28 +434,12 @@ class _MainLayoutState extends State<MainLayout> {
                     children: [
                       UserAvatar(avatarSeed: seed, displayName: name, size: 28),
                       const SizedBox(width: 8),
-                      Column(
-                        mainAxisSize: MainAxisSize.min,
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            name,
-                            style: Theme.of(context)
-                                .textTheme
-                                .bodyMedium
-                                ?.copyWith(fontWeight: FontWeight.w600),
-                          ),
-                          if (censored != null)
-                            Text(
-                              censored,
-                              style: Theme.of(context)
-                                  .textTheme
-                                  .bodySmall
-                                  ?.copyWith(
-                                    color: colorScheme.onSurfaceVariant,
-                                  ),
-                            ),
-                        ],
+                      Text(
+                        name,
+                        style: Theme.of(context)
+                            .textTheme
+                            .bodyMedium
+                            ?.copyWith(fontWeight: FontWeight.w600),
                       ),
                     ],
                   ),
