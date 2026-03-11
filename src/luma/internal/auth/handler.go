@@ -118,6 +118,9 @@ func (h *Handler) AdminRoutes() chi.Router {
 	r.Post("/groups/{id}/roles/{roleID}", h.proxyAuthTemplate("POST", "/api/auth/admin/groups/{id}/roles/{roleID}"))
 	r.Delete("/groups/{id}/roles/{roleID}", h.proxyAuthTemplate("DELETE", "/api/auth/admin/groups/{id}/roles/{roleID}"))
 
+	// Audit events (admin view)
+	r.Get("/events", h.proxyAuth("GET", "/api/auth/audit"))
+
 	// Custom roles
 	r.Get("/custom-roles", h.proxyAuth("GET", "/api/auth/admin/custom-roles"))
 	r.Post("/custom-roles", h.proxyAuth("POST", "/api/auth/admin/custom-roles"))
@@ -225,7 +228,11 @@ func (h *Handler) status(w http.ResponseWriter, r *http.Request) {
 // enforces ownership.
 func (h *Handler) proxyAuth(method, authPath string) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		req, err := http.NewRequestWithContext(r.Context(), method, h.authURL+authPath, r.Body)
+		target := h.authURL + authPath
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		req, err := http.NewRequestWithContext(r.Context(), method, target, r.Body)
 		if err != nil {
 			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
 			return

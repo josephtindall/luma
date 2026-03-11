@@ -203,6 +203,11 @@ func run() error {
 	groupHandler.SetAuthorizer(authzAuthorizer)
 	roleHandler.SetAuthorizer(authzAuthorizer)
 
+	auditHTTPHandler := audit.NewHandler(auditRepo, func(ctx context.Context, userID, action string) (bool, error) {
+		result, err := authzAuthorizer.Check(ctx, authz.CheckRequest{UserID: userID, Action: action})
+		return err == nil && result.Allowed, err
+	})
+
 	// ── 9. Router ─────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
 
@@ -286,8 +291,8 @@ func run() error {
 		r.Get("/api/auth/passkeys", mfaHandler.ListPasskeys)
 		r.Delete("/api/auth/passkeys/{id}", mfaHandler.RevokePasskey)
 
-		r.Get("/api/auth/audit/me", auditHandler(auditRepo, false))
-		r.Get("/api/auth/audit", auditHandler(auditRepo, true))
+		r.Get("/api/auth/audit/me", auditHTTPHandler.Me)
+		r.Get("/api/auth/audit", auditHTTPHandler.All)
 
 		r.Post("/api/auth/authz/check", authzHandler.Check)
 
@@ -373,32 +378,3 @@ func run() error {
 	return nil
 }
 
-// auditHandler is an inline handler for the audit log endpoints until audit
-// grows its own Handler type.
-func auditHandler(repo audit.Repository, all bool) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		claims := pkgmiddleware.ClaimsFromContext(r.Context())
-		if claims == nil {
-			httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
-			return
-		}
-		if all && claims.Role != "builtin:instance-owner" {
-			httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
-			return
-		}
-		var (
-			rows []*audit.Row
-			err  error
-		)
-		if all {
-			rows, err = repo.ListAll(r.Context(), 100, 0)
-		} else {
-			rows, err = repo.ListForUser(r.Context(), claims.Subject, 100, 0)
-		}
-		if err != nil {
-			httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load audit log")
-			return
-		}
-		httputil.WriteJSON(w, http.StatusOK, rows)
-	}
-}

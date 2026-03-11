@@ -3,17 +3,20 @@ import 'package:go_router/go_router.dart';
 
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
+import 'services/theme_notifier.dart';
 import 'services/user_service.dart';
 import 'screens/setup/setup_wizard_screen.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/settings/settings_screen.dart';
+import 'screens/settings/settings_layout.dart';
 import 'screens/admin/admin_layout.dart';
 import 'screens/admin/admin_users_screen.dart';
 import 'screens/admin/admin_invites_screen.dart';
 import 'screens/admin/admin_settings_screen.dart';
 import 'screens/admin/admin_groups_screen.dart';
 import 'screens/admin/admin_roles_screen.dart';
+import 'screens/admin/admin_events_screen.dart';
 import 'screens/register/register_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/auth/recovery_code_screen.dart';
@@ -23,6 +26,7 @@ GoRouter buildRouter(
   AuthService authService,
   ApiClient apiClient,
   UserService userService,
+  ThemeNotifier themeNotifier,
 ) {
   return GoRouter(
     refreshListenable: authService,
@@ -105,6 +109,7 @@ GoRouter buildRouter(
         builder: (_, __, child) => MainLayout(
           auth: authService,
           userService: userService,
+          themeNotifier: themeNotifier,
           child: child,
         ),
         routes: [
@@ -116,10 +121,31 @@ GoRouter buildRouter(
           ),
           GoRoute(
             path: '/settings',
-            builder: (_, __) => SettingsScreen(userService: userService),
+            redirect: (_, __) => '/settings/profile',
           ),
           ShellRoute(
-            builder: (_, __, child) => AdminLayout(userService: userService, child: child),
+            builder: (_, __, child) => SettingsLayout(child: child),
+            routes: [
+              GoRoute(
+                path: '/settings/profile',
+                builder: (_, __) =>
+                    SettingsProfileTab(userService: userService),
+              ),
+              GoRoute(
+                path: '/settings/security',
+                builder: (_, __) =>
+                    SettingsSecurityTab(userService: userService),
+              ),
+              GoRoute(
+                path: '/settings/activity',
+                builder: (_, __) =>
+                    SettingsActivityTab(userService: userService),
+              ),
+            ],
+          ),
+          ShellRoute(
+            builder: (_, __, child) =>
+                AdminLayout(userService: userService, child: child),
             routes: [
               GoRoute(
                 path: '/admin/users',
@@ -127,7 +153,8 @@ GoRouter buildRouter(
               ),
               GoRoute(
                 path: '/admin/invites',
-                builder: (_, __) => AdminInvitesScreen(userService: userService),
+                builder: (_, __) =>
+                    AdminInvitesScreen(userService: userService),
               ),
               GoRoute(
                 path: '/admin/groups',
@@ -139,7 +166,13 @@ GoRouter buildRouter(
               ),
               GoRoute(
                 path: '/admin/settings',
-                builder: (_, __) => AdminSettingsScreen(userService: userService),
+                builder: (_, __) =>
+                    AdminSettingsScreen(userService: userService),
+              ),
+              GoRoute(
+                path: '/admin/events',
+                builder: (_, __) =>
+                    AdminEventsScreen(userService: userService),
               ),
             ],
           ),

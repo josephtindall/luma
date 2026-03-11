@@ -30,6 +30,8 @@ class UserService extends ChangeNotifier {
   bool get canManageGroups => _adminCaps['group:read'] == true;
   bool get canManageRoles => _adminCaps['role:read'] == true;
   bool get isAdminOwner => _adminCaps['is_owner'] == true;
+  bool get canViewAuditLog => _adminCaps['audit:read-all'] == true;
+  bool get canExportAuditLog => _adminCaps['audit:export-all'] == true;
 
   Future<void> loadProfile() async {
     final resp = await _api.get('/api/luma/user/me');
@@ -163,16 +165,56 @@ class UserService extends ChangeNotifier {
     }
   }
 
-  Future<List<AuditEvent>> loadAudit() async {
-    final resp = await _api.get('/api/luma/user/me/audit');
+  Future<AuditPage> loadAudit({
+    int limit = 10,
+    int offset = 0,
+    String? search,
+    String? eventFilter,
+    String exclude = 'token_refreshed',
+  }) async {
+    final params = <String, String>{
+      'limit': '$limit',
+      'offset': '$offset',
+      if (search != null && search.isNotEmpty) 'search': search,
+      if (eventFilter != null && eventFilter.isNotEmpty) 'event': eventFilter,
+      if (exclude.isNotEmpty) 'exclude': exclude,
+    };
+    final uri = Uri.parse('/api/luma/user/me/audit')
+        .replace(queryParameters: params)
+        .toString();
+    final resp = await _api.get(uri);
     if (resp.statusCode != 200) {
       throw Exception('Failed to load audit log');
     }
-    final data = json.decode(resp.body);
-    final items = _unwrapList(data, ['events', 'audit', 'data']);
-    return items
-        .map((e) => AuditEvent.fromJson(e as Map<String, dynamic>))
-        .toList();
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    return AuditPage.fromJson(data);
+  }
+
+  Future<AuditPage> loadAdminAudit({
+    int limit = 30,
+    int offset = 0,
+    String? search,
+    String? eventFilter,
+    DateTime? after,
+    DateTime? before,
+  }) async {
+    final params = <String, String>{
+      'limit': '$limit',
+      'offset': '$offset',
+      if (search != null && search.isNotEmpty) 'search': search,
+      if (eventFilter != null && eventFilter.isNotEmpty) 'event': eventFilter,
+      if (after != null) 'after': after.toUtc().toIso8601String(),
+      if (before != null) 'before': before.toUtc().toIso8601String(),
+    };
+    final uri = Uri.parse('/api/luma/admin/events')
+        .replace(queryParameters: params)
+        .toString();
+    final resp = await _api.get(uri);
+    if (resp.statusCode != 200) {
+      throw Exception('Failed to load audit log');
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    return AuditPage.fromJson(data);
   }
 
   // ── TOTP management ─────────────────────────────────────────────────────

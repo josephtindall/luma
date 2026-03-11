@@ -14,15 +14,35 @@ type Event struct {
 }
 
 // Row is the persisted form of an audit event (includes DB-assigned fields).
+// UserEmail and UserDisplayName are populated only by ListAll (via JOIN).
 type Row struct {
-	ID         int64
-	UserID     *string
-	DeviceID   *string
-	Event      string
-	IPAddress  *string
-	UserAgent  *string
-	Metadata   map[string]any
-	OccurredAt time.Time
+	ID              int64
+	UserID          *string
+	DeviceID        *string
+	Event           string
+	IPAddress       *string
+	UserAgent       *string
+	Metadata        map[string]any
+	OccurredAt      time.Time
+	UserEmail       *string // populated by ListAll JOIN; nil otherwise
+	UserDisplayName *string // populated by ListAll JOIN; nil otherwise
+}
+
+// AuditQuery holds filter + pagination parameters for listing audit events.
+type AuditQuery struct {
+	Limit       int        // max rows; 0 → use handler default
+	Offset      int        // rows to skip
+	Search      string     // ILIKE match against event + user_agent (empty = no filter)
+	EventFilter string     // exact event type to include (empty = all types)
+	Exclude     string     // exact event type to exclude (empty = none)
+	After       *time.Time // occurred_at >= After
+	Before      *time.Time // occurred_at <= Before
+}
+
+// Page is a paginated result set returned by list queries.
+type Page struct {
+	Rows  []*Row
+	Total int // total matching rows (ignoring Limit/Offset)
 }
 
 // Canonical event name constants — the complete set from the design spec.

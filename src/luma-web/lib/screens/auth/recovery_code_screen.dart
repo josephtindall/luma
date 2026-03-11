@@ -69,55 +69,55 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(
-              'Luma — Account Recovery Code',
-              style: pw.TextStyle(
-                  fontSize: 22, fontWeight: pw.FontWeight.bold),
+              'Luma Account Recovery Code',
+              style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 24),
             pw.Text(
               'This code is the only way to recover your account if you forget '
-              'your password. Keep it in a safe place — it cannot be retrieved '
+              'your password. Keep it in a safe place; it cannot be retrieved '
               'from your account if lost.',
               style: const pw.TextStyle(fontSize: 11),
             ),
             pw.SizedBox(height: 32),
             // 4×4 grid of digit groups
-            ...List.generate(4, (row) => pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 14),
-                  child: pw.Row(
-                    children: List.generate(4, (col) {
-                      final idx = row * 4 + col;
-                      return pw.Padding(
-                        padding: const pw.EdgeInsets.only(right: 14),
-                        child: pw.Container(
-                          width: 72,
-                          padding: const pw.EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 10),
-                          decoration: pw.BoxDecoration(
-                            border: pw.Border.all(
-                                color: PdfColors.grey400, width: 1),
-                            borderRadius: const pw.BorderRadius.all(
-                                pw.Radius.circular(4)),
-                          ),
-                          child: pw.Text(
-                            idx < groups.length ? groups[idx] : '',
-                            style: pw.TextStyle(
-                              fontSize: 18,
-                              fontWeight: pw.FontWeight.bold,
-                              font: pw.Font.courier(),
+            ...List.generate(
+                4,
+                (row) => pw.Padding(
+                      padding: const pw.EdgeInsets.only(bottom: 14),
+                      child: pw.Row(
+                        children: List.generate(4, (col) {
+                          final idx = row * 4 + col;
+                          return pw.Padding(
+                            padding: const pw.EdgeInsets.only(right: 14),
+                            child: pw.Container(
+                              width: 72,
+                              padding: const pw.EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 10),
+                              decoration: pw.BoxDecoration(
+                                border: pw.Border.all(
+                                    color: PdfColors.grey400, width: 1),
+                                borderRadius: const pw.BorderRadius.all(
+                                    pw.Radius.circular(4)),
+                              ),
+                              child: pw.Text(
+                                idx < groups.length ? groups[idx] : '',
+                                style: pw.TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: pw.FontWeight.bold,
+                                  font: pw.Font.courier(),
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
                             ),
-                            textAlign: pw.TextAlign.center,
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                )),
+                          );
+                        }),
+                      ),
+                    )),
             pw.SizedBox(height: 32),
             pw.Text(
-              'Do not share this code with anyone. Luma support will never ask for it.',
-              style: const pw.TextStyle(
-                  fontSize: 10, color: PdfColors.red900),
+              'Do not share this code with anyone. It is for you, and you alone.',
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.red900),
             ),
           ],
         ),
@@ -148,12 +148,24 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
     final colorScheme = theme.colorScheme;
     final groups = _groups;
 
+    // Compute all widths explicitly from the real viewport width.
+    // Flutter web passes loose constraints through Column children, which
+    // breaks Expanded + SelectableText combinations — bypass entirely.
+    const hPad = 24.0;
+    const buttonW = 160.0;
+    const colGap = 16.0;
+    const cellGap = 12.0;
+    final viewportW = MediaQuery.sizeOf(context).width;
+    final contentW = (viewportW - hPad * 2).clamp(0.0, 700.0);
+    final gridW = (contentW - buttonW - colGap).clamp(0.0, double.infinity);
+    final cellW = ((gridW - cellGap * 3) / 4).clamp(0.0, double.infinity);
+
     return Scaffold(
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 48),
-          child: ConstrainedBox(
-            constraints: const BoxConstraints(maxWidth: 700),
+          padding: const EdgeInsets.symmetric(horizontal: hPad, vertical: 48),
+          child: SizedBox(
+            width: contentW,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
@@ -168,6 +180,7 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
                 ),
                 const SizedBox(height: 12),
                 Container(
+                  width: contentW,
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: colorScheme.errorContainer,
@@ -183,8 +196,8 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
                         child: Text(
                           'This is how you recover your account in case you lose your password. '
                           'Save it somewhere safe — it cannot be retrieved later.',
-                          style: theme.textTheme.bodyMedium?.copyWith(
-                              color: colorScheme.onErrorContainer),
+                          style: theme.textTheme.bodyMedium
+                              ?.copyWith(color: colorScheme.onErrorContainer),
                         ),
                       ),
                     ],
@@ -193,127 +206,137 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
 
                 const SizedBox(height: 24),
 
-                // Code + action buttons side by side
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    // 4×4 grid
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.stretch,
-                        children: List.generate(4, (row) => Padding(
-                          padding: const EdgeInsets.only(bottom: 10),
-                          child: Row(
-                            children: List.generate(4, (col) {
-                              final idx = row * 4 + col;
-                              final group =
-                                  idx < groups.length ? groups[idx] : '';
-                              return Expanded(
-                                child: Padding(
-                                  padding: EdgeInsets.only(
-                                      right: col < 3 ? 8 : 0),
-                                  child: Container(
-                                    padding: const EdgeInsets.symmetric(
-                                        vertical: 12),
-                                    decoration: BoxDecoration(
-                                      border: Border.all(
-                                          color: colorScheme.outline),
-                                      borderRadius:
-                                          BorderRadius.circular(6),
-                                      color: colorScheme
-                                          .surfaceContainerHighest,
-                                    ),
-                                    child: Text(
-                                      group,
-                                      textAlign: TextAlign.center,
-                                      style: theme.textTheme.titleLarge
-                                          ?.copyWith(
-                                        fontFamily: 'monospace',
-                                        fontWeight: FontWeight.bold,
-                                        letterSpacing: 2,
+                // Code grid + action buttons side by side.
+                // All widths are explicit pixels — no Expanded or
+                // SelectableText (which breaks flex layout on Flutter web).
+                // The outer SizedBox gives the Row tight constraints so
+                // every fixed-width child is guaranteed to be visible.
+                SizedBox(
+                  width: contentW,
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      SelectionArea(
+                        child: SizedBox(
+                          width: gridW,
+                          child: Column(
+                            children: List.generate(
+                                4,
+                                (row) => Padding(
+                                      padding:
+                                          const EdgeInsets.only(bottom: 16),
+                                      child: Row(
+                                        mainAxisSize: MainAxisSize.min,
+                                        children: List.generate(4, (col) {
+                                          final idx = row * 4 + col;
+                                          final group = idx < groups.length
+                                              ? groups[idx]
+                                              : '';
+                                          return Padding(
+                                            padding: EdgeInsets.only(
+                                                right: col < 3 ? cellGap : 0),
+                                            child: SizedBox(
+                                              width: cellW,
+                                              child: Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        vertical: 12),
+                                                decoration: BoxDecoration(
+                                                  border: Border.all(
+                                                      color:
+                                                          colorScheme.outline),
+                                                  borderRadius:
+                                                      BorderRadius.circular(6),
+                                                  color: colorScheme
+                                                      .surfaceContainerHighest,
+                                                ),
+                                                child: Text(
+                                                  group,
+                                                  textAlign: TextAlign.center,
+                                                  style: theme
+                                                      .textTheme.titleLarge
+                                                      ?.copyWith(
+                                                    fontFamily: 'monospace',
+                                                    fontWeight: FontWeight.bold,
+                                                    letterSpacing: 2,
+                                                  ),
+                                                ),
+                                              ),
+                                            ),
+                                          );
+                                        }),
                                       ),
-                                    ),
-                                  ),
-                                ),
-                              );
-                            }),
+                                    )),
                           ),
-                        )),
+                        ),
                       ),
-                    ),
 
-                    const SizedBox(width: 16),
+                      const SizedBox(width: colGap),
 
-                    // Action buttons (stacked vertically)
-                    Column(
-                      crossAxisAlignment: CrossAxisAlignment.stretch,
-                      children: [
-                        SizedBox(
-                          width: 160,
-                          child: OutlinedButton.icon(
-                            onPressed: _copyCode,
-                            icon: const Icon(Icons.copy, size: 18),
-                            label: const Text('Copy Recovery\nCode'),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 14),
-                              alignment: Alignment.centerLeft,
+                      // Action buttons (stacked vertically)
+                      SizedBox(
+                        width: buttonW,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            OutlinedButton.icon(
+                              onPressed: _copyCode,
+                              icon: const Icon(Icons.copy, size: 18),
+                              label: const Text('Copy Recovery\nCode'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 14),
+                                alignment: Alignment.centerLeft,
+                              ),
                             ),
-                          ),
-                        ),
-                        const SizedBox(height: 10),
-                        SizedBox(
-                          width: 160,
-                          child: OutlinedButton.icon(
-                            onPressed: _generatingPdf ? null : _downloadPDF,
-                            icon: _generatingPdf
-                                ? const SizedBox(
-                                    width: 18,
-                                    height: 18,
-                                    child: CircularProgressIndicator(
-                                        strokeWidth: 2),
-                                  )
-                                : const Icon(Icons.download, size: 18),
-                            label: const Text('Download\nPDF File'),
-                            style: OutlinedButton.styleFrom(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 16, vertical: 14),
-                              alignment: Alignment.centerLeft,
+                            const SizedBox(height: 10),
+                            OutlinedButton.icon(
+                              onPressed: _generatingPdf ? null : _downloadPDF,
+                              icon: _generatingPdf
+                                  ? const SizedBox(
+                                      width: 18,
+                                      height: 18,
+                                      child: CircularProgressIndicator(
+                                          strokeWidth: 2),
+                                    )
+                                  : const Icon(Icons.download, size: 18),
+                              label: const Text('Download\nPDF File'),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                    horizontal: 16, vertical: 14),
+                                alignment: Alignment.centerLeft,
+                              ),
                             ),
-                          ),
+                          ],
                         ),
-                      ],
-                    ),
-                  ],
+                      ),
+                    ],
+                  ),
                 ),
 
                 const SizedBox(height: 24),
 
                 // Mandatory acknowledgement checkbox
                 InkWell(
-                  onTap: () =>
-                      setState(() => _acknowledged = !_acknowledged),
+                  onTap: () => setState(() => _acknowledged = !_acknowledged),
                   borderRadius: BorderRadius.circular(8),
                   child: Padding(
-                    padding: const EdgeInsets.symmetric(vertical: 8),
+                    padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+                      crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         Checkbox(
                           value: _acknowledged,
-                          onChanged: (v) => setState(
-                              () => _acknowledged = v ?? false),
+                          onChanged: (v) =>
+                              setState(() => _acknowledged = v ?? false),
                         ),
-                        const SizedBox(width: 8),
+                        const SizedBox(width: 4),
                         Expanded(
-                          child: Padding(
-                            padding: const EdgeInsets.only(top: 12),
-                            child: Text(
-                              'I understand the risks and importance of saving this code '
-                              'for resetting my password. Without this code my account '
-                              'cannot be recovered.',
-                              style: theme.textTheme.bodyMedium,
-                            ),
+                          child: Text(
+                            'I understand the risks and importance of saving this code '
+                            'for resetting my password. Without this code my account '
+                            'cannot be recovered.',
+                            style: theme.textTheme.bodyMedium,
                           ),
                         ),
                       ],

@@ -87,6 +87,7 @@ func (h *Handler) AdminCapabilities(w http.ResponseWriter, r *http.Request) {
 		"group:add-member", "group:remove-member", "group:assign-role", "group:unassign-role",
 		"role:read", "role:create", "role:update", "role:delete",
 		"role:set-permission", "role:remove-permission", "role:assign-user", "role:unassign-user",
+		"audit:read-all", "audit:export-all",
 	}
 	caps := map[string]any{"is_owner": isOwner}
 
