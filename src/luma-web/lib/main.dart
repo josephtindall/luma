@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
@@ -6,6 +7,7 @@ import 'services/user_service.dart';
 import 'router.dart';
 
 void main() async {
+  usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
 
   const baseUrl = String.fromEnvironment(

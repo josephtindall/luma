@@ -179,7 +179,7 @@ CREATE TABLE luma.page_revisions (
     id          UUID        PRIMARY KEY DEFAULT gen_random_uuid(),
     page_id     UUID        NOT NULL REFERENCES luma.pages(id) ON DELETE CASCADE,
     content     JSONB       NOT NULL,      -- full block tree snapshot
-    created_by  TEXT        NOT NULL,      -- Haven user UUID
+    created_by  TEXT        NOT NULL,      -- luma-auth user UUID
     created_at  TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     is_manual   BOOLEAN     NOT NULL DEFAULT false,  -- true = user-triggered
     label       TEXT                                  -- optional user label for manual saves
@@ -202,7 +202,7 @@ CREATE TABLE luma.pages (
     vault_id     UUID        NOT NULL REFERENCES luma.vaults(id),
     title        TEXT        NOT NULL DEFAULT 'Untitled',
     content      JSONB       NOT NULL DEFAULT '{"blocks": []}',
-    created_by   TEXT        NOT NULL,      -- Haven user UUID
+    created_by   TEXT        NOT NULL,      -- luma-auth user UUID
     updated_by   TEXT        NOT NULL,
     is_archived  BOOLEAN     NOT NULL DEFAULT false,
     archived_at  TIMESTAMPTZ,

@@ -120,6 +120,7 @@ func run() error {
 
 	r.Route("/api/luma/setup", func(r chi.Router) { r.Mount("/", authHandler.SetupRoutes()) })
 	r.Route("/api/luma/auth", func(r chi.Router) { r.Mount("/", authHandler.AuthRoutes()) })
+	r.Get("/api/luma/health", authHandler.Health())
 
 	// Protected routes
 	r.Route("/api/luma", func(r chi.Router) {
@@ -127,15 +128,30 @@ func run() error {
 		r.Use(ensureVaultMw)
 		r.Mount("/vaults", vaultHandler.Routes())
 		r.Mount("/user", authHandler.UserRoutes())
+		r.Mount("/admin", authHandler.AdminRoutes())
 	})
 
-	// Static file serving — Flutter web SPA (when LUMA_STATIC_DIR is set)
+	// Static file serving — Flutter web SPA (when LUMA_STATIC_DIR is set).
+	// Uses path URL strategy: any path without a matching static file is served
+	// as index.html so the Flutter router can handle client-side navigation.
 	if cfg.StaticDir != "" {
-		fs := http.FileServer(http.Dir(cfg.StaticDir))
-		r.Handle("/*", http.StripPrefix("/", fs))
-		r.NotFound(func(w http.ResponseWriter, r *http.Request) {
-			http.ServeFile(w, r, filepath.Join(cfg.StaticDir, "index.html"))
-		})
+		staticDir := http.Dir(cfg.StaticDir)
+		indexFile := filepath.Join(cfg.StaticDir, "index.html")
+		fileServer := http.FileServer(staticDir)
+		r.Handle("/*", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			f, err := staticDir.Open(r.URL.Path)
+			if err != nil {
+				http.ServeFile(w, r, indexFile)
+				return
+			}
+			st, err := f.Stat()
+			f.Close()
+			if err != nil || st.IsDir() {
+				http.ServeFile(w, r, indexFile)
+				return
+			}
+			fileServer.ServeHTTP(w, r)
+		}))
 	}
 
 	// Server

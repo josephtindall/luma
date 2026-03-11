@@ -48,7 +48,7 @@ Two entry points in the editor, both produce the same dropdown:
 - Results grouped by type: Pages, Tasks, Flows, Users
 - Max 3 results per group in the dropdown, ordered by relevance then recency
 - Search is fuzzy — "ann" matches "Annual", "Announcement", "Ann"
-- Only returns results the current user has permission to read (filtered by Haven authz)
+- Only returns results the current user has permission to read (filtered by luma-auth authz)
 - Dropdown appears within 150ms of `@` being typed — queries Redis search cache first
 
 ---
@@ -201,4 +201,4 @@ Response:
 }
 ```
 
-Results filtered to only include entities the requesting user has `read` permission for. Permission check uses a batch Haven authz call to avoid N+1 round trips for a single dropdown load.
+Results filtered to only include entities the requesting user has `read` permission for. Permission check uses a batch luma-auth authz call to avoid N+1 round trips for a single dropdown load.

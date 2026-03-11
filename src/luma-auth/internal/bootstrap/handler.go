@@ -1,28 +1,69 @@
 package bootstrap
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
 	"time"
 
+	"github.com/josephtindall/luma-auth/internal/authz"
 	"github.com/josephtindall/luma-auth/internal/session"
 	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
 	"github.com/josephtindall/luma-auth/pkg/httputil"
+	"github.com/josephtindall/luma-auth/pkg/middleware"
 )
+
+// RecoveryTokenGenerator generates (or regenerates) a recovery token for a user.
+// Satisfied by recoverytoken.Service.
+type RecoveryTokenGenerator interface {
+	Generate(ctx context.Context, userID string) (string, error)
+}
 
 // Handler serves the setup wizard API endpoints.
 // All handlers call the Service — which re-checks state internally (third layer).
 type Handler struct {
-	svc    *Service
-	issuer session.Issuer
+	svc      *Service
+	issuer   session.Issuer
+	authzSvc authz.Authorizer
+	recovery RecoveryTokenGenerator // may be nil if feature not wired
 }
 
 // NewHandler constructs the setup handler.
 // issuer is called after owner creation to issue the initial token pair.
 func NewHandler(svc *Service, issuer session.Issuer) *Handler {
 	return &Handler{svc: svc, issuer: issuer}
+}
+
+// SetAuthorizer injects the authz evaluator.
+func (h *Handler) SetAuthorizer(a authz.Authorizer) { h.authzSvc = a }
+
+// SetRecoveryGenerator injects the recovery token generator (called from main.go).
+func (h *Handler) SetRecoveryGenerator(g RecoveryTokenGenerator) { h.recovery = g }
+
+func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request, action string) bool {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return false
+	}
+	if claims.Role == "builtin:instance-owner" {
+		return true
+	}
+	if h.authzSvc == nil {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
+		return false
+	}
+	result, err := h.authzSvc.Check(r.Context(), authz.CheckRequest{
+		UserID: claims.Subject,
+		Action: action,
+	})
+	if err != nil || !result.Allowed {
+		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
+		return false
+	}
+	return true
 }
 
 // VerifyToken handles POST /api/setup/verify-token (Step 1).
@@ -147,10 +188,90 @@ func (h *Handler) CreateOwner(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 	})
 
-	httputil.WriteJSON(w, http.StatusCreated, map[string]string{
+	resp := map[string]string{
 		"access_token": pair.AccessToken,
 		"user_id":      userID,
+	}
+	if h.recovery != nil {
+		if raw, err := h.recovery.Generate(r.Context(), userID); err == nil {
+			resp["recovery_token"] = raw
+		}
+	}
+	httputil.WriteJSON(w, http.StatusCreated, resp)
+}
+
+// GetInstanceSettings handles GET /api/auth/admin/instance-settings.
+func (h *Handler) GetInstanceSettings(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePerm(w, r, "instance:read") {
+		return
+	}
+
+	state, err := h.svc.GetSettings(r.Context())
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, instanceSettingsResponse(state))
+}
+
+// UpdateInstanceSettings handles PATCH /api/auth/admin/instance-settings.
+func (h *Handler) UpdateInstanceSettings(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePerm(w, r, "instance:configure") {
+		return
+	}
+
+	var req struct {
+		Name                     *string `json:"name"`
+		PasswordMinLength        *int    `json:"password_min_length"`
+		PasswordRequireUppercase *bool   `json:"password_require_uppercase"`
+		PasswordRequireLowercase *bool   `json:"password_require_lowercase"`
+		PasswordRequireNumbers   *bool   `json:"password_require_numbers"`
+		PasswordRequireSymbols   *bool   `json:"password_require_symbols"`
+		PasswordHistoryCount     *int    `json:"password_history_count"`
+		ContentWidth             *string `json:"content_width"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid body")
+		return
+	}
+	if req.ContentWidth != nil {
+		switch *req.ContentWidth {
+		case "narrow", "wide", "max":
+			// valid
+		default:
+			httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "content_width must be narrow, wide, or max")
+			return
+		}
+	}
+
+	state, err := h.svc.UpdateSettings(r.Context(), InstanceSettingsParams{
+		Name:                     req.Name,
+		PasswordMinLength:        req.PasswordMinLength,
+		PasswordRequireUppercase: req.PasswordRequireUppercase,
+		PasswordRequireLowercase: req.PasswordRequireLowercase,
+		PasswordRequireNumbers:   req.PasswordRequireNumbers,
+		PasswordRequireSymbols:   req.PasswordRequireSymbols,
+		PasswordHistoryCount:     req.PasswordHistoryCount,
+		ContentWidth:             req.ContentWidth,
 	})
+	if err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), errorCode(err), err.Error())
+		return
+	}
+	httputil.WriteJSON(w, http.StatusOK, instanceSettingsResponse(state))
+}
+
+func instanceSettingsResponse(s *InstanceState) map[string]any {
+	return map[string]any{
+		"name":                       s.Name,
+		"password_min_length":        s.PasswordMinLength,
+		"password_require_uppercase": s.PasswordRequireUppercase,
+		"password_require_lowercase": s.PasswordRequireLowercase,
+		"password_require_numbers":   s.PasswordRequireNumbers,
+		"password_require_symbols":   s.PasswordRequireSymbols,
+		"password_history_count":     s.PasswordHistoryCount,
+		"content_width":              s.ContentWidth,
+	}
 }
 
 // ── helpers ───────────────────────────────────────────────────────────────────

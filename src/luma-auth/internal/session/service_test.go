@@ -76,6 +76,17 @@ func (m *mockUserRepo) SetMFAEnabled(_ context.Context, _ string, _ bool) error 
 func (m *mockUserRepo) RegisterAtomic(_ context.Context, _ user.RegisterParams) (string, error) {
 	return m.registerID, m.registerErr
 }
+func (m *mockUserRepo) List(_ context.Context, _, _ int) ([]*user.User, error) { return nil, nil }
+func (m *mockUserRepo) ListWithCounts(_ context.Context, _, _ int) ([]*user.AdminUser, error) {
+	return nil, nil
+}
+func (m *mockUserRepo) AddPasswordHistory(_ context.Context, _, _ string) error      { return nil }
+func (m *mockUserRepo) GetRecentPasswordHashes(_ context.Context, _ string, _ int) ([]string, error) {
+	return nil, nil
+}
+func (m *mockUserRepo) SetForcePasswordChange(_ context.Context, _ string, _ bool) error {
+	return nil
+}
 
 // ── Mock: device.Repository ───────────────────────────────────────────────────
 

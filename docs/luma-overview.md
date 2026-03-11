@@ -2,9 +2,9 @@
 
 ## What Luma Is
 
-Luma is a self-hosted collaborative workspace. It provides three primary features — Pages, Tasks, and Flows — organized into Vaults. Authentication and identity management are handled entirely by the Haven sidecar. Luma owns content; Haven owns identity.
+Luma is a self-hosted collaborative workspace. It provides three primary features — Pages, Tasks, and Flows — organized into Vaults. Authentication and identity management are handled entirely by the luma-auth sidecar. Luma owns content; luma-auth owns identity.
 
-Luma is the first consumer of Haven. Future projects fork Haven independently and connect to it the same way.
+Luma is the first consumer of luma-auth. Future projects fork luma-auth independently and connect to it the same way.
 
 ---
 
@@ -35,12 +35,12 @@ luma/
       model.go, service.go, dispatcher.go
     search/
       service.go               # cross-feature search, called by Cmd+K handler
-    haven/
-      client.go                # HTTP client wrapping all Haven API calls
-      middleware.go            # validates Bearer token via Haven on every request
+    auth/
+      client.go                # HTTP client wrapping all luma-auth API calls
+      middleware.go            # validates Bearer token via luma-auth on every request
   pkg/
     authz/
-      authz.go                 # calls Haven /api/haven/authz/check
+      authz.go                 # calls luma-auth /api/auth/authz/check
     shortid/
       shortid.go               # YouTube-style short ID generation
     editor/
@@ -73,13 +73,13 @@ luma/
 HOME LAN
   │
   └─ Caddy :443 (only port exposed to LAN)
-       ├─ /api/haven/*  → Haven container :8080
-       ├─ /api/luma/*   → Luma container  :8002
-       ├─ /ws           → Luma WebSocket  :8002
+       ├─ /api/auth/*   → luma-auth container :8080
+       ├─ /api/luma/*   → Luma container       :8002
+       ├─ /ws           → Luma WebSocket       :8002
        └─ /             → Flutter web build (static)
 
 Docker internal network (not reachable from LAN):
-  haven     :8080   — IAM, auth, RBAC, audit
+  luma-auth :8080   — IAM, auth, RBAC, audit
   luma      :8002   — pages, tasks, flows, vaults
   postgres  :5432   — shared instance, separate schemas per service
   redis     :6379   — sessions, rate limiting, notification queue, search cache
@@ -103,12 +103,12 @@ Docker internal network (not reachable from LAN):
 
 ---
 
-## Haven Integration
+## luma-auth Integration
 
-Every authenticated Luma request goes through two Haven calls:
+Every authenticated Luma request goes through two luma-auth calls:
 
 ```go
-// internal/haven/middleware.go
+// internal/auth/middleware.go
 // Step 1: Validate the Bearer token
 func (m *Middleware) Authenticate(next http.Handler) http.Handler {
     return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -130,7 +130,7 @@ func (a *Authorizer) RequireCan(
     action string,
     resource Resource,
 ) bool {
-    ok, err := a.havenClient.CheckPermission(ctx, authz.CheckRequest{
+    ok, err := a.authClient.CheckPermission(ctx, authz.CheckRequest{
         UserID:       IdentityFromContext(ctx).UserID,
         Action:       action,
         ResourceType: resource.Type,
@@ -149,7 +149,7 @@ func (a *Authorizer) RequireCan(
 
 ## Database Schema Ownership
 
-Luma's PostgreSQL user has access only to the `luma` schema. Haven has its own `haven` schema. No cross-schema joins ever — user data resolved by calling Haven's API.
+Luma's PostgreSQL user has access only to the `luma` schema. luma-auth has its own `auth` schema. No cross-schema joins ever — user data resolved by calling luma-auth's API.
 
 ```sql
 -- luma schema contains:
@@ -214,8 +214,8 @@ See `urls-design.md` for complete specification. Summary:
 /p/{shortId}          Pages
 /t/{shortId}          Tasks
 /f/{shortId}          Flows
-/u/{userId}           User profiles (served by Haven)
-/a/*                  Admin (Haven admin and Luma admin both use /a/)
+/u/{userId}           User profiles (served by luma-auth)
+/a/*                  Admin (luma-auth admin and Luma admin both use /a/)
 ```
 
 Vault is never in the URL — it appears in the breadcrumb only.
@@ -252,7 +252,7 @@ These apply to every file in this repo:
 # Required
 LUMA_DB_URL=postgres://luma_user:${LUMA_DB_PASS}@postgres:5432/luma
 LUMA_REDIS_URL=redis://redis:6379
-LUMA_HAVEN_URL=http://haven:8080        # internal Docker network URL
+LUMA_AUTH_URL=http://luma-auth:8080     # internal Docker network URL
 LUMA_PUBLIC_URL=https://luma.local
 
 # Optional
@@ -267,8 +267,8 @@ LUMA_REVISION_RETENTION_DAYS=30         # default — configurable in admin UI
 
 | Phase | Deliverable | Depends On |
 |-------|-------------|-----------|
-| 0 | Haven v1.0 complete and in daily use | Nothing |
-| 1 | Vaults + RBAC integration with Haven | Haven v1.0 |
+| 0 | luma-auth v1.0 complete and in daily use | Nothing |
+| 1 | Vaults + RBAC integration with luma-auth | luma-auth v1.0 |
 | 2 | Pages — editor, revisions, transclusion | Vaults |
 | 3 | Tasks — full lifecycle with comments | Vaults, Pages (links) |
 | 4 | Flows — steps, branching, execution | Pages (editor), Tasks (links) |

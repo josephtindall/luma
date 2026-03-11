@@ -8,6 +8,16 @@ import 'screens/setup/setup_wizard_screen.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
 import 'screens/settings/settings_screen.dart';
+import 'screens/admin/admin_layout.dart';
+import 'screens/admin/admin_users_screen.dart';
+import 'screens/admin/admin_invites_screen.dart';
+import 'screens/admin/admin_settings_screen.dart';
+import 'screens/admin/admin_groups_screen.dart';
+import 'screens/admin/admin_roles_screen.dart';
+import 'screens/register/register_screen.dart';
+import 'screens/auth/reset_password_screen.dart';
+import 'screens/auth/recovery_code_screen.dart';
+import 'screens/main_layout.dart';
 
 GoRouter buildRouter(
   AuthService authService,
@@ -23,12 +33,32 @@ GoRouter buildRouter(
         return state.uri.path == '/setup' ? null : '/setup';
       }
 
-      if (!authService.isLoggedIn) {
-        return state.uri.path == '/login' ? null : '/login';
+      // Force-change pending — gate to reset-password screen.
+      if (authService.hasPasswordChangePending) {
+        return state.uri.path == '/reset-password' ? null : '/reset-password';
       }
 
-      // Logged in — bounce away from login/setup
-      if (state.uri.path == '/login' || state.uri.path == '/setup') {
+      // Recovery token pending — gate to recovery-code screen after login.
+      if (authService.recoveryTokenPending) {
+        return state.uri.path == '/recovery-code' ? null : '/recovery-code';
+      }
+
+      if (!authService.isLoggedIn) {
+        // Allow unauthenticated flows without being logged in.
+        if (state.uri.path == '/login' ||
+            state.uri.path == '/join' ||
+            state.uri.path == '/reset-password') {
+          return null;
+        }
+        return '/login';
+      }
+
+      // Logged in — bounce away from login/setup/join/reset-password.
+      if (state.uri.path == '/login' ||
+          state.uri.path == '/setup' ||
+          state.uri.path == '/join' ||
+          state.uri.path == '/reset-password' ||
+          state.uri.path == '/recovery-code') {
         return '/home';
       }
 
@@ -52,16 +82,68 @@ GoRouter buildRouter(
         ),
       ),
       GoRoute(
-        path: '/home',
-        builder: (_, __) => HomeScreen(
-          api: apiClient,
+        path: '/join',
+        builder: (context, state) => RegisterScreen(
           auth: authService,
           userService: userService,
+          token: state.uri.queryParameters['token'] ?? '',
         ),
       ),
       GoRoute(
-        path: '/settings',
-        builder: (_, __) => SettingsScreen(userService: userService),
+        path: '/reset-password',
+        builder: (context, state) => ResetPasswordScreen(
+          auth: authService,
+          userService: userService,
+          token: state.uri.queryParameters['token'],
+        ),
+      ),
+      GoRoute(
+        path: '/recovery-code',
+        builder: (_, __) => RecoveryCodeScreen(auth: authService),
+      ),
+      ShellRoute(
+        builder: (_, __, child) => MainLayout(
+          auth: authService,
+          userService: userService,
+          child: child,
+        ),
+        routes: [
+          GoRoute(
+            path: '/home',
+            builder: (_, __) => HomeScreen(
+              api: apiClient,
+            ),
+          ),
+          GoRoute(
+            path: '/settings',
+            builder: (_, __) => SettingsScreen(userService: userService),
+          ),
+          ShellRoute(
+            builder: (_, __, child) => AdminLayout(userService: userService, child: child),
+            routes: [
+              GoRoute(
+                path: '/admin/users',
+                builder: (_, __) => AdminUsersScreen(userService: userService),
+              ),
+              GoRoute(
+                path: '/admin/invites',
+                builder: (_, __) => AdminInvitesScreen(userService: userService),
+              ),
+              GoRoute(
+                path: '/admin/groups',
+                builder: (_, __) => AdminGroupsScreen(userService: userService),
+              ),
+              GoRoute(
+                path: '/admin/roles',
+                builder: (_, __) => AdminRolesScreen(userService: userService),
+              ),
+              GoRoute(
+                path: '/admin/settings',
+                builder: (_, __) => AdminSettingsScreen(userService: userService),
+              ),
+            ],
+          ),
+        ],
       ),
     ],
   );

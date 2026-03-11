@@ -817,3 +817,56 @@ func (s *Service) CountUnusedRecoveryCodes(ctx context.Context, userID string) (
 	}
 	return count, nil
 }
+
+// ── Admin operations (no password check — caller enforces owner authorization) ──
+
+// AdminDeleteAllTOTP removes every verified TOTP secret for a user.
+// If no MFA methods remain afterwards, mfa_enabled is cleared.
+func (s *Service) AdminDeleteAllTOTP(ctx context.Context, userID string) error {
+	secrets, err := s.repo.ListVerifiedTOTPSecrets(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("mfa.Service.AdminDeleteAllTOTP list: %w", err)
+	}
+	for _, sec := range secrets {
+		if err := s.repo.DeleteTOTPSecret(ctx, sec.ID); err != nil {
+			return fmt.Errorf("mfa.Service.AdminDeleteAllTOTP delete %s: %w", sec.ID, err)
+		}
+	}
+	// Recheck counts — clear mfa_enabled if no methods remain.
+	totpCount, _ := s.repo.CountVerifiedTOTPSecrets(ctx, userID)
+	passkeyCount, _ := s.repo.CountActivePasskeys(ctx, userID)
+	if totpCount+passkeyCount == 0 {
+		_ = s.users.SetMFAEnabled(ctx, userID, false)
+	}
+	s.audit.WriteAsync(ctx, audit.Event{
+		UserID:   userID,
+		Event:    audit.EventTOTPRemoved,
+		Metadata: map[string]any{"by": "admin", "all": true},
+	})
+	return nil
+}
+
+// AdminRevokeAllPasskeys revokes every active passkey for a user.
+// If no MFA methods remain afterwards, mfa_enabled is cleared.
+func (s *Service) AdminRevokeAllPasskeys(ctx context.Context, userID string) error {
+	passkeys, err := s.repo.ListPasskeysForUser(ctx, userID)
+	if err != nil {
+		return fmt.Errorf("mfa.Service.AdminRevokeAllPasskeys list: %w", err)
+	}
+	for _, pk := range passkeys {
+		if err := s.repo.RevokePasskey(ctx, pk.ID); err != nil {
+			return fmt.Errorf("mfa.Service.AdminRevokeAllPasskeys revoke %s: %w", pk.ID, err)
+		}
+	}
+	totpCount, _ := s.repo.CountVerifiedTOTPSecrets(ctx, userID)
+	passkeyCount, _ := s.repo.CountActivePasskeys(ctx, userID)
+	if totpCount+passkeyCount == 0 {
+		_ = s.users.SetMFAEnabled(ctx, userID, false)
+	}
+	s.audit.WriteAsync(ctx, audit.Event{
+		UserID:   userID,
+		Event:    audit.EventPasskeyRevoked,
+		Metadata: map[string]any{"by": "admin", "all": true},
+	})
+	return nil
+}

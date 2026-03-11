@@ -2,7 +2,7 @@
 
 ## Overview
 
-The notification system is the event layer that connects all of Luma and Haven into a coherent signal for users. Notifications are extensive by default and highly configurable — every event type can be toggled at the server level and at the per-user level, across two delivery channels: in-app (real-time via WebSocket) and email.
+The notification system is the event layer that connects all of Luma and luma-auth into a coherent signal for users. Notifications are extensive by default and highly configurable — every event type can be toggled at the server level and at the per-user level, across two delivery channels: in-app (real-time via WebSocket) and email.
 
 ---
 
@@ -28,7 +28,7 @@ The dispatcher is a background goroutine within the Luma process. It does not re
 
 ## Event Types
 
-### Haven Events (Login & Security)
+### luma-auth Events (Login & Security)
 
 | Event | Default: Email | Default: In-App |
 |-------|---------------|-----------------|
@@ -94,7 +94,7 @@ Watching a Vault watches all current and future content within it.
 Instance Owner can toggle event categories on/off for the entire instance. Disabled event categories produce no notifications for any user regardless of personal preferences.
 
 ```sql
--- Stored in haven.instance.features JSONB
+-- Stored in auth.instance.features JSONB
 {
   "notifications": {
     "pages_events":  true,
@@ -148,7 +148,7 @@ CREATE TABLE luma.notifications (
     resource_type TEXT,                           -- page | task | flow
     resource_id   TEXT,                           -- short ID
     resource_url  TEXT,                           -- /p/TIvsUANKJC
-    actor_id      TEXT,                           -- Haven user UUID of who caused the event
+    actor_id      TEXT,                           -- luma-auth user UUID of who caused the event
     is_read       BOOLEAN     NOT NULL DEFAULT false,
     read_at       TIMESTAMPTZ,
     created_at    TIMESTAMPTZ NOT NULL DEFAULT NOW()
@@ -168,8 +168,8 @@ Users with an open Luma session receive notifications in real-time via WebSocket
 
 ```
 Client connects: ws://luma.local/ws
-Haven token passed as query param: ?token=<access_token>
-Haven validates token — rejects if invalid or expired
+luma-auth token passed as query param: ?token=<access_token>
+luma-auth validates token — rejects if invalid or expired
 
 Server sends notification frame:
 {

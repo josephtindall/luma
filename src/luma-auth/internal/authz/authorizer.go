@@ -51,6 +51,23 @@ type Repository interface {
 
 	// IsFeatureEnabled returns whether a top-level feature flag is set on the instance.
 	IsFeatureEnabled(ctx context.Context, feature string) (bool, error)
+
+	// IsOwner returns true if the user holds the instance-owner role.
+	IsOwner(ctx context.Context, userID string) (bool, error)
+
+	// GetCustomRolePermissionsForUser returns all custom-role permission rows relevant
+	// to this user (direct + via groups, at all nesting depths) for the given action.
+	GetCustomRolePermissionsForUser(ctx context.Context, userID, action string) ([]CustomRolePerm, error)
+
+	// InvalidateUserCache removes all cached authz results for a user.
+	InvalidateUserCache(ctx context.Context, userID string) error
+}
+
+// CustomRolePerm is a permission row returned by GetCustomRolePermissionsForUser.
+type CustomRolePerm struct {
+	Effect      string // "allow" | "allow_cascade" | "deny"
+	Priority    *int   // nil = lowest precedence
+	IsCascaded  bool   // true if inherited through group nesting (depth > 0)
 }
 
 // PolicyStatement is a single allow/deny rule from a policy.
@@ -77,16 +94,17 @@ func NewDefaultAuthorizer(repo Repository, cache *redis.Client) *DefaultAuthoriz
 	return &DefaultAuthorizer{repo: repo, cache: cache}
 }
 
-// Check evaluates all four permission dimensions in strict order.
-// Explicit deny at any level always wins and stops evaluation immediately.
+// Check evaluates all permission dimensions in strict order.
 //
-// Evaluation order (most→least specific):
-//  1. Feature flag (instance-level)
-//  2. Resource-level explicit deny
-//  3. Resource-level explicit allow
-//  4. Vault role policies
-//  5. Instance role policies
-//  6. Default → DENY
+// Evaluation order:
+//  1. Owner fast-path — untouchable; no custom role can block the owner
+//  2. Feature flag (instance-level)
+//  3. Resource-level explicit deny
+//  4. Resource-level explicit allow
+//  5. Vault role policies
+//  6. Custom role evaluation (direct + group inheritance + priority + cascade)
+//  7. Instance role policies
+//  8. Default → DENY
 func (a *DefaultAuthorizer) Check(ctx context.Context, req CheckRequest) (CheckResult, error) {
 	cacheKey := fmt.Sprintf("authz:%s:%s:%s:%s:%s",
 		req.UserID, req.VaultID, req.ResourceType, req.ResourceID, req.Action)
@@ -101,7 +119,16 @@ func (a *DefaultAuthorizer) Check(ctx context.Context, req CheckRequest) (CheckR
 		}
 	}
 
-	// 1. Feature flag.
+	// 1. Owner fast-path — cannot be blocked by any custom role deny.
+	owner, err := a.repo.IsOwner(ctx, req.UserID)
+	if err != nil {
+		return CheckResult{}, fmt.Errorf("authz: owner check: %w", err)
+	}
+	if owner {
+		return a.cacheAndReturn(ctx, cacheKey, CheckResult{Allowed: true})
+	}
+
+	// 2. Feature flag.
 	featureKey := domainOf(req.Action)
 	enabled, err := a.repo.IsFeatureEnabled(ctx, featureKey)
 	if err != nil {
@@ -111,7 +138,7 @@ func (a *DefaultAuthorizer) Check(ctx context.Context, req CheckRequest) (CheckR
 		return a.cacheAndReturn(ctx, cacheKey, CheckResult{Allowed: false, Reason: "feature_disabled"})
 	}
 
-	// 2 & 3. Resource-level explicit permission.
+	// 3 & 4. Resource-level explicit permission.
 	rp, err := a.repo.GetResourcePermission(ctx, req.UserID, req.ResourceType, req.ResourceID)
 	if err != nil {
 		return CheckResult{}, fmt.Errorf("authz: resource permission: %w", err)
@@ -125,7 +152,7 @@ func (a *DefaultAuthorizer) Check(ctx context.Context, req CheckRequest) (CheckR
 		}
 	}
 
-	// 4. Vault role.
+	// 5. Vault role.
 	vaultPolicies, err := a.repo.GetVaultRole(ctx, req.UserID, req.VaultID)
 	if err != nil {
 		return CheckResult{}, fmt.Errorf("authz: vault role: %w", err)
@@ -134,7 +161,14 @@ func (a *DefaultAuthorizer) Check(ctx context.Context, req CheckRequest) (CheckR
 		return a.cacheAndReturn(ctx, cacheKey, result)
 	}
 
-	// 5. Instance role.
+	// 6. Custom role evaluation.
+	if result, ok, err := a.evaluateCustomRoles(ctx, req.UserID, req.Action); err != nil {
+		return CheckResult{}, fmt.Errorf("authz: custom roles: %w", err)
+	} else if ok {
+		return a.cacheAndReturn(ctx, cacheKey, result)
+	}
+
+	// 7. Instance role.
 	instancePolicies, err := a.repo.GetInstanceRole(ctx, req.UserID)
 	if err != nil {
 		return CheckResult{}, fmt.Errorf("authz: instance role: %w", err)
@@ -143,8 +177,105 @@ func (a *DefaultAuthorizer) Check(ctx context.Context, req CheckRequest) (CheckR
 		return a.cacheAndReturn(ctx, cacheKey, result)
 	}
 
-	// 6. Default deny.
+	// 8. Default deny.
 	return a.cacheAndReturn(ctx, cacheKey, CheckResult{Allowed: false, Reason: "default_deny"})
+}
+
+// priorityBucket groups custom role permissions by priority level.
+type priorityBucket struct {
+	priority *int
+	perms    []CustomRolePerm
+}
+
+// evaluateCustomRoles applies priority-based, cascade-aware custom role evaluation.
+//
+// Rules:
+//   - IsCascaded=true + Effect="allow" → dropped (non-cascading allow)
+//   - IsCascaded=true + Effect="allow_cascade" or "deny" → kept
+//   - Priority: lower number wins; nil = lowest; within same priority deny beats allow
+func (a *DefaultAuthorizer) evaluateCustomRoles(ctx context.Context, userID, action string) (CheckResult, bool, error) {
+	perms, err := a.repo.GetCustomRolePermissionsForUser(ctx, userID, action)
+	if err != nil {
+		return CheckResult{}, false, err
+	}
+
+	// Apply cascade filter: drop plain "allow" if inherited through group nesting.
+	var filtered []CustomRolePerm
+	for _, p := range perms {
+		if p.IsCascaded && p.Effect == "allow" {
+			continue
+		}
+		filtered = append(filtered, p)
+	}
+	if len(filtered) == 0 {
+		return CheckResult{}, false, nil
+	}
+
+	// Group by priority. Process ascending priority (lower number first); nil last.
+	seen := map[string]bool{}
+	var buckets []priorityBucket
+
+	for i := range filtered {
+		key := priorityKey(filtered[i].Priority)
+		if seen[key] {
+			continue
+		}
+		seen[key] = true
+		b := priorityBucket{priority: filtered[i].Priority}
+		for j := range filtered {
+			if priorityKey(filtered[j].Priority) == key {
+				b.perms = append(b.perms, filtered[j])
+			}
+		}
+		buckets = append(buckets, b)
+	}
+
+	// Sort buckets: non-nil ascending, then nil.
+	for i := 1; i < len(buckets); i++ {
+		for j := i; j > 0; j-- {
+			if priorityBucketLess(buckets[j], buckets[j-1]) {
+				buckets[j], buckets[j-1] = buckets[j-1], buckets[j]
+			} else {
+				break
+			}
+		}
+	}
+
+	for _, b := range buckets {
+		hasDeny := false
+		hasAllow := false
+		for _, p := range b.perms {
+			if p.Effect == "deny" {
+				hasDeny = true
+			} else {
+				hasAllow = true
+			}
+		}
+		if hasDeny {
+			return CheckResult{Allowed: false, Reason: "custom_role_deny"}, true, nil
+		}
+		if hasAllow {
+			return CheckResult{Allowed: true}, true, nil
+		}
+	}
+	return CheckResult{}, false, nil
+}
+
+func priorityKey(p *int) string {
+	if p == nil {
+		return "nil"
+	}
+	return fmt.Sprintf("%d", *p)
+}
+
+func priorityBucketLess(a, b priorityBucket) bool {
+	if a.priority == nil {
+		return false // nil is largest (lowest priority)
+	}
+	if b.priority == nil {
+		return true
+	}
+	return *a.priority < *b.priority
 }
 
 // cacheAndReturn stores the result in Redis (best-effort) and returns it.

@@ -3,6 +3,7 @@ class UserProfile {
   final String email;
   final String displayName;
   final String avatarSeed;
+  final String instanceRoleId;
   final bool mfaEnabled;
   final DateTime createdAt;
 
@@ -11,9 +12,12 @@ class UserProfile {
     required this.email,
     required this.displayName,
     required this.avatarSeed,
+    required this.instanceRoleId,
     required this.mfaEnabled,
     required this.createdAt,
   });
+
+  bool get isOwner => instanceRoleId == 'builtin:instance-owner';
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
     return UserProfile(
@@ -21,7 +25,129 @@ class UserProfile {
       email: _str(json['email']),
       displayName: _str(json['display_name']),
       avatarSeed: _str(json['avatar_seed']),
+      instanceRoleId: _str(json['instance_role_id']),
       mfaEnabled: _bool(json['mfa_enabled']),
+      createdAt: _dt(json['created_at']),
+    );
+  }
+}
+
+class AdminUserRecord {
+  final String id;
+  final String email;
+  final String displayName;
+  final String avatarSeed;
+  final String instanceRoleId;
+  final bool mfaEnabled;
+  final bool isLocked;
+  final bool forcePasswordChange;
+  final int totpCount;
+  final int passkeyCount;
+  final DateTime createdAt;
+
+  const AdminUserRecord({
+    required this.id,
+    required this.email,
+    required this.displayName,
+    required this.avatarSeed,
+    required this.instanceRoleId,
+    required this.mfaEnabled,
+    required this.isLocked,
+    required this.forcePasswordChange,
+    required this.totpCount,
+    required this.passkeyCount,
+    required this.createdAt,
+  });
+
+  bool get isOwner => instanceRoleId == 'builtin:instance-owner';
+
+  factory AdminUserRecord.fromJson(Map<String, dynamic> json) {
+    return AdminUserRecord(
+      id: _str(json['id']),
+      email: _str(json['email']),
+      displayName: _str(json['display_name']),
+      avatarSeed: _str(json['avatar_seed']),
+      instanceRoleId: _str(json['instance_role_id']),
+      mfaEnabled: _bool(json['mfa_enabled']),
+      isLocked: _bool(json['is_locked']),
+      forcePasswordChange: _bool(json['force_password_change']),
+      totpCount: (json['totp_count'] as int?) ?? 0,
+      passkeyCount: (json['passkey_count'] as int?) ?? 0,
+      createdAt: _dt(json['created_at']),
+    );
+  }
+}
+
+class PasswordResetLinkResult {
+  final String token;
+  final DateTime expiresAt;
+
+  const PasswordResetLinkResult({required this.token, required this.expiresAt});
+
+  factory PasswordResetLinkResult.fromJson(Map<String, dynamic> json) {
+    return PasswordResetLinkResult(
+      token: _str(json['token']),
+      expiresAt: _dt(json['expires_at']),
+    );
+  }
+}
+
+class InvitationCreateResult {
+  final String id;
+  final String token; // raw token extracted from the auth service's join_url
+  final DateTime expiresAt;
+
+  const InvitationCreateResult({
+    required this.id,
+    required this.token,
+    required this.expiresAt,
+  });
+}
+
+class InvitationRecord {
+  final String id;
+  final String email;
+  final String note;
+  final String status; // "pending", "accepted", "revoked"
+  final DateTime expiresAt;
+  final DateTime? acceptedAt;
+  final DateTime? revokedAt;
+  final DateTime createdAt;
+
+  const InvitationRecord({
+    required this.id,
+    required this.email,
+    required this.note,
+    required this.status,
+    required this.expiresAt,
+    required this.acceptedAt,
+    required this.revokedAt,
+    required this.createdAt,
+  });
+
+  /// True if pending and the expiry time has not passed.
+  bool get isPendingValid =>
+      status == 'pending' && DateTime.now().isBefore(expiresAt);
+
+  /// True if pending but the expiry time has passed.
+  bool get isExpired =>
+      status == 'pending' && DateTime.now().isAfter(expiresAt);
+
+  bool get isAccepted => status == 'accepted';
+  bool get isRevoked => status == 'revoked';
+
+  /// Pending invites (valid or expired) can be revoked.
+  bool get canRevoke => status == 'pending';
+
+  factory InvitationRecord.fromJson(Map<String, dynamic> json) {
+    return InvitationRecord(
+      id: _str(json['id']),
+      email: _str(json['email']),
+      note: _str(json['note']),
+      status: _str(json['status']),
+      expiresAt: _dt(json['expires_at']),
+      acceptedAt: _dtOpt(json['accepted_at']),
+      revokedAt: _dtOpt(json['revoked_at']),
       createdAt: _dt(json['created_at']),
     );
   }
@@ -205,4 +331,12 @@ DateTime _dt(dynamic value) {
     return DateTime.tryParse(value) ?? DateTime.now();
   }
   return DateTime.now();
+}
+
+/// Safely parses an optional DateTime (returns null if value is null/empty).
+DateTime? _dtOpt(dynamic value) {
+  if (value is String && value.isNotEmpty) {
+    return DateTime.tryParse(value);
+  }
+  return null;
 }

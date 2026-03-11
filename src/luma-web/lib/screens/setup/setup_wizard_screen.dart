@@ -219,7 +219,8 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
           // Show success screen, then navigate.
           _setStep(3);
           _successCtrl.forward();
-          widget.auth.activateSession(token);
+          final recoveryToken = data['recovery_token'] as String?;
+          widget.auth.activateSession(token, recoveryToken: recoveryToken);
           // Load profile in background so it's ready when home screen renders.
           await Future.wait([
             widget.userService.loadProfile(),
@@ -227,7 +228,9 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
           ]);
           await Future.delayed(const Duration(seconds: 2));
           if (mounted) {
-            context.go('/home');
+            // Router redirect handles /recovery-code if token is pending;
+            // otherwise go to home.
+            context.go(recoveryToken != null ? '/recovery-code' : '/home');
           }
         } else {
           setState(() =>

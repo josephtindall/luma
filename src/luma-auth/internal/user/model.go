@@ -1,6 +1,9 @@
 package user
 
-import "time"
+import (
+	"context"
+	"time"
+)
 
 // User is the canonical user record. Password hashes are never returned in
 // any API response — strip them in the handler before writing JSON.
@@ -12,6 +15,7 @@ type User struct {
 	InstanceRoleID      string // e.g. "builtin:instance-owner", "builtin:instance-member"
 	AvatarSeed          string
 	MFAEnabled          bool
+	ForcePasswordChange bool
 	FailedLoginAttempts int
 	LockedAt            *time.Time
 	LockedReason        string
@@ -55,6 +59,39 @@ func (u *User) ToPublic() *PublicUser {
 	}
 }
 
+// AdminUser is the admin-facing projection of a user. Includes lock status,
+// force-password-change flag, and MFA method counts.
+// Returned on GET /api/auth/admin/users.
+type AdminUser struct {
+	ID                  string    `json:"id"`
+	Email               string    `json:"email"`
+	DisplayName         string    `json:"display_name"`
+	InstanceRoleID      string    `json:"instance_role_id"`
+	AvatarSeed          string    `json:"avatar_seed,omitempty"`
+	MFAEnabled          bool      `json:"mfa_enabled"`
+	IsLocked            bool      `json:"is_locked"`
+	ForcePasswordChange bool      `json:"force_password_change"`
+	TOTPCount           int       `json:"totp_count"`
+	PasskeyCount        int       `json:"passkey_count"`
+	CreatedAt           time.Time `json:"created_at"`
+}
+
+// ToAdmin converts a User to its admin-facing form.
+// TOTPCount and PasskeyCount must be set separately (from a JOIN query).
+func (u *User) ToAdmin() *AdminUser {
+	return &AdminUser{
+		ID:                  u.ID,
+		Email:               u.Email,
+		DisplayName:         u.DisplayName,
+		InstanceRoleID:      u.InstanceRoleID,
+		AvatarSeed:          u.AvatarSeed,
+		MFAEnabled:          u.MFAEnabled,
+		IsLocked:            u.IsLocked(),
+		ForcePasswordChange: u.ForcePasswordChange,
+		CreatedAt:           u.CreatedAt,
+	}
+}
+
 // UpdateProfileParams holds validated fields for PUT /api/auth/users/me/profile.
 type UpdateProfileParams struct {
 	DisplayName string
@@ -73,4 +110,28 @@ type RegisterParams struct {
 	DisplayName  string
 	PasswordHash string
 	InvitationID string
+}
+
+// AdminCreateParams holds the validated inputs for admin-initiated user creation.
+type AdminCreateParams struct {
+	Email               string
+	DisplayName         string
+	Password            string
+	ForcePasswordChange bool
+}
+
+// PasswordPolicy describes the instance-level password requirements.
+type PasswordPolicy struct {
+	MinLength        int
+	RequireUppercase bool
+	RequireLowercase bool
+	RequireNumbers   bool
+	RequireSymbols   bool
+	HistoryCount     int
+}
+
+// PasswordPolicyProvider is satisfied by bootstrap.Service.
+// Injected into user.Service to avoid a direct import of bootstrap.
+type PasswordPolicyProvider interface {
+	GetPasswordPolicy(ctx context.Context) (*PasswordPolicy, error)
 }

@@ -30,6 +30,29 @@ type InstanceState struct {
 	SetupTokenFailures  int
 	ActivatedAt         *time.Time
 	Version             string
+	// Password policy
+	PasswordMinLength        int
+	PasswordRequireUppercase bool
+	PasswordRequireLowercase bool
+	PasswordRequireNumbers   bool
+	PasswordRequireSymbols   bool
+	PasswordHistoryCount     int
+	// ContentWidth controls the width of the main content area site-wide.
+	// Valid values: "narrow" | "wide" | "max". Defaults to "wide".
+	ContentWidth string
+}
+
+// InstanceSettingsParams holds fields for a partial PATCH of instance settings.
+// Pointer fields are optional — nil means "leave unchanged".
+type InstanceSettingsParams struct {
+	Name                     *string
+	PasswordMinLength        *int
+	PasswordRequireUppercase *bool
+	PasswordRequireLowercase *bool
+	PasswordRequireNumbers   *bool
+	PasswordRequireSymbols   *bool
+	PasswordHistoryCount     *int
+	ContentWidth             *string
 }
 
 // CreateOwnerParams carries all fields required to atomically create the
@@ -71,6 +94,9 @@ type StateRepository interface {
 
 	// ConfigureInstance updates name, locale, and timezone. Called during Step 2.
 	ConfigureInstance(ctx context.Context, name, locale, timezone string) error
+
+	// UpdateSettings applies a partial update of instance-level settings.
+	UpdateSettings(ctx context.Context, params InstanceSettingsParams) error
 
 	// CreateOwnerAtomic runs a single DB transaction that:
 	//   1. INSERTs auth.users with role builtin:instance-owner

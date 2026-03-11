@@ -1,4 +1,4 @@
-# URL Design — Haven + Luma
+# URL Design — luma-auth + Luma
 
 ## Design Principles
 
@@ -21,7 +21,7 @@
 | `/u/{userId}` | User profile | `/u/f47ac10b` |
 | `/a/*` | Admin pages | `/a/members`, `/a/audit`, `/a/vaults` |
 
-### Haven
+### luma-auth
 
 | Pattern | Resource |
 |---------|----------|
@@ -33,7 +33,7 @@
 
 ### Shared Conventions
 
-- `/a/` prefix on both Haven and Luma is for admin-only pages — enforced at both the router level (requires `builtin:instance-owner` or `builtin:instance-admin` role) and the Haven authz check
+- `/a/` prefix on both luma-auth and Luma is for admin-only pages — enforced at both the router level (requires `builtin:instance-owner` or `builtin:instance-admin` role) and the luma-auth authz check
 - No trailing slashes
 - All lowercase except the short ID segment which is mixed case
 
@@ -90,7 +90,7 @@ When a request arrives at `/p/TIvsUANKJC`:
 1. Router matches the `/p/` prefix and extracts `TIvsUANKJC`
 2. Handler queries `luma.short_ids WHERE short_id = 'TIvsUANKJC'`
 3. Resolves to the `page_id` UUID
-4. Loads the page and checks permission via Haven authz
+4. Loads the page and checks permission via luma-auth authz
 5. If not found: 404. If permission denied: 403. If archived: 410 Gone.
 
 ---
@@ -140,7 +140,7 @@ The URL is relative — it works on any hostname the instance is served from.
 
 Any route under `/a/` requires the user to have `builtin:instance-owner` or `builtin:instance-member` with admin-level instance role. This is enforced at two levels:
 
-1. **Router middleware** — checks the role from the validated Haven token before the handler runs
-2. **Haven authz check** — the handler additionally calls Haven to verify the specific admin action permission
+1. **Router middleware** — checks the role from the validated luma-auth token before the handler runs
+2. **luma-auth authz check** — the handler additionally calls luma-auth to verify the specific admin action permission
 
 Both checks must pass. Failing either returns 403 with no information about what admin pages exist.

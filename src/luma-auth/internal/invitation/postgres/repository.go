@@ -42,7 +42,7 @@ func (r *Repository) Create(ctx context.Context, inv *invitation.Invitation) err
 
 func (r *Repository) GetByHash(ctx context.Context, tokenHash string) (*invitation.Invitation, error) {
 	const q = `
-		SELECT id, inviter_id, email, note, token_hash, status,
+		SELECT id, inviter_id, COALESCE(email, ''), COALESCE(note, ''), token_hash, status,
 		       expires_at, accepted_at, revoked_at, created_at
 		FROM auth.invitations
 		WHERE token_hash = $1`
@@ -59,7 +59,7 @@ func (r *Repository) GetByHash(ctx context.Context, tokenHash string) (*invitati
 
 func (r *Repository) GetByID(ctx context.Context, id string) (*invitation.Invitation, error) {
 	const q = `
-		SELECT id, inviter_id, email, note, token_hash, status,
+		SELECT id, inviter_id, COALESCE(email, ''), COALESCE(note, ''), token_hash, status,
 		       expires_at, accepted_at, revoked_at, created_at
 		FROM auth.invitations
 		WHERE id = $1`
@@ -76,10 +76,9 @@ func (r *Repository) GetByID(ctx context.Context, id string) (*invitation.Invita
 
 func (r *Repository) List(ctx context.Context) ([]*invitation.Invitation, error) {
 	const q = `
-		SELECT id, inviter_id, email, note, token_hash, status,
+		SELECT id, inviter_id, COALESCE(email, ''), COALESCE(note, ''), token_hash, status,
 		       expires_at, accepted_at, revoked_at, created_at
 		FROM auth.invitations
-		WHERE status = 'pending'
 		ORDER BY created_at DESC`
 
 	rows, err := r.db.Query(ctx, q)

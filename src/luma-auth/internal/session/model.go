@@ -35,15 +35,19 @@ type TokenPair struct {
 	AccessToken  string
 	RefreshToken string // raw — hand to client; never store
 	ExpiresAt    time.Time
+	UserID       string // populated by Register/IssueForUser — empty after Refresh
 }
 
-// LoginResult is the outcome of a login attempt. Either Pair is set (no MFA)
-// or MFARequired is true and MFAToken/MFAMethods are set.
+// LoginResult is the outcome of a login attempt. Either Pair is set (no MFA/force-change),
+// MFARequired is true and MFAToken/MFAMethods are set, or PasswordChangeRequired is true
+// and UserID is set (force-change flow).
 type LoginResult struct {
-	Pair        *TokenPair
-	MFARequired bool
-	MFAToken    string   // raw opaque token — only set when MFARequired
-	MFAMethods  []string // e.g. ["totp", "passkey"]
+	Pair                   *TokenPair
+	MFARequired            bool
+	MFAToken               string   // raw opaque token — only set when MFARequired
+	MFAMethods             []string // e.g. ["totp", "passkey"]
+	PasswordChangeRequired bool
+	UserID                 string // set when PasswordChangeRequired is true
 }
 
 // IdentifyResult tells the frontend which authentication steps to present

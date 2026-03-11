@@ -9,9 +9,13 @@ environment:
 dependencies:
   flutter:
     sdk: flutter
+  flutter_web_plugins:
+    sdk: flutter
   go_router: ^17.1.0
   http: ^1.2.0
   web: ^1.1.0
+  qr_flutter: ^4.1.0
+  pdf: ^3.10.8
 
 dev_dependencies:
   flutter_test:

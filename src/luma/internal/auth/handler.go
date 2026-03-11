@@ -31,6 +31,12 @@ func NewHandler(httpClient *http.Client, authURL string, userIDFunc func(context
 	}
 }
 
+// Health proxies to the auth service health endpoint (unauthenticated).
+// Returns instance_name and content_width from the auth service.
+func (h *Handler) Health() http.HandlerFunc {
+	return h.proxySetup("GET", "/api/auth/health")
+}
+
 // SetupRoutes returns a router for /api/luma/setup/* endpoints.
 func (h *Handler) SetupRoutes() chi.Router {
 	r := chi.NewRouter()
@@ -49,6 +55,10 @@ func (h *Handler) AuthRoutes() chi.Router {
 	r.Post("/refresh", h.refresh)
 	r.Post("/logout", h.logout)
 
+	// Invitation join + registration (unauthenticated).
+	r.Get("/join", h.proxySetupWithQuery("GET", "/api/auth/join"))
+	r.Post("/register", h.register)
+
 	// MFA challenge verification (unauthenticated — issues session tokens).
 	r.Post("/mfa/verify", h.sessionIssuerProxy("/api/auth/mfa/verify"))
 
@@ -59,6 +69,64 @@ func (h *Handler) AuthRoutes() chi.Router {
 	// Passwordless passkey login (unauthenticated — no password required).
 	r.Post("/passkeys/passwordless/begin", h.proxySetup("POST", "/api/auth/passkeys/passwordless/begin"))
 	r.Post("/passkeys/passwordless/finish", h.sessionIssuerProxy("/api/auth/passkeys/passwordless/finish"))
+
+	// Password reset (unauthenticated — issues session tokens on success).
+	r.Post("/reset-password", h.sessionIssuerProxy("/api/auth/reset-password"))
+
+	// Account recovery (authenticated status + generate; unauthenticated reset).
+	r.Get("/recovery/status", h.proxyAuth("GET", "/api/auth/recovery/status"))
+	r.Post("/recovery/generate", h.proxyAuth("POST", "/api/auth/recovery/generate"))
+	r.Post("/recovery/reset-password", h.sessionIssuerProxy("/api/auth/recovery/reset-password"))
+	return r
+}
+
+// AdminRoutes returns a router for /api/luma/admin/* endpoints.
+// All routes require a valid Bearer token; the auth service enforces owner-only
+// access on each path.
+func (h *Handler) AdminRoutes() chi.Router {
+	r := chi.NewRouter()
+	r.Get("/access", h.proxyAuth("GET", "/api/auth/admin/access"))
+	r.Get("/capabilities", h.proxyAuth("GET", "/api/auth/admin/capabilities"))
+	r.Get("/users", h.proxyAuth("GET", "/api/auth/admin/users"))
+	r.Post("/users", h.proxyAuth("POST", "/api/auth/admin/users"))
+	r.Post("/users/{id}/lock", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/users/", "id", "/lock"))
+	r.Delete("/users/{id}/lock", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/lock"))
+	r.Delete("/users/{id}/sessions", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/sessions"))
+	r.Post("/users/{id}/force-password-change", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/users/", "id", "/force-password-change"))
+	r.Post("/users/{id}/password-reset", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/users/", "id", "/password-reset"))
+	r.Delete("/users/{id}/mfa/totp", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/mfa/totp"))
+	r.Delete("/users/{id}/passkeys", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/passkeys"))
+	r.Get("/instance-settings", h.proxyAuth("GET", "/api/auth/admin/instance-settings"))
+	r.Patch("/instance-settings", h.proxyAuth("PATCH", "/api/auth/admin/instance-settings"))
+	r.Post("/invitations", h.proxyAuth("POST", "/api/auth/invitations"))
+	r.Get("/invitations", h.proxyAuth("GET", "/api/auth/invitations"))
+	r.Delete("/invitations/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/invitations/", "id"))
+
+	// User custom role assignments
+	r.Get("/users/{id}/custom-roles", h.proxyAuthTemplate("GET", "/api/auth/admin/users/{id}/custom-roles"))
+	r.Post("/users/{id}/custom-roles/{roleID}", h.proxyAuthTemplate("POST", "/api/auth/admin/users/{id}/custom-roles/{roleID}"))
+	r.Delete("/users/{id}/custom-roles/{roleID}", h.proxyAuthTemplate("DELETE", "/api/auth/admin/users/{id}/custom-roles/{roleID}"))
+
+	// Groups
+	r.Get("/groups", h.proxyAuth("GET", "/api/auth/admin/groups"))
+	r.Post("/groups", h.proxyAuth("POST", "/api/auth/admin/groups"))
+	r.Get("/groups/{id}", h.proxyAuthWithParam("GET", "/api/auth/admin/groups/", "id"))
+	r.Patch("/groups/{id}", h.proxyAuthWithParam("PATCH", "/api/auth/admin/groups/", "id"))
+	r.Delete("/groups/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/admin/groups/", "id"))
+	r.Post("/groups/{id}/members", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/groups/", "id", "/members"))
+	r.Delete("/groups/{id}/members/{type}/{memberID}", h.proxyAuthTemplate("DELETE", "/api/auth/admin/groups/{id}/members/{type}/{memberID}"))
+	r.Post("/groups/{id}/roles/{roleID}", h.proxyAuthTemplate("POST", "/api/auth/admin/groups/{id}/roles/{roleID}"))
+	r.Delete("/groups/{id}/roles/{roleID}", h.proxyAuthTemplate("DELETE", "/api/auth/admin/groups/{id}/roles/{roleID}"))
+
+	// Custom roles
+	r.Get("/custom-roles", h.proxyAuth("GET", "/api/auth/admin/custom-roles"))
+	r.Post("/custom-roles", h.proxyAuth("POST", "/api/auth/admin/custom-roles"))
+	r.Get("/custom-roles/{id}", h.proxyAuthWithParam("GET", "/api/auth/admin/custom-roles/", "id"))
+	r.Patch("/custom-roles/{id}", h.proxyAuthWithParam("PATCH", "/api/auth/admin/custom-roles/", "id"))
+	r.Delete("/custom-roles/{id}", h.proxyAuthWithParam("DELETE", "/api/auth/admin/custom-roles/", "id"))
+	r.Put("/custom-roles/{id}/permissions/{action}", h.proxyAuthTemplate("PUT", "/api/auth/admin/custom-roles/{id}/permissions/{action}"))
+	r.Delete("/custom-roles/{id}/permissions/{action}", h.proxyAuthTemplate("DELETE", "/api/auth/admin/custom-roles/{id}/permissions/{action}"))
+
 	return r
 }
 
@@ -213,6 +281,86 @@ func (h *Handler) proxyAuthWithParam(method, authPathPrefix, paramName string) h
 	}
 }
 
+// proxyAuthWithParamAndSuffix returns a handler that builds an auth service path as
+// prefix + urlParam + suffix, forwarding the request with the caller's Authorization header.
+// Used for admin paths like /api/auth/admin/users/{id}/lock.
+func (h *Handler) proxyAuthWithParamAndSuffix(method, authPathPrefix, paramName, suffix string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		paramVal := chi.URLParam(r, paramName)
+		if paramVal == "" || strings.ContainsAny(paramVal, "/\\") {
+			writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid " + paramName})
+			return
+		}
+
+		req, err := http.NewRequestWithContext(r.Context(), method, h.authURL+authPathPrefix+paramVal+suffix, r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+
+		resp, err := h.client.Do(req)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
+			return
+		}
+		defer resp.Body.Close()
+
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
+	}
+}
+
+// proxyAuthTemplate returns a handler that builds the auth service path from a template
+// containing {paramName} placeholders, substituting chi URL params for each.
+// Used for routes with multiple URL params (e.g. /groups/{id}/members/{type}/{memberID}).
+func (h *Handler) proxyAuthTemplate(method, authPathTemplate string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		// Replace all {param} placeholders with the corresponding chi URL param values.
+		path := authPathTemplate
+		for strings.Contains(path, "{") {
+			start := strings.Index(path, "{")
+			end := strings.Index(path[start:], "}")
+			if start < 0 || end < 0 {
+				break
+			}
+			end += start
+			paramName := path[start+1 : end]
+			paramVal := chi.URLParam(r, paramName)
+			if paramVal == "" {
+				writeJSON(w, http.StatusBadRequest, map[string]string{"error": "invalid " + paramName})
+				return
+			}
+			path = path[:start] + paramVal + path[end+1:]
+		}
+
+		req, err := http.NewRequestWithContext(r.Context(), method, h.authURL+path, r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+		if auth := r.Header.Get("Authorization"); auth != "" {
+			req.Header.Set("Authorization", auth)
+		}
+
+		resp, err := h.client.Do(req)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
+			return
+		}
+		defer resp.Body.Close()
+
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
+	}
+}
+
 // proxySetup returns a handler that pipes the request body verbatim to auth service and
 // forwards auth service's status code and response body verbatim.
 func (h *Handler) proxySetup(method, authPath string) http.HandlerFunc {
@@ -318,6 +466,14 @@ func (h *Handler) login(w http.ResponseWriter, r *http.Request) {
 
 	// MFA required — forward the challenge response as-is (no cookies to rewrite).
 	if mfaRequired, _ := payload["mfa_required"].(bool); mfaRequired {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusOK)
+		w.Write(body) //nolint:errcheck
+		return
+	}
+
+	// Password change required — forward as-is (no tokens issued yet).
+	if pwdChange, _ := payload["password_change_required"].(bool); pwdChange {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 		w.Write(body) //nolint:errcheck
@@ -446,6 +602,76 @@ func (h *Handler) sessionIssuerProxy(authPath string) http.HandlerFunc {
 		w.WriteHeader(http.StatusOK)
 		w.Write(body) //nolint:errcheck
 	}
+}
+
+// proxySetupWithQuery pipes the request to auth service, forwarding the raw query string.
+// Used for unauthenticated GET endpoints whose parameters are in the query string (e.g. join).
+func (h *Handler) proxySetupWithQuery(method, authPath string) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		target := h.authURL + authPath
+		if r.URL.RawQuery != "" {
+			target += "?" + r.URL.RawQuery
+		}
+		req, err := http.NewRequestWithContext(r.Context(), method, target, r.Body)
+		if err != nil {
+			writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+			return
+		}
+		req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+
+		resp, err := h.client.Do(req)
+		if err != nil {
+			writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
+			return
+		}
+		defer resp.Body.Close()
+
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
+	}
+}
+
+// register forwards the invitation registration request to auth service, rewrites the
+// refresh cookie Path, and returns the access token on 201.
+func (h *Handler) register(w http.ResponseWriter, r *http.Request) {
+	req, err := http.NewRequestWithContext(r.Context(), http.MethodPost, h.authURL+"/api/auth/register", r.Body)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+	req.Header.Set("Content-Type", r.Header.Get("Content-Type"))
+
+	resp, err := h.client.Do(req)
+	if err != nil {
+		writeJSON(w, http.StatusServiceUnavailable, map[string]string{"error": "auth service unavailable"})
+		return
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusCreated {
+		w.Header().Set("Content-Type", resp.Header.Get("Content-Type"))
+		w.WriteHeader(resp.StatusCode)
+		io.Copy(w, resp.Body) //nolint:errcheck
+		return
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		writeJSON(w, http.StatusInternalServerError, map[string]string{"error": "internal error"})
+		return
+	}
+
+	var payload map[string]interface{}
+	if err := json.Unmarshal(body, &payload); err != nil {
+		writeJSON(w, http.StatusBadGateway, map[string]string{"error": "invalid auth response"})
+		return
+	}
+
+	rewriteCookies(w, resp, "/api/auth/refresh", "/api/luma/auth/refresh")
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusCreated)
+	w.Write(body) //nolint:errcheck
 }
 
 // rewriteCookies reads Set-Cookie headers from the auth service response via resp.Cookies(),

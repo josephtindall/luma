@@ -23,6 +23,7 @@ func (m *mockStateRepo) TransitionToSetup(_ context.Context, _ time.Time) error 
 func (m *mockStateRepo) IncrementTokenFailures(_ context.Context) (int, error)           { return 0, nil }
 func (m *mockStateRepo) ResetToUnclaimed(_ context.Context, _ string, _ time.Time) error { return nil }
 func (m *mockStateRepo) ConfigureInstance(_ context.Context, _, _, _ string) error       { return nil }
+func (m *mockStateRepo) UpdateSettings(_ context.Context, _ InstanceSettingsParams) error { return nil }
 func (m *mockStateRepo) CreateOwnerAtomic(_ context.Context, _ CreateOwnerParams) (string, error) {
 	return "", nil
 }

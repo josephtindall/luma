@@ -43,7 +43,7 @@ CREATE TABLE luma.vaults (
     name        TEXT        NOT NULL,
     slug        TEXT        NOT NULL UNIQUE,
     type        TEXT        NOT NULL DEFAULT 'shared',
-    owner_id    TEXT        NOT NULL,  -- Haven user UUID
+    owner_id    TEXT        NOT NULL,  -- luma-auth user UUID
     description TEXT,
     icon        TEXT,                  -- emoji or icon identifier
     color       TEXT,                  -- hex color for vault badge in nav
@@ -58,8 +58,8 @@ CREATE INDEX idx_vaults_owner ON luma.vaults(owner_id);
 
 CREATE TABLE luma.vault_members (
     vault_id   UUID NOT NULL REFERENCES luma.vaults(id) ON DELETE CASCADE,
-    user_id    TEXT NOT NULL,  -- Haven user UUID
-    role_id    TEXT NOT NULL,  -- Haven role ID
+    user_id    TEXT NOT NULL,  -- luma-auth user UUID
+    role_id    TEXT NOT NULL,  -- luma-auth role ID
     added_by   TEXT,
     added_at   TIMESTAMPTZ NOT NULL DEFAULT NOW(),
     PRIMARY KEY (vault_id, user_id)
@@ -84,7 +84,7 @@ PATCH  /api/luma/vaults/{id}/members/{userId}   change member role
 DELETE /api/luma/vaults/{id}/members/{userId}   remove member
 ```
 
-All endpoints require authentication via Haven. Vault management actions require `vault:manage-members` or `vault:manage-roles` permission checked via Haven authz.
+All endpoints require authentication via luma-auth. Vault management actions require `vault:manage-members` or `vault:manage-roles` permission checked via luma-auth authz.
 
 ---
 

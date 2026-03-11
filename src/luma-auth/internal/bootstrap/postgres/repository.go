@@ -26,7 +26,11 @@ func (r *Repository) Get(ctx context.Context) (*bootstrap.InstanceState, error) 
 	const q = `
 		SELECT id, name, locale, timezone, setup_state,
 		       setup_token_hash, setup_token_expires_at, setup_token_failures,
-		       activated_at, version
+		       activated_at, version,
+		       password_min_length, password_require_uppercase,
+		       password_require_lowercase, password_require_numbers,
+		       password_require_symbols, password_history_count,
+		       content_width
 		FROM auth.instance
 		LIMIT 1`
 
@@ -42,6 +46,13 @@ func (r *Repository) Get(ctx context.Context) (*bootstrap.InstanceState, error) 
 		&s.SetupTokenFailures,
 		&s.ActivatedAt,
 		&s.Version,
+		&s.PasswordMinLength,
+		&s.PasswordRequireUppercase,
+		&s.PasswordRequireLowercase,
+		&s.PasswordRequireNumbers,
+		&s.PasswordRequireSymbols,
+		&s.PasswordHistoryCount,
+		&s.ContentWidth,
 	)
 	if err == pgx.ErrNoRows {
 		// Row hasn't been seeded yet — EnsureRow will create it.
@@ -51,6 +62,76 @@ func (r *Repository) Get(ctx context.Context) (*bootstrap.InstanceState, error) 
 		return nil, fmt.Errorf("bootstrap.postgres.Get: %w", err)
 	}
 	return s, nil
+}
+
+func (r *Repository) UpdateSettings(ctx context.Context, params bootstrap.InstanceSettingsParams) error {
+	// Build a dynamic UPDATE touching only the provided fields.
+	setClauses := []string{}
+	args := []any{}
+	i := 1
+
+	if params.Name != nil {
+		setClauses = append(setClauses, fmt.Sprintf("name = $%d", i))
+		args = append(args, *params.Name)
+		i++
+	}
+	if params.PasswordMinLength != nil {
+		setClauses = append(setClauses, fmt.Sprintf("password_min_length = $%d", i))
+		args = append(args, *params.PasswordMinLength)
+		i++
+	}
+	if params.PasswordRequireUppercase != nil {
+		setClauses = append(setClauses, fmt.Sprintf("password_require_uppercase = $%d", i))
+		args = append(args, *params.PasswordRequireUppercase)
+		i++
+	}
+	if params.PasswordRequireLowercase != nil {
+		setClauses = append(setClauses, fmt.Sprintf("password_require_lowercase = $%d", i))
+		args = append(args, *params.PasswordRequireLowercase)
+		i++
+	}
+	if params.PasswordRequireNumbers != nil {
+		setClauses = append(setClauses, fmt.Sprintf("password_require_numbers = $%d", i))
+		args = append(args, *params.PasswordRequireNumbers)
+		i++
+	}
+	if params.PasswordRequireSymbols != nil {
+		setClauses = append(setClauses, fmt.Sprintf("password_require_symbols = $%d", i))
+		args = append(args, *params.PasswordRequireSymbols)
+		i++
+	}
+	if params.PasswordHistoryCount != nil {
+		setClauses = append(setClauses, fmt.Sprintf("password_history_count = $%d", i))
+		args = append(args, *params.PasswordHistoryCount)
+		i++
+	}
+	if params.ContentWidth != nil {
+		setClauses = append(setClauses, fmt.Sprintf("content_width = $%d", i))
+		args = append(args, *params.ContentWidth)
+		i++
+	}
+
+	if len(setClauses) == 0 {
+		return nil // nothing to update
+	}
+
+	q := "UPDATE auth.instance SET " + joinStrings(setClauses, ", ")
+	_, err := r.db.Exec(ctx, q, args...)
+	if err != nil {
+		return fmt.Errorf("bootstrap.postgres.UpdateSettings: %w", err)
+	}
+	return nil
+}
+
+func joinStrings(ss []string, sep string) string {
+	result := ""
+	for k, s := range ss {
+		if k > 0 {
+			result += sep
+		}
+		result += s
+	}
+	return result
 }
 
 func (r *Repository) EnsureRow(ctx context.Context) error {
@@ -195,6 +276,22 @@ func (r *Repository) CreateOwnerAtomic(ctx context.Context, params bootstrap.Cre
 	if tag.RowsAffected() == 0 {
 		return "", fmt.Errorf("bootstrap.postgres.CreateOwnerAtomic: instance was not in SETUP state")
 	}
+
+	// Add the owner to the "Super Admins" system group (best-effort — group may
+	// not exist yet on fresh installs that haven't run migration 0011).
+	const addToSuperAdmins = `
+		INSERT INTO auth.group_members (group_id, member_type, member_id)
+		VALUES ('00000000-0000-0000-0000-000000000002', 'user', $1)
+		ON CONFLICT DO NOTHING`
+	_, _ = tx.Exec(ctx, addToSuperAdmins, userID)
+
+	// Add the owner to the "Users" system group (best-effort — group may
+	// not exist yet on fresh installs that haven't run migration 0012).
+	const addToUsers = `
+		INSERT INTO auth.group_members (group_id, member_type, member_id)
+		VALUES ('00000000-0000-0000-0000-000000000003', 'user', $1)
+		ON CONFLICT DO NOTHING`
+	_, _ = tx.Exec(ctx, addToUsers, userID)
 
 	if err := tx.Commit(ctx); err != nil {
 		return "", fmt.Errorf("bootstrap.postgres.CreateOwnerAtomic commit: %w", err)

@@ -38,8 +38,26 @@ type Repository interface {
 	// SetMFAEnabled updates the mfa_enabled flag on the user.
 	SetMFAEnabled(ctx context.Context, id string, enabled bool) error
 
+	// SetForcePasswordChange sets or clears the force_password_change flag.
+	SetForcePasswordChange(ctx context.Context, id string, force bool) error
+
 	// RegisterAtomic creates a new user, their preferences row, and marks the
 	// invitation as accepted — all inside a single transaction.
 	// Returns the new user's UUID.
 	RegisterAtomic(ctx context.Context, params RegisterParams) (string, error)
+
+	// List returns all users ordered by created_at descending.
+	// Used by admin endpoints only.
+	List(ctx context.Context, limit, offset int) ([]*User, error)
+
+	// ListWithCounts returns all users with per-user TOTP and passkey counts.
+	// Used by the admin ListUsers endpoint.
+	ListWithCounts(ctx context.Context, limit, offset int) ([]*AdminUser, error)
+
+	// AddPasswordHistory records a hashed password in the history table.
+	AddPasswordHistory(ctx context.Context, userID, hash string) error
+
+	// GetRecentPasswordHashes returns the most recent `count` password hashes for
+	// a user, ordered newest first. Used to enforce password reuse prevention.
+	GetRecentPasswordHashes(ctx context.Context, userID string, count int) ([]string, error)
 }

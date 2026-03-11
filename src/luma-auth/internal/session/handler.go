@@ -1,6 +1,7 @@
 package session
 
 import (
+	"context"
 	"encoding/json"
 	"net"
 	"net/http"
@@ -12,20 +13,37 @@ import (
 	"github.com/josephtindall/luma-auth/pkg/middleware"
 )
 
+// ForceChangeTokenCreator issues a short-lived token for the force-password-change flow.
+// Satisfied by passwordreset.Service.
+type ForceChangeTokenCreator interface {
+	CreateForceChangeToken(ctx context.Context, userID string) (string, error)
+}
+
+// RecoveryTokenGenerator generates (or regenerates) a recovery token for a user.
+// Satisfied by recoverytoken.Service.
+type RecoveryTokenGenerator interface {
+	Generate(ctx context.Context, userID string) (string, error)
+}
+
 // RefreshCookieName is the name of the HttpOnly cookie used to store
 // the refresh token. Shared with bootstrap/handler.go for initial token issuance.
 const RefreshCookieName = "auth_refresh"
 
 // Handler serves auth endpoints.
 type Handler struct {
-	svc          *Service
-	secureCookie bool // false only in tests
+	svc           *Service
+	passwordReset ForceChangeTokenCreator // may be nil if feature not wired
+	recovery      RecoveryTokenGenerator  // may be nil if feature not wired
+	secureCookie  bool                    // false only in tests
 }
 
 // NewHandler constructs the session handler.
-func NewHandler(svc *Service, secureCookie bool) *Handler {
-	return &Handler{svc: svc, secureCookie: secureCookie}
+func NewHandler(svc *Service, passwordReset ForceChangeTokenCreator, secureCookie bool) *Handler {
+	return &Handler{svc: svc, passwordReset: passwordReset, secureCookie: secureCookie}
 }
+
+// SetRecoveryGenerator injects the recovery token generator (called from main.go).
+func (h *Handler) SetRecoveryGenerator(g RecoveryTokenGenerator) { h.recovery = g }
 
 // Register handles POST /api/auth/register.
 func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
@@ -65,9 +83,13 @@ func (h *Handler) Register(w http.ResponseWriter, r *http.Request) {
 	}
 
 	h.setRefreshCookie(w, pair.RefreshToken, pair.ExpiresAt)
-	httputil.WriteJSON(w, http.StatusCreated, map[string]string{
-		"access_token": pair.AccessToken,
-	})
+	resp := map[string]string{"access_token": pair.AccessToken}
+	if h.recovery != nil {
+		if raw, err := h.recovery.Generate(r.Context(), pair.UserID); err == nil {
+			resp["recovery_token"] = raw
+		}
+	}
+	httputil.WriteJSON(w, http.StatusCreated, resp)
 }
 
 // Identify handles POST /api/auth/identify.
@@ -128,6 +150,19 @@ func (h *Handler) Login(w http.ResponseWriter, r *http.Request) {
 			"mfa_required": true,
 			"mfa_token":    result.MFAToken,
 			"methods":      result.MFAMethods,
+		})
+		return
+	}
+
+	if result.PasswordChangeRequired && h.passwordReset != nil {
+		token, err := h.passwordReset.CreateForceChangeToken(r.Context(), result.UserID)
+		if err != nil {
+			httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to create change token")
+			return
+		}
+		httputil.WriteJSON(w, http.StatusOK, map[string]any{
+			"password_change_required": true,
+			"change_token":             token,
 		})
 		return
 	}

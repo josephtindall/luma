@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/josephtindall/luma-auth/internal/user"
 	"github.com/josephtindall/luma-auth/pkg/crypto"
 	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
 )
@@ -173,6 +174,61 @@ func (s *Service) CreateOwner(ctx context.Context, params CreateOwnerParams) (us
 	}
 	slog.Info("bootstrap: owner created — instance is now ACTIVE", "user_id", userID)
 	return userID, nil
+}
+
+// GetSettings returns the current instance state (including password policy).
+func (s *Service) GetSettings(ctx context.Context) (*InstanceState, error) {
+	state, err := s.repo.Get(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("bootstrap.GetSettings: %w", err)
+	}
+	return state, nil
+}
+
+// UpdateSettings applies a partial update to instance settings and returns
+// the refreshed state.
+func (s *Service) UpdateSettings(ctx context.Context, params InstanceSettingsParams) (*InstanceState, error) {
+	if params.Name != nil {
+		if len(*params.Name) < 2 || len(*params.Name) > 64 {
+			return nil, ErrInvalidName
+		}
+	}
+	if params.PasswordMinLength != nil {
+		if *params.PasswordMinLength < 6 || *params.PasswordMinLength > 128 {
+			return nil, fmt.Errorf("password_min_length must be between 6 and 128")
+		}
+	}
+	if params.PasswordHistoryCount != nil {
+		if *params.PasswordHistoryCount < 0 || *params.PasswordHistoryCount > 24 {
+			return nil, fmt.Errorf("password_history_count must be between 0 and 24")
+		}
+	}
+	if err := s.repo.UpdateSettings(ctx, params); err != nil {
+		return nil, fmt.Errorf("bootstrap.UpdateSettings: %w", err)
+	}
+	return s.repo.Get(ctx)
+}
+
+// GetPasswordPolicy returns the instance password policy as a user.PasswordPolicy.
+// Implements user.PasswordPolicyProvider. Returns safe defaults on error.
+func (s *Service) GetPasswordPolicy(ctx context.Context) (*user.PasswordPolicy, error) {
+	state, err := s.repo.Get(ctx)
+	if err != nil {
+		// Return conservative defaults rather than failing password operations.
+		return &user.PasswordPolicy{MinLength: 8}, nil
+	}
+	minLen := state.PasswordMinLength
+	if minLen < 6 {
+		minLen = 6
+	}
+	return &user.PasswordPolicy{
+		MinLength:        minLen,
+		RequireUppercase: state.PasswordRequireUppercase,
+		RequireLowercase: state.PasswordRequireLowercase,
+		RequireNumbers:   state.PasswordRequireNumbers,
+		RequireSymbols:   state.PasswordRequireSymbols,
+		HistoryCount:     state.PasswordHistoryCount,
+	}, nil
 }
 
 // ── internal helpers ──────────────────────────────────────────────────────────

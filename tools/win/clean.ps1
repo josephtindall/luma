@@ -8,16 +8,16 @@ param(
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
-$RepoRoot     = Resolve-Path (Join-Path (Join-Path $PSScriptRoot "..") "..")
+$RepoRoot = Resolve-Path (Join-Path (Join-Path $PSScriptRoot "..") "..")
 $ArtifactsDir = Join-Path $RepoRoot "artifacts"
-$AirTmpDir    = Join-Path (Join-Path (Join-Path $RepoRoot "src") "luma") "tmp"
+$AirTmpDir = Join-Path (Join-Path (Join-Path $RepoRoot "src") "luma") "tmp"
 $FlutterBuild = Join-Path (Join-Path (Join-Path $RepoRoot "src") "luma-web") "build"
 
-$removeData   = $Data -or $Full
+$removeData = $Data -or $Full
 $removeImages = $Images -or $Full
 
 function Write-Step($msg) { Write-Host "`n>> $msg" -ForegroundColor Cyan }
-function Write-Ok($msg)   { Write-Host "   $msg" -ForegroundColor Green }
+function Write-Ok($msg) { Write-Host "   $msg" -ForegroundColor Green }
 function Write-Skip($msg) { Write-Host "   $msg  (not found -- skipped)" -ForegroundColor DarkGray }
 function Write-Warn($msg) { Write-Host "   $msg" -ForegroundColor Yellow }
 
@@ -96,7 +96,7 @@ else {
     Write-Host "Clean complete." -ForegroundColor Green
     if ($removeData) {
         Write-Warn "Database volumes were deleted."
-        Write-Warn "Haven will be UNCLAIMED on next start -- run '.\tools\win\run.ps1 -Fresh' or just run.ps1."
+        Write-Warn "Luma will be UNCLAIMED on next start -- run '.\tools\win\run.ps1 -Fresh' or just run.ps1."
     }
     if ($removeImages) {
         Write-Host "   Docker images removed. Run '.\tools\win\build.ps1' to rebuild." -ForegroundColor DarkGray

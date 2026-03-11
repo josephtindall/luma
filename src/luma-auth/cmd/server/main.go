@@ -26,13 +26,21 @@ import (
 	authzpg "github.com/josephtindall/luma-auth/internal/authz/postgres"
 	"github.com/josephtindall/luma-auth/internal/bootstrap"
 	bootstrappg "github.com/josephtindall/luma-auth/internal/bootstrap/postgres"
+	"github.com/josephtindall/luma-auth/internal/customrole"
+	customrolepg "github.com/josephtindall/luma-auth/internal/customrole/postgres"
 	"github.com/josephtindall/luma-auth/internal/device"
 	devicepg "github.com/josephtindall/luma-auth/internal/device/postgres"
+	"github.com/josephtindall/luma-auth/internal/group"
+	grouppg "github.com/josephtindall/luma-auth/internal/group/postgres"
 	"github.com/josephtindall/luma-auth/internal/invitation"
 	invitationpg "github.com/josephtindall/luma-auth/internal/invitation/postgres"
 	mfapkg "github.com/josephtindall/luma-auth/internal/mfa"
 	mfapg "github.com/josephtindall/luma-auth/internal/mfa/postgres"
 	"github.com/josephtindall/luma-auth/internal/migrate"
+	passwordresetpkg "github.com/josephtindall/luma-auth/internal/passwordreset"
+	passwordresetpg "github.com/josephtindall/luma-auth/internal/passwordreset/postgres"
+	recoverytokenpkg "github.com/josephtindall/luma-auth/internal/recoverytoken"
+	recoverytokenpg "github.com/josephtindall/luma-auth/internal/recoverytoken/postgres"
 	"github.com/josephtindall/luma-auth/internal/preferences"
 	prefpg "github.com/josephtindall/luma-auth/internal/preferences/postgres"
 	"github.com/josephtindall/luma-auth/internal/session"
@@ -97,7 +105,7 @@ func run() error {
 	prefRepo := prefpg.New(db)
 	invitationRepo := invitationpg.New(db)
 	bootstrapRepo := bootstrappg.New(db)
-	authzRepo := authzpg.New(db)
+	authzRepo := authzpg.New(db, rdb)
 	mfaRepo := mfapg.New(db)
 
 	// ── 5b. WebAuthn instance ─────────────────────────────────────────────────────
@@ -142,7 +150,28 @@ func run() error {
 		cfg.JWTSigningKey,
 	)
 
+	// Wire session terminator into user service (avoids import cycle).
+	userSvc.SetSessions(sessionSvc)
+	// Wire password policy provider into user service (avoids import cycle).
+	userSvc.SetPolicy(bootstrapSvc)
+
+	passwordResetRepo := passwordresetpg.New(db)
+	passwordResetSvc := passwordresetpkg.NewService(passwordResetRepo, userRepo, userSvc)
+
+	recoveryTokenRepo := recoverytokenpg.New(db)
+	recoveryTokenSvc := recoverytokenpkg.NewService(recoveryTokenRepo)
+	recoveryTokenHandler := recoverytokenpkg.NewHandler(recoveryTokenSvc, userRepo, userSvc, sessionSvc, true /* secureCookie */)
+
 	authzAuthorizer := authz.NewDefaultAuthorizer(authzRepo, rdb)
+
+	groupRepo := grouppg.New(db)
+	groupSvc := group.NewService(groupRepo)
+	groupSvc.SetCacheInvalidator(authzRepo)
+	groupHandler := group.NewHandler(groupSvc)
+
+	roleRepo := customrolepg.New(db)
+	roleSvc := customrole.NewService(roleRepo)
+	roleHandler := customrole.NewHandler(roleSvc)
 
 	// ── 7. Bootstrap initialisation ───────────────────────────────────────────
 	// Ensures the instance row exists. Prints the setup token to stdout when
@@ -154,13 +183,25 @@ func run() error {
 	// ── 8. HTTP handlers ──────────────────────────────────────────────────────
 	bootstrapGate := bootstrap.NewBootstrapGate(bootstrapRepo)
 	bootstrapHandler := bootstrap.NewHandler(bootstrapSvc, sessionSvc)
-	sessionHandler := session.NewHandler(sessionSvc, true /* secureCookie */)
+	sessionHandler := session.NewHandler(sessionSvc, passwordResetSvc, true /* secureCookie */)
+	passwordResetHandler := passwordresetpkg.NewHandler(passwordResetSvc, sessionSvc, sessionSvc, true /* secureCookie */)
 	userHandler := user.NewHandler(userSvc, sessionSvc)
 	deviceHandler := device.NewHandler(deviceSvc, sessionSvc)
 	prefHandler := preferences.NewHandler(prefSvc)
 	invHandler := invitation.NewHandler(invitationSvc, cfg.BaseURL)
 	authzHandler := authz.NewHandler(authzAuthorizer, auditSvc)
 	mfaHandler := mfapkg.NewHandler(mfaSvc, sessionSvc, sessionSvc, sessionSvc, true /* secureCookie */)
+
+	// Inject recovery token generator into registration flows.
+	sessionHandler.SetRecoveryGenerator(recoveryTokenSvc)
+	bootstrapHandler.SetRecoveryGenerator(recoveryTokenSvc)
+
+	// Inject authz into handlers that support custom-role permission checks.
+	userHandler.SetAuthorizer(authzAuthorizer)
+	invHandler.SetAuthorizer(authzAuthorizer)
+	bootstrapHandler.SetAuthorizer(authzAuthorizer)
+	groupHandler.SetAuthorizer(authzAuthorizer)
+	roleHandler.SetAuthorizer(authzAuthorizer)
 
 	// ── 9. Router ─────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
@@ -184,6 +225,7 @@ func run() error {
 			"status":        "ok",
 			"state":         string(state.SetupState),
 			"instance_name": state.Name,
+			"content_width": state.ContentWidth,
 		})
 	})
 
@@ -199,6 +241,8 @@ func run() error {
 		r.Post("/api/auth/login", sessionHandler.Login)
 		r.Post("/api/auth/refresh", sessionHandler.Refresh)
 		r.Post("/api/auth/register", sessionHandler.Register)
+		r.Post("/api/auth/reset-password", passwordResetHandler.ResetPassword)
+		r.Post("/api/auth/recovery/reset-password", recoveryTokenHandler.ResetPassword)
 		r.Post("/api/auth/mfa/verify", mfaHandler.VerifyMFA)
 		r.Post("/api/auth/passkeys/login/begin", mfaHandler.BeginLogin)
 		r.Post("/api/auth/passkeys/login/finish", mfaHandler.FinishLogin)
@@ -251,9 +295,49 @@ func run() error {
 		r.Get("/api/auth/invitations", invHandler.List)
 		r.Delete("/api/auth/invitations/{id}", invHandler.Revoke)
 
+		r.Get("/api/auth/recovery/status", recoveryTokenHandler.GetStatus)
+		r.Post("/api/auth/recovery/generate", recoveryTokenHandler.Generate)
+
+		r.Get("/api/auth/admin/access", userHandler.AdminAccess)
+		r.Get("/api/auth/admin/capabilities", userHandler.AdminCapabilities)
+
+		r.Get("/api/auth/admin/instance-settings", bootstrapHandler.GetInstanceSettings)
+		r.Patch("/api/auth/admin/instance-settings", bootstrapHandler.UpdateInstanceSettings)
+
+		r.Get("/api/auth/admin/users", userHandler.ListUsers)
+		r.Post("/api/auth/admin/users", userHandler.AdminCreate)
 		r.Post("/api/auth/admin/users/{id}/lock", userHandler.LockUser)
 		r.Delete("/api/auth/admin/users/{id}/lock", userHandler.UnlockUser)
 		r.Delete("/api/auth/admin/users/{id}/sessions", sessionHandler.RevokeUserSessions)
+		r.Post("/api/auth/admin/users/{id}/force-password-change", userHandler.ForcePasswordChange)
+		r.Post("/api/auth/admin/users/{id}/password-reset", passwordResetHandler.AdminCreateResetToken)
+		r.Delete("/api/auth/admin/users/{id}/mfa/totp", mfaHandler.AdminDeleteAllTOTP)
+		r.Delete("/api/auth/admin/users/{id}/passkeys", mfaHandler.AdminRevokeAllPasskeys)
+
+		// User custom role assignments
+		r.Get("/api/auth/admin/users/{id}/custom-roles", roleHandler.ListUserCustomRoles)
+		r.Post("/api/auth/admin/users/{id}/custom-roles/{roleID}", roleHandler.AssignToUser)
+		r.Delete("/api/auth/admin/users/{id}/custom-roles/{roleID}", roleHandler.RemoveFromUser)
+
+		// Groups (owner-only — enforced inside handler)
+		r.Get("/api/auth/admin/groups", groupHandler.ListGroups)
+		r.Post("/api/auth/admin/groups", groupHandler.CreateGroup)
+		r.Get("/api/auth/admin/groups/{id}", groupHandler.GetGroup)
+		r.Patch("/api/auth/admin/groups/{id}", groupHandler.RenameGroup)
+		r.Delete("/api/auth/admin/groups/{id}", groupHandler.DeleteGroup)
+		r.Post("/api/auth/admin/groups/{id}/members", groupHandler.AddMember)
+		r.Delete("/api/auth/admin/groups/{id}/members/{type}/{memberID}", groupHandler.RemoveMember)
+		r.Post("/api/auth/admin/groups/{id}/roles/{roleID}", groupHandler.AssignRole)
+		r.Delete("/api/auth/admin/groups/{id}/roles/{roleID}", groupHandler.RemoveRole)
+
+		// Custom roles (owner-only — enforced inside handler)
+		r.Get("/api/auth/admin/custom-roles", roleHandler.ListRoles)
+		r.Post("/api/auth/admin/custom-roles", roleHandler.CreateRole)
+		r.Get("/api/auth/admin/custom-roles/{id}", roleHandler.GetRole)
+		r.Patch("/api/auth/admin/custom-roles/{id}", roleHandler.UpdateRole)
+		r.Delete("/api/auth/admin/custom-roles/{id}", roleHandler.DeleteRole)
+		r.Put("/api/auth/admin/custom-roles/{id}/permissions/{action}", roleHandler.SetPermission)
+		r.Delete("/api/auth/admin/custom-roles/{id}/permissions/{action}", roleHandler.RemovePermission)
 	})
 
 	// ── 10. Start server + graceful shutdown ──────────────────────────────────

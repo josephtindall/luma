@@ -58,7 +58,7 @@ func (s *Service) Validate(ctx context.Context, rawToken string) (*Invitation, e
 	return inv, nil
 }
 
-// List returns all pending invitations.
+// List returns all invitations (all statuses) for the owner's admin view.
 func (s *Service) List(ctx context.Context) ([]*Invitation, error) {
 	invs, err := s.repo.List(ctx)
 	if err != nil {
