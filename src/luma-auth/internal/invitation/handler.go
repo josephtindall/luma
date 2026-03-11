@@ -77,7 +77,7 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Note:      req.Note,
 	})
 	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
 
@@ -107,7 +107,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	invs, err := h.svc.List(r.Context())
 	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, invs)

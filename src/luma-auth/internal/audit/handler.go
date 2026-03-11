@@ -96,6 +96,9 @@ func parseQuery(r *http.Request, defaultLimit int) AuditQuery {
 	}
 	if v := r.URL.Query().Get("offset"); v != "" {
 		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			if n > 100_000 {
+				n = 100_000
+			}
 			q.Offset = n
 		}
 	}

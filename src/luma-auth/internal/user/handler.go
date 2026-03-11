@@ -135,6 +135,15 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	if len(req.DisplayName) > 64 {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "display_name too long (max 64 characters)")
+		return
+	}
+	if len(req.Email) > 254 {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "email too long (max 254 characters)")
+		return
+	}
+
 	err := h.svc.UpdateProfile(r.Context(), claims.Subject, UpdateProfileParams{
 		DisplayName: req.DisplayName,
 		Email:       req.Email,

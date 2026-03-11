@@ -199,7 +199,7 @@ class _ProfileSectionState extends State<_ProfileSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Could not save profile. Please try again.')),
         );
       }
     } finally {
@@ -314,7 +314,7 @@ class _PasswordSectionState extends State<_PasswordSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Could not change password. Please try again.')),
         );
       }
     } finally {
@@ -440,7 +440,7 @@ class _TOTPSectionState extends State<_TOTPSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Could not start TOTP setup. Please try again.')),
         );
       }
       setState(() => _enrolling = false);
@@ -572,7 +572,7 @@ class _TOTPSectionState extends State<_TOTPSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Could not add authenticator app. Please try again.')),
         );
       }
     } finally {
@@ -639,7 +639,7 @@ class _TOTPSectionState extends State<_TOTPSection> {
       _passwordCtrl.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Could not remove authenticator app. Please try again.')),
         );
       }
     }
@@ -846,7 +846,7 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Could not add passkey. Please try again.')),
         );
       }
     } finally {
@@ -899,7 +899,7 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
       passwordCtrl.dispose();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Could not remove passkey. Please try again.')),
         );
       }
     }
@@ -1184,7 +1184,7 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error generating codes: $e')),
+          const SnackBar(content: Text('Could not generate recovery codes. Please try again.')),
         );
       }
     } finally {
@@ -1365,7 +1365,7 @@ class _AccountRecoverySectionState extends State<_AccountRecoverySection> {
       _passwordCtrl.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Could not generate recovery token. Please try again.')),
         );
       }
     } finally {
@@ -1397,7 +1397,7 @@ class _AccountRecoverySectionState extends State<_AccountRecoverySection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not generate PDF: $e')),
+          const SnackBar(content: Text('Could not generate PDF. Please try again.')),
         );
       }
     } finally {
@@ -1706,7 +1706,7 @@ class _PreferencesSectionState extends State<_PreferencesSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save preference: $e')),
+          const SnackBar(content: Text('Could not save preference. Please try again.')),
         );
       }
     }
@@ -1841,7 +1841,7 @@ class _DevicesSectionState extends State<_DevicesSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(content: Text('Could not revoke device. Please try again.')),
         );
       }
     }
