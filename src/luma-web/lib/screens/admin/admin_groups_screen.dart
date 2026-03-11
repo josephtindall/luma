@@ -30,7 +30,7 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
       final groups = await widget.userService.listGroups();
       if (mounted) setState(() { _groups = groups; _loading = false; });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) setState(() { _error = 'Could not load groups. Please try again.'; _loading = false; });
     }
   }
 
@@ -151,7 +151,7 @@ class _CreateGroupDialogState extends State<_CreateGroupDialog> {
       );
       if (mounted) { Navigator.of(context).pop(); widget.onCreated(); }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _saving = false; });
+      if (mounted) setState(() { _error = e.toString().replaceFirst('Exception: ', ''); _saving = false; });
     }
   }
 
@@ -252,7 +252,7 @@ class _GroupManageDialogState extends State<_GroupManageDialog> {
         });
       }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) setState(() { _error = 'Could not load groups. Please try again.'; _loading = false; });
     }
   }
 
@@ -294,8 +294,9 @@ class _GroupManageDialogState extends State<_GroupManageDialog> {
   }
 
   void _showError(String msg) {
+    final display = msg.replaceFirst('Exception: ', '');
     ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-      content: Text(msg),
+      content: Text(display.isEmpty ? 'Something went wrong. Please try again.' : display),
       backgroundColor: Theme.of(context).colorScheme.error,
     ));
   }
@@ -315,10 +316,29 @@ class _GroupManageDialogState extends State<_GroupManageDialog> {
   }
 
   Future<void> _removeMember(GroupMemberRecord m) async {
+    final label = _memberLabel(m);
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Remove member?'),
+        content: Text('Remove "$label" from this group?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: const Text('Remove'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
     try {
       await widget.userService.removeGroupMember(widget.group.id, m.memberType, m.memberId);
       await _loadDetail();
-    } catch (e) { if (mounted) _showError(e.toString()); }
+    } catch (e) { if (mounted) _showError('Could not remove member. Please try again.'); }
   }
 
   Future<void> _assignRole(String roleId) async {

@@ -53,7 +53,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
       final s = await widget.userService.getInstanceSettings();
       _applySettings(s);
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = 'Could not load settings. Please try again.');
     } finally {
       setState(() => _loading = false);
     }
@@ -116,7 +116,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(e.toString())),
+          const SnackBar(content: Text('Could not save settings. Please try again.')),
         );
       }
     } finally {

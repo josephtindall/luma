@@ -43,7 +43,7 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
       final roles = await widget.userService.listCustomRoles();
       if (mounted) setState(() { _roles = roles; _loading = false; });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted) setState(() { _error = 'Could not load roles. Please try again.'; _loading = false; });
     }
   }
 
@@ -271,7 +271,7 @@ class _CreateRoleDialogState extends State<_CreateRoleDialog> {
         widget.onCreated();
       }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _saving = false; });
+      if (mounted) setState(() { _error = e.toString().replaceFirst('Exception: ', ''); _saving = false; });
     }
   }
 
@@ -416,7 +416,7 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
       await _reload();
       widget.onChanged();
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -448,7 +448,7 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
         widget.onChanged();
       }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _deleting = false; });
+      if (mounted) setState(() { _error = e.toString().replaceFirst('Exception: ', ''); _deleting = false; });
     }
   }
 
@@ -471,7 +471,7 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
     } catch (e) {
       // Revert on failure
       await _reload();
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted) setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     }
   }
 

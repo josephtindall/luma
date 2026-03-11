@@ -116,7 +116,7 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not load events: $e')),
+          const SnackBar(content: Text('Could not load events. Please try again.')),
         );
       }
     } finally {
@@ -165,7 +165,7 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Export failed: $e')),
+          const SnackBar(content: Text('Export failed. Please try again.')),
         );
       }
     } finally {

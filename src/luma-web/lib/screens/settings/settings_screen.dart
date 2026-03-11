@@ -1140,11 +1140,24 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
           actions: [
             FilledButton.icon(
               onPressed: () {
-                // In a real app we'd trigger a file download using universal_html
-                // or similar, but for now we instruct the user to copy.
+                final text = codes
+                    .asMap()
+                    .entries
+                    .map((e) {
+                      final i = e.key;
+                      final code = e.value;
+                      if (i % 2 == 0 && i < codes.length - 1) {
+                        return '${code.padRight(28)}${codes[i + 1]}';
+                      } else if (i % 2 == 0) {
+                        return code;
+                      }
+                      return null;
+                    })
+                    .where((l) => l != null)
+                    .join('\n');
+                Clipboard.setData(ClipboardData(text: text));
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(
-                      content: Text('Please select and copy the codes above')),
+                  const SnackBar(content: Text('Recovery codes copied to clipboard')),
                 );
               },
               icon: const Icon(Icons.copy),

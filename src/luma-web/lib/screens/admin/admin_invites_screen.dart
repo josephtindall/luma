@@ -70,7 +70,7 @@ class _AdminInvitesScreenState extends State<AdminInvitesScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString()),
+          content: const Text('Could not revoke invitation. Please try again.'),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -429,7 +429,7 @@ class _InvitePanelState extends State<_InvitePanel> {
     } catch (e) {
       setState(() {
         _creating = false;
-        _error = e.toString();
+        _error = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -550,12 +550,6 @@ class _InvitePanelState extends State<_InvitePanel> {
                       onPressed: _creating ? null : _create,
                     ),
                   ],
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.email_outlined),
-                  label: const Text('Send invite via Email'),
-                  onPressed: null,
                 ),
                 const SizedBox(height: 24),
                 Center(

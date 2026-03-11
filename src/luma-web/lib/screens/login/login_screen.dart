@@ -663,6 +663,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           onChanged: (value) {
             if (value.length == 6) {
+              setState(() => _loading = true);
               _submitPasswordAndTotp();
             }
           },

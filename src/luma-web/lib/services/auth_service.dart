@@ -286,6 +286,8 @@ class AuthService extends ChangeNotifier {
     }
     final data = json.decode(resp.body) as Map<String, dynamic>;
     _accessToken = data['access_token'] as String?;
+    _mfaToken = null;
+    _mfaMethods = [];
     notifyListeners();
   }
 
