@@ -1,6 +1,7 @@
 package bootstrap
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net"
@@ -14,12 +15,19 @@ import (
 	"github.com/josephtindall/luma-auth/pkg/middleware"
 )
 
+// RecoveryTokenGenerator generates (or regenerates) a recovery token for a user.
+// Satisfied by recoverytoken.Service.
+type RecoveryTokenGenerator interface {
+	Generate(ctx context.Context, userID string) (string, error)
+}
+
 // Handler serves the setup wizard API endpoints.
 // All handlers call the Service — which re-checks state internally (third layer).
 type Handler struct {
 	svc      *Service
 	issuer   session.Issuer
 	authzSvc authz.Authorizer
+	recovery RecoveryTokenGenerator // may be nil if feature not wired
 }
 
 // NewHandler constructs the setup handler.
@@ -30,6 +38,9 @@ func NewHandler(svc *Service, issuer session.Issuer) *Handler {
 
 // SetAuthorizer injects the authz evaluator.
 func (h *Handler) SetAuthorizer(a authz.Authorizer) { h.authzSvc = a }
+
+// SetRecoveryGenerator injects the recovery token generator (called from main.go).
+func (h *Handler) SetRecoveryGenerator(g RecoveryTokenGenerator) { h.recovery = g }
 
 func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request, action string) bool {
 	claims := middleware.ClaimsFromContext(r.Context())
@@ -177,10 +188,16 @@ func (h *Handler) CreateOwner(w http.ResponseWriter, r *http.Request) {
 		SameSite: http.SameSiteStrictMode,
 	})
 
-	httputil.WriteJSON(w, http.StatusCreated, map[string]string{
+	resp := map[string]string{
 		"access_token": pair.AccessToken,
 		"user_id":      userID,
-	})
+	}
+	if h.recovery != nil {
+		if raw, err := h.recovery.Generate(r.Context(), userID); err == nil {
+			resp["recovery_token"] = raw
+		}
+	}
+	httputil.WriteJSON(w, http.StatusCreated, resp)
 }
 
 // GetInstanceSettings handles GET /api/auth/admin/instance-settings.

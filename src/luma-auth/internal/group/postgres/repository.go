@@ -22,27 +22,27 @@ func New(db *pgxpool.Pool) *Repository {
 }
 
 // Create inserts a new group.
-func (r *Repository) Create(ctx context.Context, name string) (*group.Group, error) {
+func (r *Repository) Create(ctx context.Context, name string, description *string) (*group.Group, error) {
 	const q = `
-		INSERT INTO auth.groups (name)
-		VALUES ($1)
-		RETURNING id, name, is_system, no_member_control, created_at, updated_at`
+		INSERT INTO auth.groups (name, description)
+		VALUES ($1, $2)
+		RETURNING id, name, description, is_system, no_member_control, created_at, updated_at`
 	var g group.Group
-	err := r.db.QueryRow(ctx, q, name).Scan(&g.ID, &g.Name, &g.IsSystem, &g.NoMemberControl, &g.CreatedAt, &g.UpdatedAt)
+	err := r.db.QueryRow(ctx, q, name, description).Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.CreatedAt, &g.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("group.postgres.Create: %w", err)
 	}
 	return &g, nil
 }
 
-// Rename updates a group's name.
-func (r *Repository) Rename(ctx context.Context, id, name string) (*group.Group, error) {
+// Rename updates a group's name and optional description.
+func (r *Repository) Rename(ctx context.Context, id, name string, description *string) (*group.Group, error) {
 	const q = `
-		UPDATE auth.groups SET name = $2, updated_at = NOW()
+		UPDATE auth.groups SET name = $2, description = $3, updated_at = NOW()
 		WHERE id = $1
-		RETURNING id, name, is_system, no_member_control, created_at, updated_at`
+		RETURNING id, name, description, is_system, no_member_control, created_at, updated_at`
 	var g group.Group
-	err := r.db.QueryRow(ctx, q, id, name).Scan(&g.ID, &g.Name, &g.IsSystem, &g.NoMemberControl, &g.CreatedAt, &g.UpdatedAt)
+	err := r.db.QueryRow(ctx, q, id, name, description).Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.CreatedAt, &g.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("group not found")
 	}
@@ -65,10 +65,10 @@ func (r *Repository) Delete(ctx context.Context, id string) error {
 // Get returns full group details including members and role IDs.
 func (r *Repository) Get(ctx context.Context, id string) (*group.GroupWithDetails, error) {
 	const q = `
-		SELECT id, name, is_system, no_member_control, created_at, updated_at
+		SELECT id, name, description, is_system, no_member_control, created_at, updated_at
 		FROM auth.groups WHERE id = $1`
 	var g group.GroupWithDetails
-	err := r.db.QueryRow(ctx, q, id).Scan(&g.ID, &g.Name, &g.IsSystem, &g.NoMemberControl, &g.CreatedAt, &g.UpdatedAt)
+	err := r.db.QueryRow(ctx, q, id).Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.CreatedAt, &g.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("group not found")
 	}
@@ -93,7 +93,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*group.GroupWithDetail
 
 // List returns all groups with details.
 func (r *Repository) List(ctx context.Context) ([]*group.GroupWithDetails, error) {
-	const q = `SELECT id, name, is_system, no_member_control, created_at, updated_at FROM auth.groups ORDER BY name`
+	const q = `SELECT id, name, description, is_system, no_member_control, created_at, updated_at FROM auth.groups ORDER BY name`
 	rows, err := r.db.Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("group.postgres.List: %w", err)
@@ -103,7 +103,7 @@ func (r *Repository) List(ctx context.Context) ([]*group.GroupWithDetails, error
 	var groups []*group.GroupWithDetails
 	for rows.Next() {
 		var g group.GroupWithDetails
-		if err := rows.Scan(&g.ID, &g.Name, &g.IsSystem, &g.NoMemberControl, &g.CreatedAt, &g.UpdatedAt); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.CreatedAt, &g.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("group.postgres.List scan: %w", err)
 		}
 		groups = append(groups, &g)

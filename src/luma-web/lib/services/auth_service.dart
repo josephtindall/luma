@@ -90,6 +90,10 @@ class AuthService extends ChangeNotifier {
   // Force-change state — set when login returns password_change_required.
   String? _forceChangeToken;
 
+  // Recovery token pending — set after registration/setup until the user
+  // acknowledges the code on the recovery-code screen.
+  String? _pendingRecoveryToken;
+
   /// Called when the session is cleared (logout, expiry) so dependent services
   /// can drop cached state. Set from main.dart to avoid circular imports.
   VoidCallback? onSessionCleared;
@@ -111,6 +115,18 @@ class AuthService extends ChangeNotifier {
 
   /// The short-lived token used to authorize the force-change reset request.
   String? get forceChangeToken => _forceChangeToken;
+
+  /// True when the user just registered and must acknowledge their recovery code.
+  bool get recoveryTokenPending => _pendingRecoveryToken != null;
+
+  /// The one-time recovery token that was generated during registration.
+  String? get pendingRecoveryToken => _pendingRecoveryToken;
+
+  /// Called from the recovery-code screen after the user has saved the code.
+  void acknowledgeRecoveryToken() {
+    _pendingRecoveryToken = null;
+    notifyListeners();
+  }
 
   /// Called from main.dart before runApp. Probes auth service state and attempts
   /// silent token refresh if the instance is active.
@@ -444,14 +460,17 @@ class AuthService extends ChangeNotifier {
     }
     final data = json.decode(resp.body) as Map<String, dynamic>;
     _accessToken = data['access_token'] as String?;
+    _pendingRecoveryToken = data['recovery_token'] as String?;
     notifyListeners();
   }
 
   /// Sets the access token and marks the instance as active.
   /// Used after setup completes — the owner endpoint already returns a token.
-  void activateSession(String accessToken) {
+  /// Pass [recoveryToken] to trigger the recovery-code acknowledgement screen.
+  void activateSession(String accessToken, {String? recoveryToken}) {
     _accessToken = accessToken;
     _setupState = 'active';
+    _pendingRecoveryToken = recoveryToken;
     notifyListeners();
   }
 
@@ -462,6 +481,7 @@ class AuthService extends ChangeNotifier {
     _mfaToken = null;
     _mfaMethods = [];
     _forceChangeToken = null;
+    _pendingRecoveryToken = null;
     onSessionCleared?.call();
     notifyListeners();
   }

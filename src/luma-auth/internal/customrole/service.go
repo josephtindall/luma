@@ -17,11 +17,11 @@ func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
 }
 
-func (s *Service) Create(ctx context.Context, name string, priority *int) (*CustomRole, error) {
-	return s.repo.Create(ctx, name, priority)
+func (s *Service) Create(ctx context.Context, name string, priority *int, description *string) (*CustomRole, error) {
+	return s.repo.Create(ctx, name, priority, description)
 }
 
-func (s *Service) Update(ctx context.Context, id, name string, priority *int) (*CustomRole, error) {
+func (s *Service) Update(ctx context.Context, id, name string, priority *int, description *string) (*CustomRole, error) {
 	cr, err := s.repo.Get(ctx, id)
 	if err != nil {
 		return nil, fmt.Errorf("customrole.Update: %w", err)
@@ -29,7 +29,7 @@ func (s *Service) Update(ctx context.Context, id, name string, priority *int) (*
 	if cr.IsSystem {
 		return nil, pkgerrors.ErrSystemEntity
 	}
-	return s.repo.Update(ctx, id, name, priority)
+	return s.repo.Update(ctx, id, name, priority, description)
 }
 
 func (s *Service) Delete(ctx context.Context, id string) error {

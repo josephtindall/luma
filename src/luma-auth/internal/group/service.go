@@ -30,13 +30,13 @@ func (s *Service) SetCacheInvalidator(inv CacheInvalidator) {
 }
 
 // Create creates a new group.
-func (s *Service) Create(ctx context.Context, name string) (*Group, error) {
-	return s.repo.Create(ctx, name)
+func (s *Service) Create(ctx context.Context, name string, description *string) (*Group, error) {
+	return s.repo.Create(ctx, name, description)
 }
 
-// Rename changes a group's display name.
-func (s *Service) Rename(ctx context.Context, id, name string) (*Group, error) {
-	return s.repo.Rename(ctx, id, name)
+// Rename changes a group's display name and optional description.
+func (s *Service) Rename(ctx context.Context, id, name string, description *string) (*Group, error) {
+	return s.repo.Rename(ctx, id, name, description)
 }
 
 // Delete deletes a group only if it is not a system group and has no members.

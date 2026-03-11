@@ -81,7 +81,13 @@ func (h *Handler) AdminCapabilities(w http.ResponseWriter, r *http.Request) {
 	}
 
 	isOwner := claims.Role == "builtin:instance-owner"
-	actions := []string{"user:read", "invitation:list", "instance:read", "group:manage", "role:manage"}
+	actions := []string{
+		"user:read", "invitation:list", "instance:read",
+		"group:read", "group:create", "group:rename", "group:delete",
+		"group:add-member", "group:remove-member", "group:assign-role", "group:unassign-role",
+		"role:read", "role:create", "role:update", "role:delete",
+		"role:set-permission", "role:remove-permission", "role:assign-user", "role:unassign-user",
+	}
 	caps := map[string]any{"is_owner": isOwner}
 
 	for _, action := range actions {

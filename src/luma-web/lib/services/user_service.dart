@@ -27,8 +27,8 @@ class UserService extends ChangeNotifier {
   bool get canManageUsers => _adminCaps['user:read'] == true;
   bool get canManageInvitations => _adminCaps['invitation:list'] == true;
   bool get canManageInstanceSettings => _adminCaps['instance:read'] == true;
-  bool get canManageGroups => _adminCaps['group:manage'] == true;
-  bool get canManageRoles => _adminCaps['role:manage'] == true;
+  bool get canManageGroups => _adminCaps['group:read'] == true;
+  bool get canManageRoles => _adminCaps['role:read'] == true;
   bool get isAdminOwner => _adminCaps['is_owner'] == true;
 
   Future<void> loadProfile() async {
@@ -512,20 +512,28 @@ class UserService extends ChangeNotifier {
     return GroupRecord.fromJson(json.decode(resp.body) as Map<String, dynamic>);
   }
 
-  Future<GroupRecord> createGroup(String name) async {
-    final resp = await _api.post('/api/luma/admin/groups', {'name': name});
+  Future<GroupRecord> createGroup(String name, {String? description}) async {
+    final body = <String, dynamic>{'name': name};
+    if (description != null && description.isNotEmpty) body['description'] = description;
+    final resp = await _api.post('/api/luma/admin/groups', body);
     if (resp.statusCode != 201) {
-      final body = json.decode(resp.body) as Map<String, dynamic>;
-      throw Exception(body['message'] ?? 'Failed to create group');
+      final b = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(b['message'] ?? 'Failed to create group');
     }
     return GroupRecord.fromJson(json.decode(resp.body) as Map<String, dynamic>);
   }
 
-  Future<GroupRecord> renameGroup(String id, String name) async {
-    final resp = await _api.patch('/api/luma/admin/groups/$id', {'name': name});
+  Future<GroupRecord> renameGroup(String id, String name, {String? description, bool clearDescription = false}) async {
+    final body = <String, dynamic>{'name': name};
+    if (clearDescription) {
+      body['description'] = null;
+    } else if (description != null && description.isNotEmpty) {
+      body['description'] = description;
+    }
+    final resp = await _api.patch('/api/luma/admin/groups/$id', body);
     if (resp.statusCode != 200) {
-      final body = json.decode(resp.body) as Map<String, dynamic>;
-      throw Exception(body['message'] ?? 'Failed to rename group');
+      final b = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(b['message'] ?? 'Failed to rename group');
     }
     return GroupRecord.fromJson(json.decode(resp.body) as Map<String, dynamic>);
   }
@@ -598,9 +606,10 @@ class UserService extends ChangeNotifier {
         json.decode(resp.body) as Map<String, dynamic>);
   }
 
-  Future<CustomRoleRecord> createCustomRole(String name, {int? priority}) async {
+  Future<CustomRoleRecord> createCustomRole(String name, {int? priority, String? description}) async {
     final body = <String, dynamic>{'name': name};
     if (priority != null) body['priority'] = priority;
+    if (description != null && description.isNotEmpty) body['description'] = description;
     final resp = await _api.post('/api/luma/admin/custom-roles', body);
     if (resp.statusCode != 201) {
       final b = json.decode(resp.body) as Map<String, dynamic>;
@@ -611,12 +620,17 @@ class UserService extends ChangeNotifier {
   }
 
   Future<CustomRoleRecord> updateCustomRole(String id, String name,
-      {int? priority, bool clearPriority = false}) async {
+      {int? priority, bool clearPriority = false, String? description, bool clearDescription = false}) async {
     final body = <String, dynamic>{'name': name};
     if (clearPriority) {
       body['priority'] = null;
     } else if (priority != null) {
       body['priority'] = priority;
+    }
+    if (clearDescription) {
+      body['description'] = null;
+    } else if (description != null && description.isNotEmpty) {
+      body['description'] = description;
     }
     final resp = await _api.patch('/api/luma/admin/custom-roles/$id', body);
     if (resp.statusCode != 200) {
@@ -718,6 +732,35 @@ class UserService extends ChangeNotifier {
       return data;
     }
     return {};
+  }
+
+  // ---------------------------------------------------------------------------
+  // Account recovery token
+  // ---------------------------------------------------------------------------
+
+  /// Returns whether the current user has a recovery token stored.
+  Future<bool> getRecoveryTokenStatus() async {
+    final resp = await _api.get('/api/luma/auth/recovery/status');
+    if (resp.statusCode != 200) throw Exception('Failed to get recovery token status');
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    return data['has_token'] as bool? ?? false;
+  }
+
+  /// Generates (or regenerates) a recovery token for the current user.
+  /// [currentPassword] is required only when a token already exists.
+  /// Returns the raw 64-digit recovery token.
+  Future<String> generateRecoveryToken({String? currentPassword}) async {
+    final body = <String, dynamic>{};
+    if (currentPassword != null && currentPassword.isNotEmpty) {
+      body['current_password'] = currentPassword;
+    }
+    final resp = await _api.post('/api/luma/auth/recovery/generate', body);
+    if (resp.statusCode != 200) {
+      final data = json.decode(resp.body) as Map<String, dynamic>?;
+      throw Exception(data?['message'] ?? data?['error'] ?? 'Failed to generate recovery token');
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    return data['token'] as String;
   }
 
   /// Extract a list from a response that might be a bare array or an object

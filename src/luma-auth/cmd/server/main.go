@@ -39,6 +39,8 @@ import (
 	"github.com/josephtindall/luma-auth/internal/migrate"
 	passwordresetpkg "github.com/josephtindall/luma-auth/internal/passwordreset"
 	passwordresetpg "github.com/josephtindall/luma-auth/internal/passwordreset/postgres"
+	recoverytokenpkg "github.com/josephtindall/luma-auth/internal/recoverytoken"
+	recoverytokenpg "github.com/josephtindall/luma-auth/internal/recoverytoken/postgres"
 	"github.com/josephtindall/luma-auth/internal/preferences"
 	prefpg "github.com/josephtindall/luma-auth/internal/preferences/postgres"
 	"github.com/josephtindall/luma-auth/internal/session"
@@ -156,6 +158,10 @@ func run() error {
 	passwordResetRepo := passwordresetpg.New(db)
 	passwordResetSvc := passwordresetpkg.NewService(passwordResetRepo, userRepo, userSvc)
 
+	recoveryTokenRepo := recoverytokenpg.New(db)
+	recoveryTokenSvc := recoverytokenpkg.NewService(recoveryTokenRepo)
+	recoveryTokenHandler := recoverytokenpkg.NewHandler(recoveryTokenSvc, userRepo, userSvc, sessionSvc, true /* secureCookie */)
+
 	authzAuthorizer := authz.NewDefaultAuthorizer(authzRepo, rdb)
 
 	groupRepo := grouppg.New(db)
@@ -185,6 +191,10 @@ func run() error {
 	invHandler := invitation.NewHandler(invitationSvc, cfg.BaseURL)
 	authzHandler := authz.NewHandler(authzAuthorizer, auditSvc)
 	mfaHandler := mfapkg.NewHandler(mfaSvc, sessionSvc, sessionSvc, sessionSvc, true /* secureCookie */)
+
+	// Inject recovery token generator into registration flows.
+	sessionHandler.SetRecoveryGenerator(recoveryTokenSvc)
+	bootstrapHandler.SetRecoveryGenerator(recoveryTokenSvc)
 
 	// Inject authz into handlers that support custom-role permission checks.
 	userHandler.SetAuthorizer(authzAuthorizer)
@@ -232,6 +242,7 @@ func run() error {
 		r.Post("/api/auth/refresh", sessionHandler.Refresh)
 		r.Post("/api/auth/register", sessionHandler.Register)
 		r.Post("/api/auth/reset-password", passwordResetHandler.ResetPassword)
+		r.Post("/api/auth/recovery/reset-password", recoveryTokenHandler.ResetPassword)
 		r.Post("/api/auth/mfa/verify", mfaHandler.VerifyMFA)
 		r.Post("/api/auth/passkeys/login/begin", mfaHandler.BeginLogin)
 		r.Post("/api/auth/passkeys/login/finish", mfaHandler.FinishLogin)
@@ -283,6 +294,9 @@ func run() error {
 		r.Post("/api/auth/invitations", invHandler.Create)
 		r.Get("/api/auth/invitations", invHandler.List)
 		r.Delete("/api/auth/invitations/{id}", invHandler.Revoke)
+
+		r.Get("/api/auth/recovery/status", recoveryTokenHandler.GetStatus)
+		r.Post("/api/auth/recovery/generate", recoveryTokenHandler.Generate)
 
 		r.Get("/api/auth/admin/access", userHandler.AdminAccess)
 		r.Get("/api/auth/admin/capabilities", userHandler.AdminCapabilities)

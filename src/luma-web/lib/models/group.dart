@@ -20,6 +20,7 @@ class GroupMemberRecord {
 class GroupRecord {
   final String id;
   final String name;
+  final String? description;
   final bool isSystem;
   final bool noMemberControl;
   final int memberCount;
@@ -30,6 +31,7 @@ class GroupRecord {
   const GroupRecord({
     required this.id,
     required this.name,
+    this.description,
     required this.isSystem,
     this.noMemberControl = false,
     required this.memberCount,
@@ -41,6 +43,7 @@ class GroupRecord {
   factory GroupRecord.fromJson(Map<String, dynamic> j) => GroupRecord(
         id: j['id'] as String,
         name: j['name'] as String,
+        description: j['description'] as String?,
         isSystem: j['is_system'] as bool? ?? false,
         noMemberControl: j['no_member_control'] as bool? ?? false,
         memberCount: j['member_count'] as int? ?? 0,

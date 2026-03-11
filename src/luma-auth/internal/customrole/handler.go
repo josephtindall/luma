@@ -25,7 +25,7 @@ func NewHandler(svc *Service) *Handler {
 // SetAuthorizer injects the authz evaluator (called after construction in main).
 func (h *Handler) SetAuthorizer(a authz.Authorizer) { h.authzSvc = a }
 
-func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request) bool {
+func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request, action string) bool {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
@@ -40,7 +40,7 @@ func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request) bool {
 	}
 	result, err := h.authzSvc.Check(r.Context(), authz.CheckRequest{
 		UserID: claims.Subject,
-		Action: "role:manage",
+		Action: action,
 	})
 	if err != nil || !result.Allowed {
 		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
@@ -51,7 +51,7 @@ func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request) bool {
 
 // ListRoles handles GET /api/auth/admin/custom-roles.
 func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "role:read") {
 		return
 	}
 	roles, err := h.svc.List(r.Context())
@@ -67,18 +67,19 @@ func (h *Handler) ListRoles(w http.ResponseWriter, r *http.Request) {
 
 // CreateRole handles POST /api/auth/admin/custom-roles.
 func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "role:create") {
 		return
 	}
 	var req struct {
-		Name     string `json:"name"`
-		Priority *int   `json:"priority"`
+		Name        string  `json:"name"`
+		Priority    *int    `json:"priority"`
+		Description *string `json:"description"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
 		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "name is required")
 		return
 	}
-	cr, err := h.svc.Create(r.Context(), req.Name, req.Priority)
+	cr, err := h.svc.Create(r.Context(), req.Name, req.Priority, req.Description)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
@@ -88,7 +89,7 @@ func (h *Handler) CreateRole(w http.ResponseWriter, r *http.Request) {
 
 // GetRole handles GET /api/auth/admin/custom-roles/{id}.
 func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "role:read") {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -102,19 +103,20 @@ func (h *Handler) GetRole(w http.ResponseWriter, r *http.Request) {
 
 // UpdateRole handles PATCH /api/auth/admin/custom-roles/{id}.
 func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "role:update") {
 		return
 	}
 	id := chi.URLParam(r, "id")
 	var req struct {
-		Name     string `json:"name"`
-		Priority *int   `json:"priority"`
+		Name        string  `json:"name"`
+		Priority    *int    `json:"priority"`
+		Description *string `json:"description"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
 		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "name is required")
 		return
 	}
-	cr, err := h.svc.Update(r.Context(), id, req.Name, req.Priority)
+	cr, err := h.svc.Update(r.Context(), id, req.Name, req.Priority, req.Description)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
@@ -124,7 +126,7 @@ func (h *Handler) UpdateRole(w http.ResponseWriter, r *http.Request) {
 
 // DeleteRole handles DELETE /api/auth/admin/custom-roles/{id}.
 func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "role:delete") {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -137,7 +139,7 @@ func (h *Handler) DeleteRole(w http.ResponseWriter, r *http.Request) {
 
 // SetPermission handles PUT /api/auth/admin/custom-roles/{id}/permissions/{action}.
 func (h *Handler) SetPermission(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "role:set-permission") {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -162,7 +164,7 @@ func (h *Handler) SetPermission(w http.ResponseWriter, r *http.Request) {
 
 // RemovePermission handles DELETE /api/auth/admin/custom-roles/{id}/permissions/{action}.
 func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "role:remove-permission") {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -175,11 +177,9 @@ func (h *Handler) RemovePermission(w http.ResponseWriter, r *http.Request) {
 }
 
 // ListUserCustomRoles handles GET /api/auth/admin/users/{id}/custom-roles.
-// Requires user:read permission or owner role.
+// Requires role:read permission or owner role.
 func (h *Handler) ListUserCustomRoles(w http.ResponseWriter, r *http.Request) {
-	claims := middleware.ClaimsFromContext(r.Context())
-	if claims == nil {
-		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+	if !h.requirePerm(w, r, "role:read") {
 		return
 	}
 	userID := chi.URLParam(r, "id")
@@ -196,7 +196,7 @@ func (h *Handler) ListUserCustomRoles(w http.ResponseWriter, r *http.Request) {
 
 // AssignToUser handles POST /api/auth/admin/users/{id}/custom-roles/{roleID}.
 func (h *Handler) AssignToUser(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "role:assign-user") {
 		return
 	}
 	userID := chi.URLParam(r, "id")
@@ -210,7 +210,7 @@ func (h *Handler) AssignToUser(w http.ResponseWriter, r *http.Request) {
 
 // RemoveFromUser handles DELETE /api/auth/admin/users/{id}/custom-roles/{roleID}.
 func (h *Handler) RemoveFromUser(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "role:unassign-user") {
 		return
 	}
 	userID := chi.URLParam(r, "id")

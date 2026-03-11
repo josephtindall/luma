@@ -72,6 +72,11 @@ func (h *Handler) AuthRoutes() chi.Router {
 
 	// Password reset (unauthenticated — issues session tokens on success).
 	r.Post("/reset-password", h.sessionIssuerProxy("/api/auth/reset-password"))
+
+	// Account recovery (authenticated status + generate; unauthenticated reset).
+	r.Get("/recovery/status", h.proxyAuth("GET", "/api/auth/recovery/status"))
+	r.Post("/recovery/generate", h.proxyAuth("POST", "/api/auth/recovery/generate"))
+	r.Post("/recovery/reset-password", h.sessionIssuerProxy("/api/auth/recovery/reset-password"))
 	return r
 }
 

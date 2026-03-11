@@ -9,6 +9,7 @@ import (
 type Group struct {
 	ID              string    `json:"id"`
 	Name            string    `json:"name"`
+	Description     *string   `json:"description"`
 	IsSystem        bool      `json:"is_system"`
 	NoMemberControl bool      `json:"no_member_control"`
 	CreatedAt       time.Time `json:"created_at"`
@@ -32,8 +33,8 @@ type GroupWithDetails struct {
 
 // Repository is the data access interface for groups.
 type Repository interface {
-	Create(ctx context.Context, name string) (*Group, error)
-	Rename(ctx context.Context, id, name string) (*Group, error)
+	Create(ctx context.Context, name string, description *string) (*Group, error)
+	Rename(ctx context.Context, id, name string, description *string) (*Group, error)
 	Delete(ctx context.Context, id string) error
 	Get(ctx context.Context, id string) (*GroupWithDetails, error)
 	List(ctx context.Context) ([]*GroupWithDetails, error)

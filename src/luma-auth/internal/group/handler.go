@@ -25,7 +25,7 @@ func NewHandler(svc *Service) *Handler {
 // SetAuthorizer injects the authz evaluator (called after construction in main).
 func (h *Handler) SetAuthorizer(a authz.Authorizer) { h.authzSvc = a }
 
-func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request) bool {
+func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request, action string) bool {
 	claims := middleware.ClaimsFromContext(r.Context())
 	if claims == nil {
 		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
@@ -40,7 +40,7 @@ func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request) bool {
 	}
 	result, err := h.authzSvc.Check(r.Context(), authz.CheckRequest{
 		UserID: claims.Subject,
-		Action: "group:manage",
+		Action: action,
 	})
 	if err != nil || !result.Allowed {
 		httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
@@ -51,7 +51,7 @@ func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request) bool {
 
 // ListGroups handles GET /api/auth/admin/groups.
 func (h *Handler) ListGroups(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "group:read") {
 		return
 	}
 	groups, err := h.svc.List(r.Context())
@@ -67,17 +67,18 @@ func (h *Handler) ListGroups(w http.ResponseWriter, r *http.Request) {
 
 // CreateGroup handles POST /api/auth/admin/groups.
 func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "group:create") {
 		return
 	}
 	var req struct {
-		Name string `json:"name"`
+		Name        string  `json:"name"`
+		Description *string `json:"description"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
 		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "name is required")
 		return
 	}
-	g, err := h.svc.Create(r.Context(), req.Name)
+	g, err := h.svc.Create(r.Context(), req.Name, req.Description)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
@@ -87,7 +88,7 @@ func (h *Handler) CreateGroup(w http.ResponseWriter, r *http.Request) {
 
 // GetGroup handles GET /api/auth/admin/groups/{id}.
 func (h *Handler) GetGroup(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "group:read") {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -101,18 +102,19 @@ func (h *Handler) GetGroup(w http.ResponseWriter, r *http.Request) {
 
 // RenameGroup handles PATCH /api/auth/admin/groups/{id}.
 func (h *Handler) RenameGroup(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "group:rename") {
 		return
 	}
 	id := chi.URLParam(r, "id")
 	var req struct {
-		Name string `json:"name"`
+		Name        string  `json:"name"`
+		Description *string `json:"description"`
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil || req.Name == "" {
 		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "name is required")
 		return
 	}
-	g, err := h.svc.Rename(r.Context(), id, req.Name)
+	g, err := h.svc.Rename(r.Context(), id, req.Name, req.Description)
 	if err != nil {
 		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
 		return
@@ -122,7 +124,7 @@ func (h *Handler) RenameGroup(w http.ResponseWriter, r *http.Request) {
 
 // DeleteGroup handles DELETE /api/auth/admin/groups/{id}.
 func (h *Handler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "group:delete") {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -135,7 +137,7 @@ func (h *Handler) DeleteGroup(w http.ResponseWriter, r *http.Request) {
 
 // AddMember handles POST /api/auth/admin/groups/{id}/members.
 func (h *Handler) AddMember(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "group:add-member") {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -164,7 +166,7 @@ func (h *Handler) AddMember(w http.ResponseWriter, r *http.Request) {
 
 // RemoveMember handles DELETE /api/auth/admin/groups/{id}/members/{type}/{memberID}.
 func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "group:remove-member") {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -179,7 +181,7 @@ func (h *Handler) RemoveMember(w http.ResponseWriter, r *http.Request) {
 
 // AssignRole handles POST /api/auth/admin/groups/{id}/roles/{roleID}.
 func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "group:assign-role") {
 		return
 	}
 	id := chi.URLParam(r, "id")
@@ -193,7 +195,7 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 
 // RemoveRole handles DELETE /api/auth/admin/groups/{id}/roles/{roleID}.
 func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
-	if !h.requirePerm(w, r) {
+	if !h.requirePerm(w, r, "group:unassign-role") {
 		return
 	}
 	id := chi.URLParam(r, "id")

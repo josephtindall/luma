@@ -14,7 +14,8 @@ const _actionGroups = <String, List<String>>{
   'Instance': ['instance:read', 'instance:configure', 'instance:backup', 'instance:restore'],
   'Notifications': ['notification:read', 'notification:configure-own', 'notification:configure-all'],
   'Invitations': ['invitation:create', 'invitation:revoke', 'invitation:list'],
-  'Admin': ['group:manage', 'role:manage'],
+  'Groups': ['group:read', 'group:create', 'group:rename', 'group:delete', 'group:add-member', 'group:remove-member', 'group:assign-role', 'group:unassign-role'],
+  'Roles': ['role:read', 'role:create', 'role:update', 'role:delete', 'role:set-permission', 'role:remove-permission', 'role:assign-user', 'role:unassign-user'],
 };
 
 class AdminRolesScreen extends StatefulWidget {
@@ -232,6 +233,7 @@ class _CreateRoleDialog extends StatefulWidget {
 class _CreateRoleDialogState extends State<_CreateRoleDialog> {
   final _nameCtrl = TextEditingController();
   final _priorityCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
   bool _saving = false;
   String? _error;
 
@@ -239,6 +241,7 @@ class _CreateRoleDialogState extends State<_CreateRoleDialog> {
   void dispose() {
     _nameCtrl.dispose();
     _priorityCtrl.dispose();
+    _descCtrl.dispose();
     super.dispose();
   }
 
@@ -255,9 +258,14 @@ class _CreateRoleDialogState extends State<_CreateRoleDialog> {
       }
     }
 
+    final desc = _descCtrl.text.trim();
     setState(() { _saving = true; _error = null; });
     try {
-      await widget.userService.createCustomRole(name, priority: priority);
+      await widget.userService.createCustomRole(
+        name,
+        priority: priority,
+        description: desc.isEmpty ? null : desc,
+      );
       if (mounted) {
         Navigator.of(context).pop();
         widget.onCreated();
@@ -290,6 +298,12 @@ class _CreateRoleDialogState extends State<_CreateRoleDialog> {
                 labelText: 'Priority (optional)',
                 hintText: 'Lower = higher priority',
               ),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _descCtrl,
+              decoration: const InputDecoration(labelText: 'Description (optional)'),
+              maxLines: 2,
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
@@ -331,6 +345,7 @@ class _RoleManageDialog extends StatefulWidget {
 class _RoleManageDialogState extends State<_RoleManageDialog> {
   late final TextEditingController _nameCtrl;
   late final TextEditingController _priorityCtrl;
+  late final TextEditingController _descCtrl;
   late CustomRoleRecord _role;
   bool _saving = false;
   bool _deleting = false;
@@ -347,6 +362,7 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
     _priorityCtrl = TextEditingController(
       text: _role.priority != null ? '${_role.priority}' : '',
     );
+    _descCtrl = TextEditingController(text: _role.description ?? '');
     _permMap = {for (final p in _role.permissions) p.action: p.effect};
   }
 
@@ -354,6 +370,7 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
   void dispose() {
     _nameCtrl.dispose();
     _priorityCtrl.dispose();
+    _descCtrl.dispose();
     super.dispose();
   }
 
@@ -365,6 +382,7 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
           _role = fresh;
           _nameCtrl.text = fresh.name;
           _priorityCtrl.text = fresh.priority != null ? '${fresh.priority}' : '';
+          _descCtrl.text = fresh.description ?? '';
           _permMap = {for (final p in fresh.permissions) p.action: p.effect};
         });
       }
@@ -384,6 +402,7 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
       }
     }
 
+    final desc = _descCtrl.text.trim();
     setState(() { _saving = true; _error = null; });
     try {
       await widget.userService.updateCustomRole(
@@ -391,6 +410,8 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
         name,
         priority: priority,
         clearPriority: priority == null,
+        description: desc.isEmpty ? null : desc,
+        clearDescription: desc.isEmpty,
       );
       await _reload();
       widget.onChanged();
@@ -517,6 +538,23 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
                         hintText: 'Lower number = higher priority; blank = lowest',
                         border: OutlineInputBorder(),
                       ),
+                    ),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: _descCtrl,
+                      decoration: const InputDecoration(
+                        labelText: 'Description (optional)',
+                        border: OutlineInputBorder(),
+                      ),
+                      maxLines: 2,
+                    ),
+                    const SizedBox(height: 6),
+                    Text(
+                      _role.id,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: colorScheme.onSurfaceVariant.withAlpha(100),
+                            fontFamily: 'monospace',
+                          ),
                     ),
                     const SizedBox(height: 12),
                     Row(

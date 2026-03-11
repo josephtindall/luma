@@ -132,18 +132,23 @@ class _CreateGroupDialog extends StatefulWidget {
 }
 
 class _CreateGroupDialogState extends State<_CreateGroupDialog> {
-  final _ctrl = TextEditingController();
+  final _nameCtrl = TextEditingController();
+  final _descCtrl = TextEditingController();
   bool _saving = false;
   String? _error;
 
   @override
-  void dispose() { _ctrl.dispose(); super.dispose(); }
+  void dispose() { _nameCtrl.dispose(); _descCtrl.dispose(); super.dispose(); }
 
   Future<void> _submit() async {
-    if (_ctrl.text.trim().isEmpty) return;
+    if (_nameCtrl.text.trim().isEmpty) return;
     setState(() { _saving = true; _error = null; });
     try {
-      await widget.userService.createGroup(_ctrl.text.trim());
+      final desc = _descCtrl.text.trim();
+      await widget.userService.createGroup(
+        _nameCtrl.text.trim(),
+        description: desc.isEmpty ? null : desc,
+      );
       if (mounted) { Navigator.of(context).pop(); widget.onCreated(); }
     } catch (e) {
       if (mounted) setState(() { _error = e.toString(); _saving = false; });
@@ -154,20 +159,29 @@ class _CreateGroupDialogState extends State<_CreateGroupDialog> {
   Widget build(BuildContext context) {
     return AlertDialog(
       title: const Text('Create group'),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          TextField(
-            controller: _ctrl,
-            decoration: const InputDecoration(labelText: 'Group name'),
-            autofocus: true,
-            onSubmitted: (_) => _submit(),
-          ),
-          if (_error != null) ...[
-            const SizedBox(height: 8),
-            Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+      content: SizedBox(
+        width: 360,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: _nameCtrl,
+              decoration: const InputDecoration(labelText: 'Group name'),
+              autofocus: true,
+              onSubmitted: (_) => _submit(),
+            ),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _descCtrl,
+              decoration: const InputDecoration(labelText: 'Description (optional)'),
+              maxLines: 2,
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 8),
+              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+            ],
           ],
-        ],
+        ),
       ),
       actions: [
         TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
@@ -195,6 +209,7 @@ class _GroupManageDialog extends StatefulWidget {
 
 class _GroupManageDialogState extends State<_GroupManageDialog> {
   late final TextEditingController _nameCtrl;
+  late final TextEditingController _descCtrl;
   GroupRecord? _detail;
   List<AdminUserRecord>? _allUsers;
   List<GroupRecord>? _allGroups;
@@ -206,11 +221,12 @@ class _GroupManageDialogState extends State<_GroupManageDialog> {
   void initState() {
     super.initState();
     _nameCtrl = TextEditingController(text: widget.group.name);
+    _descCtrl = TextEditingController(text: widget.group.description ?? '');
     _loadDetail();
   }
 
   @override
-  void dispose() { _nameCtrl.dispose(); super.dispose(); }
+  void dispose() { _nameCtrl.dispose(); _descCtrl.dispose(); super.dispose(); }
 
   Future<void> _loadDetail() async {
     setState(() { _loading = true; _error = null; });
@@ -222,8 +238,11 @@ class _GroupManageDialogState extends State<_GroupManageDialog> {
         widget.userService.listCustomRoles(),
       ]);
       if (mounted) {
+        final detail = results[0] as GroupRecord;
         setState(() {
-          _detail = results[0] as GroupRecord;
+          _detail = detail;
+          _nameCtrl.text = detail.name;
+          _descCtrl.text = detail.description ?? '';
           _allUsers = results[1] as List<AdminUserRecord>;
           _allGroups = (results[2] as List<GroupRecord>)
               .where((g) => g.id != widget.group.id)
@@ -239,8 +258,14 @@ class _GroupManageDialogState extends State<_GroupManageDialog> {
 
   Future<void> _rename() async {
     if (_nameCtrl.text.trim().isEmpty) return;
+    final desc = _descCtrl.text.trim();
     try {
-      await widget.userService.renameGroup(widget.group.id, _nameCtrl.text.trim());
+      await widget.userService.renameGroup(
+        widget.group.id,
+        _nameCtrl.text.trim(),
+        description: desc.isEmpty ? null : desc,
+        clearDescription: desc.isEmpty,
+      );
       if (mounted) { widget.onChanged(); await _loadDetail(); }
     } catch (e) {
       if (mounted) _showError(e.toString());
@@ -359,7 +384,7 @@ class _GroupManageDialogState extends State<_GroupManageDialog> {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                // ── Name ────────────────────────────────
+                                // ── Name + Description ──────────────────
                                 Text('Name', style: Theme.of(context).textTheme.labelLarge),
                                 const SizedBox(height: 8),
                                 Row(
@@ -372,8 +397,26 @@ class _GroupManageDialogState extends State<_GroupManageDialog> {
                                       ),
                                     )),
                                     const SizedBox(width: 8),
-                                    OutlinedButton(onPressed: _rename, child: const Text('Rename')),
+                                    OutlinedButton(onPressed: _rename, child: const Text('Save')),
                                   ],
+                                ),
+                                const SizedBox(height: 8),
+                                TextField(
+                                  controller: _descCtrl,
+                                  decoration: const InputDecoration(
+                                    labelText: 'Description (optional)',
+                                    isDense: true,
+                                    border: OutlineInputBorder(),
+                                  ),
+                                  maxLines: 2,
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  widget.group.id,
+                                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                        color: colorScheme.onSurfaceVariant.withAlpha(100),
+                                        fontFamily: 'monospace',
+                                      ),
                                 ),
                                 if (isSystem) ...[
                                   const SizedBox(height: 8),

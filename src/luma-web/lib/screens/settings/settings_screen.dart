@@ -1,4 +1,10 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
+import 'package:pdf/pdf.dart';
+import 'package:pdf/widgets.dart' as pw;
+import 'package:web/web.dart' as web;
 
 import '../../models/user.dart';
 import '../../services/user_service.dart';
@@ -62,6 +68,8 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       userService: widget.userService,
                       hasTOTP: _hasTOTP,
                     ),
+                    const SizedBox(height: 24),
+                    _AccountRecoverySection(userService: widget.userService),
                     const SizedBox(height: 24),
                     _PreferencesSection(userService: widget.userService),
                     const SizedBox(height: 24),
@@ -1196,6 +1204,398 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
           ],
         ),
       ),
+    );
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Account Recovery Token
+// ---------------------------------------------------------------------------
+
+class _AccountRecoverySection extends StatefulWidget {
+  final UserService userService;
+
+  const _AccountRecoverySection({required this.userService});
+
+  @override
+  State<_AccountRecoverySection> createState() =>
+      _AccountRecoverySectionState();
+}
+
+class _AccountRecoverySectionState extends State<_AccountRecoverySection> {
+  bool? _hasToken;
+  bool _loading = true;
+
+  // Regenerate state
+  final _passwordCtrl = TextEditingController();
+  bool _regenerating = false;
+  String? _newToken;
+  bool _generatingPdf = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    _passwordCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _refresh() async {
+    setState(() {
+      _loading = true;
+      _newToken = null;
+    });
+    try {
+      final has = await widget.userService.getRecoveryTokenStatus();
+      if (mounted) setState(() => _hasToken = has);
+    } catch (_) {
+      if (mounted) setState(() => _hasToken = false);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _regenerate() async {
+    _passwordCtrl.clear();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('Regenerate recovery code?'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text(
+                'Your existing recovery code will be invalidated. Enter your password to confirm.'),
+            const SizedBox(height: 12),
+            TextField(
+              controller: _passwordCtrl,
+              obscureText: true,
+              autofocus: true,
+              decoration: const InputDecoration(
+                labelText: 'Current password',
+                border: OutlineInputBorder(),
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('Cancel')),
+          FilledButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('Regenerate')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _regenerating = true);
+    try {
+      final token = await widget.userService.generateRecoveryToken(
+        currentPassword: _passwordCtrl.text,
+      );
+      _passwordCtrl.clear();
+      if (mounted) setState(() => _newToken = token);
+    } catch (e) {
+      _passwordCtrl.clear();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _regenerating = false);
+    }
+  }
+
+  List<String> _groups(String token) {
+    final groups = <String>[];
+    for (int i = 0; i < token.length; i += 4) {
+      groups.add(token.substring(i, (i + 4).clamp(0, token.length)));
+    }
+    return groups;
+  }
+
+  void _copyToken(String token) {
+    Clipboard.setData(ClipboardData(text: token));
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(content: Text('Recovery code copied to clipboard')),
+    );
+  }
+
+  Future<void> _downloadPDF(String token) async {
+    if (_generatingPdf) return;
+    setState(() => _generatingPdf = true);
+    try {
+      final bytes = await _buildPdf(token);
+      _triggerDownload(bytes, 'luma-recovery-code.pdf', 'application/pdf');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not generate PDF: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _generatingPdf = false);
+    }
+  }
+
+  Future<Uint8List> _buildPdf(String token) async {
+    final groups = _groups(token);
+    final doc = pw.Document();
+    doc.addPage(
+      pw.Page(
+        pageFormat: PdfPageFormat.a4,
+        margin: const pw.EdgeInsets.all(60),
+        build: (ctx) => pw.Column(
+          crossAxisAlignment: pw.CrossAxisAlignment.start,
+          children: [
+            pw.Text(
+              'Luma — Account Recovery Code',
+              style: pw.TextStyle(
+                  fontSize: 22, fontWeight: pw.FontWeight.bold),
+            ),
+            pw.SizedBox(height: 24),
+            pw.Text(
+              'Keep this code in a safe place. It is the only way to recover '
+              'your account if you forget your password.',
+              style: const pw.TextStyle(fontSize: 11),
+            ),
+            pw.SizedBox(height: 32),
+            ...List.generate(4, (row) => pw.Padding(
+                  padding: const pw.EdgeInsets.only(bottom: 14),
+                  child: pw.Row(
+                    children: List.generate(4, (col) {
+                      final idx = row * 4 + col;
+                      return pw.Padding(
+                        padding: const pw.EdgeInsets.only(right: 14),
+                        child: pw.Container(
+                          width: 72,
+                          padding: const pw.EdgeInsets.symmetric(
+                              horizontal: 10, vertical: 10),
+                          decoration: pw.BoxDecoration(
+                            border: pw.Border.all(
+                                color: PdfColors.grey400, width: 1),
+                            borderRadius: const pw.BorderRadius.all(
+                                pw.Radius.circular(4)),
+                          ),
+                          child: pw.Text(
+                            idx < groups.length ? groups[idx] : '',
+                            style: pw.TextStyle(
+                              fontSize: 18,
+                              fontWeight: pw.FontWeight.bold,
+                              font: pw.Font.courier(),
+                            ),
+                            textAlign: pw.TextAlign.center,
+                          ),
+                        ),
+                      );
+                    }),
+                  ),
+                )),
+            pw.SizedBox(height: 32),
+            pw.Text(
+              'Do not share this code with anyone.',
+              style: const pw.TextStyle(
+                  fontSize: 10, color: PdfColors.red900),
+            ),
+          ],
+        ),
+      ),
+    );
+    return Uint8List.fromList(await doc.save());
+  }
+
+  void _triggerDownload(Uint8List bytes, String filename, String mimeType) {
+    final encoded = base64Encode(bytes);
+    final dataUrl = 'data:$mimeType;base64,$encoded';
+    final a = web.document.createElement('a') as web.HTMLAnchorElement;
+    a.href = dataUrl;
+    a.download = filename;
+    a.click();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Card(
+      child: Padding(
+        padding: const EdgeInsets.all(24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text('Account recovery code',
+                style: Theme.of(context).textTheme.titleMedium),
+            const SizedBox(height: 8),
+            Text(
+              'A recovery code lets you reset your password without admin help '
+              'if you forget it.',
+              style: Theme.of(context).textTheme.bodySmall,
+            ),
+            const SizedBox(height: 16),
+
+            if (_loading)
+              const CircularProgressIndicator()
+            else if (_newToken != null)
+              _NewTokenPanel(
+                token: _newToken!,
+                generatingPdf: _generatingPdf,
+                onCopy: () => _copyToken(_newToken!),
+                onDownload: () => _downloadPDF(_newToken!),
+                onDone: _refresh,
+              )
+            else
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    _hasToken == true
+                        ? 'You have an active recovery code.'
+                        : 'No recovery code set.',
+                    style: const TextStyle(fontWeight: FontWeight.w500),
+                  ),
+                  OutlinedButton.icon(
+                    onPressed: _regenerating ? null : _regenerate,
+                    icon: _regenerating
+                        ? const SizedBox(
+                            width: 16,
+                            height: 16,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.refresh),
+                    label: Text(_hasToken == true
+                        ? 'Regenerate code'
+                        : 'Generate code'),
+                  ),
+                ],
+              ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _NewTokenPanel extends StatelessWidget {
+  final String token;
+  final bool generatingPdf;
+  final VoidCallback onCopy;
+  final VoidCallback onDownload;
+  final VoidCallback onDone;
+
+  const _NewTokenPanel({
+    required this.token,
+    required this.generatingPdf,
+    required this.onCopy,
+    required this.onDownload,
+    required this.onDone,
+  });
+
+  List<String> get _groups {
+    final groups = <String>[];
+    for (int i = 0; i < token.length; i += 4) {
+      groups.add(token.substring(i, (i + 4).clamp(0, token.length)));
+    }
+    return groups;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final groups = _groups;
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(12),
+          decoration: BoxDecoration(
+            color: colorScheme.errorContainer,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Icon(Icons.warning_amber_rounded,
+                  color: colorScheme.onErrorContainer, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  'Save this code somewhere safe. It will not be shown again.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: colorScheme.onErrorContainer),
+                ),
+              ),
+            ],
+          ),
+        ),
+        const SizedBox(height: 16),
+        // 4×4 grid
+        ...List.generate(4, (row) => Padding(
+              padding: const EdgeInsets.only(bottom: 8),
+              child: Row(
+                children: List.generate(4, (col) {
+                  final idx = row * 4 + col;
+                  final group = idx < groups.length ? groups[idx] : '';
+                  return Expanded(
+                    child: Padding(
+                      padding: EdgeInsets.only(right: col < 3 ? 8 : 0),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(vertical: 10),
+                        decoration: BoxDecoration(
+                          border: Border.all(color: colorScheme.outline),
+                          borderRadius: BorderRadius.circular(6),
+                          color: colorScheme.surfaceContainerHighest,
+                        ),
+                        child: Text(
+                          group,
+                          textAlign: TextAlign.center,
+                          style: theme.textTheme.titleMedium?.copyWith(
+                            fontFamily: 'monospace',
+                            fontWeight: FontWeight.bold,
+                            letterSpacing: 2,
+                          ),
+                        ),
+                      ),
+                    ),
+                  );
+                }),
+              ),
+            )),
+        const SizedBox(height: 16),
+        Row(
+          children: [
+            OutlinedButton.icon(
+              onPressed: onCopy,
+              icon: const Icon(Icons.copy, size: 16),
+              label: const Text('Copy'),
+            ),
+            const SizedBox(width: 8),
+            OutlinedButton.icon(
+              onPressed: generatingPdf ? null : onDownload,
+              icon: generatingPdf
+                  ? const SizedBox(
+                      width: 16,
+                      height: 16,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : const Icon(Icons.download, size: 16),
+              label: const Text('Download PDF'),
+            ),
+            const Spacer(),
+            FilledButton(
+              onPressed: onDone,
+              child: const Text("I've saved it"),
+            ),
+          ],
+        ),
+      ],
     );
   }
 }

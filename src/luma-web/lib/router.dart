@@ -16,6 +16,7 @@ import 'screens/admin/admin_groups_screen.dart';
 import 'screens/admin/admin_roles_screen.dart';
 import 'screens/register/register_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
+import 'screens/auth/recovery_code_screen.dart';
 import 'screens/main_layout.dart';
 
 GoRouter buildRouter(
@@ -37,6 +38,11 @@ GoRouter buildRouter(
         return state.uri.path == '/reset-password' ? null : '/reset-password';
       }
 
+      // Recovery token pending — gate to recovery-code screen after login.
+      if (authService.recoveryTokenPending) {
+        return state.uri.path == '/recovery-code' ? null : '/recovery-code';
+      }
+
       if (!authService.isLoggedIn) {
         // Allow unauthenticated flows without being logged in.
         if (state.uri.path == '/login' ||
@@ -51,7 +57,8 @@ GoRouter buildRouter(
       if (state.uri.path == '/login' ||
           state.uri.path == '/setup' ||
           state.uri.path == '/join' ||
-          state.uri.path == '/reset-password') {
+          state.uri.path == '/reset-password' ||
+          state.uri.path == '/recovery-code') {
         return '/home';
       }
 
@@ -89,6 +96,10 @@ GoRouter buildRouter(
           userService: userService,
           token: state.uri.queryParameters['token'],
         ),
+      ),
+      GoRoute(
+        path: '/recovery-code',
+        builder: (_, __) => RecoveryCodeScreen(auth: authService),
       ),
       ShellRoute(
         builder: (_, __, child) => MainLayout(

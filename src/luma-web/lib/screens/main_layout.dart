@@ -157,7 +157,7 @@ class _MainLayoutState extends State<MainLayout> {
                     if (cw == 'max') {
                       return Expanded(child: content);
                     }
-                    final maxWidth = cw == 'narrow' ? 740.0 : 1140.0;
+                    final maxWidth = cw == 'narrow' ? 920.0 : 1360.0;
                     return Expanded(
                       child: Center(
                         child: ConstrainedBox(

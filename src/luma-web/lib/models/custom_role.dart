@@ -14,6 +14,7 @@ class CustomRolePermission {
 class CustomRoleRecord {
   final String id;
   final String name;
+  final String? description;
   final bool isSystem;
   final int? priority;
   final int userCount;
@@ -24,6 +25,7 @@ class CustomRoleRecord {
   const CustomRoleRecord({
     required this.id,
     required this.name,
+    this.description,
     required this.isSystem,
     this.priority,
     required this.userCount,
@@ -35,6 +37,7 @@ class CustomRoleRecord {
   factory CustomRoleRecord.fromJson(Map<String, dynamic> j) => CustomRoleRecord(
         id: j['id'] as String,
         name: j['name'] as String,
+        description: j['description'] as String?,
         isSystem: j['is_system'] as bool? ?? false,
         priority: j['priority'] as int?,
         userCount: j['user_count'] as int? ?? 0,

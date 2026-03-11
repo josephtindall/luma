@@ -504,6 +504,7 @@ func (s *Service) issueTokenPair(ctx context.Context, u *user.User, dev *device.
 		AccessToken:  access,
 		RefreshToken: raw,
 		ExpiresAt:    rt.ExpiresAt,
+		UserID:       u.ID,
 	}, nil
 }
 

@@ -22,27 +22,27 @@ func New(db *pgxpool.Pool) *Repository {
 }
 
 // Create inserts a new custom role.
-func (r *Repository) Create(ctx context.Context, name string, priority *int) (*customrole.CustomRole, error) {
+func (r *Repository) Create(ctx context.Context, name string, priority *int, description *string) (*customrole.CustomRole, error) {
 	const q = `
-		INSERT INTO auth.custom_roles (name, priority)
-		VALUES ($1, $2)
-		RETURNING id, name, is_system, priority, created_at, updated_at`
+		INSERT INTO auth.custom_roles (name, priority, description)
+		VALUES ($1, $2, $3)
+		RETURNING id, name, description, is_system, priority, created_at, updated_at`
 	var cr customrole.CustomRole
-	err := r.db.QueryRow(ctx, q, name, priority).Scan(&cr.ID, &cr.Name, &cr.IsSystem, &cr.Priority, &cr.CreatedAt, &cr.UpdatedAt)
+	err := r.db.QueryRow(ctx, q, name, priority, description).Scan(&cr.ID, &cr.Name, &cr.Description, &cr.IsSystem, &cr.Priority, &cr.CreatedAt, &cr.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("customrole.postgres.Create: %w", err)
 	}
 	return &cr, nil
 }
 
-// Update renames a custom role and/or changes its priority.
-func (r *Repository) Update(ctx context.Context, id, name string, priority *int) (*customrole.CustomRole, error) {
+// Update updates a custom role's name, priority, and description.
+func (r *Repository) Update(ctx context.Context, id, name string, priority *int, description *string) (*customrole.CustomRole, error) {
 	const q = `
-		UPDATE auth.custom_roles SET name=$2, priority=$3, updated_at=NOW()
+		UPDATE auth.custom_roles SET name=$2, priority=$3, description=$4, updated_at=NOW()
 		WHERE id=$1
-		RETURNING id, name, is_system, priority, created_at, updated_at`
+		RETURNING id, name, description, is_system, priority, created_at, updated_at`
 	var cr customrole.CustomRole
-	err := r.db.QueryRow(ctx, q, id, name, priority).Scan(&cr.ID, &cr.Name, &cr.IsSystem, &cr.Priority, &cr.CreatedAt, &cr.UpdatedAt)
+	err := r.db.QueryRow(ctx, q, id, name, priority, description).Scan(&cr.ID, &cr.Name, &cr.Description, &cr.IsSystem, &cr.Priority, &cr.CreatedAt, &cr.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("custom role not found")
 	}
@@ -65,7 +65,7 @@ func (r *Repository) Delete(ctx context.Context, id string) error {
 // Get returns full role details including permissions and counts.
 func (r *Repository) Get(ctx context.Context, id string) (*customrole.CustomRoleWithDetails, error) {
 	const q = `
-		SELECT cr.id, cr.name, cr.is_system, cr.priority, cr.created_at, cr.updated_at,
+		SELECT cr.id, cr.name, cr.description, cr.is_system, cr.priority, cr.created_at, cr.updated_at,
 		       COUNT(DISTINCT ucr.user_id) AS user_count,
 		       COUNT(DISTINCT gcr.group_id) AS group_count
 		FROM auth.custom_roles cr
@@ -75,7 +75,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*customrole.CustomRole
 		GROUP BY cr.id`
 	var cr customrole.CustomRoleWithDetails
 	err := r.db.QueryRow(ctx, q, id).Scan(
-		&cr.ID, &cr.Name, &cr.IsSystem, &cr.Priority, &cr.CreatedAt, &cr.UpdatedAt,
+		&cr.ID, &cr.Name, &cr.Description, &cr.IsSystem, &cr.Priority, &cr.CreatedAt, &cr.UpdatedAt,
 		&cr.UserCount, &cr.GroupCount,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -96,7 +96,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*customrole.CustomRole
 // List returns all custom roles with details.
 func (r *Repository) List(ctx context.Context) ([]*customrole.CustomRoleWithDetails, error) {
 	const q = `
-		SELECT cr.id, cr.name, cr.is_system, cr.priority, cr.created_at, cr.updated_at,
+		SELECT cr.id, cr.name, cr.description, cr.is_system, cr.priority, cr.created_at, cr.updated_at,
 		       COUNT(DISTINCT ucr.user_id) AS user_count,
 		       COUNT(DISTINCT gcr.group_id) AS group_count
 		FROM auth.custom_roles cr
@@ -114,7 +114,7 @@ func (r *Repository) List(ctx context.Context) ([]*customrole.CustomRoleWithDeta
 	for rows.Next() {
 		var cr customrole.CustomRoleWithDetails
 		if err := rows.Scan(
-			&cr.ID, &cr.Name, &cr.IsSystem, &cr.Priority, &cr.CreatedAt, &cr.UpdatedAt,
+			&cr.ID, &cr.Name, &cr.Description, &cr.IsSystem, &cr.Priority, &cr.CreatedAt, &cr.UpdatedAt,
 			&cr.UserCount, &cr.GroupCount,
 		); err != nil {
 			return nil, fmt.Errorf("customrole.postgres.List scan: %w", err)
@@ -202,7 +202,7 @@ func (r *Repository) RemoveFromUser(ctx context.Context, roleID, userID string) 
 // GetUserCustomRoles returns all custom roles directly assigned to a user.
 func (r *Repository) GetUserCustomRoles(ctx context.Context, userID string) ([]*customrole.CustomRole, error) {
 	const q = `
-		SELECT cr.id, cr.name, cr.is_system, cr.priority, cr.created_at, cr.updated_at
+		SELECT cr.id, cr.name, cr.description, cr.is_system, cr.priority, cr.created_at, cr.updated_at
 		FROM auth.custom_roles cr
 		JOIN auth.user_custom_roles ucr ON ucr.role_id = cr.id
 		WHERE ucr.user_id = $1
@@ -216,7 +216,7 @@ func (r *Repository) GetUserCustomRoles(ctx context.Context, userID string) ([]*
 	var roles []*customrole.CustomRole
 	for rows.Next() {
 		var cr customrole.CustomRole
-		if err := rows.Scan(&cr.ID, &cr.Name, &cr.IsSystem, &cr.Priority, &cr.CreatedAt, &cr.UpdatedAt); err != nil {
+		if err := rows.Scan(&cr.ID, &cr.Name, &cr.Description, &cr.IsSystem, &cr.Priority, &cr.CreatedAt, &cr.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("customrole.postgres.GetUserCustomRoles scan: %w", err)
 		}
 		roles = append(roles, &cr)
