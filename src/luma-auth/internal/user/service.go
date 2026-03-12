@@ -197,6 +197,18 @@ func (s *Service) ChangePassword(ctx context.Context, id string, params ChangePa
 	return nil
 }
 
+// ValidateNewPassword checks the proposed password against policies and reuse rules
+// without updating anything. Used for early validation before burning tokens.
+func (s *Service) ValidateNewPassword(ctx context.Context, id, newPassword string) error {
+	if err := s.validateNewPassword(ctx, newPassword); err != nil {
+		return err
+	}
+	if err := s.checkPasswordNotReused(ctx, id, newPassword); err != nil {
+		return err
+	}
+	return nil
+}
+
 // SetPasswordDirect updates a user's password hash without verifying the old
 // password. Used by the password-reset flow after a valid reset token is consumed.
 func (s *Service) SetPasswordDirect(ctx context.Context, id, newPassword string) error {

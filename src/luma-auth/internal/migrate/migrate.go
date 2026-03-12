@@ -38,6 +38,31 @@ func Up(ctx context.Context, db *pgxpool.Pool, migrations fs.FS) error {
 		return err
 	}
 
+	// ── Baseline Fix ──────────────────────────────────────────────────────────
+	// If the database already has the `auth.instance` table, but `0001_schema.sql`
+	// is not marked as applied, it means this is an existing database from before
+	// the migrations were squashed. We mark it as applied to avoid crashing.
+	if !applied["0001_schema.sql"] {
+		var exists bool
+		err := db.QueryRow(ctx, `
+			SELECT EXISTS (
+				SELECT 1 FROM information_schema.tables 
+				WHERE table_schema = 'auth' AND table_name = 'instance'
+			)
+		`).Scan(&exists)
+		if err != nil {
+			return fmt.Errorf("migrate check existing db: %w", err)
+		}
+		if exists {
+			slog.Info("existing database detected, baselining 0001_schema.sql")
+			_, err = db.Exec(ctx, `INSERT INTO auth.schema_migrations (filename) VALUES ('0001_schema.sql') ON CONFLICT DO NOTHING`)
+			if err != nil {
+				return fmt.Errorf("migrate baseline 0001_schema.sql: %w", err)
+			}
+			applied["0001_schema.sql"] = true
+		}
+	}
+
 	files, err := upFiles(migrations)
 	if err != nil {
 		return err

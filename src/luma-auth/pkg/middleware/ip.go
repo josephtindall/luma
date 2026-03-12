@@ -27,18 +27,30 @@ func IPFromContext(ctx context.Context) *string {
 }
 
 // remoteIP strips the port from r.RemoteAddr and checks standard proxy headers.
+// It returns a valid IP address or an empty string if none can be parsed.
 func remoteIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		if parts := strings.Split(xff, ","); len(parts) > 0 {
-			return strings.TrimSpace(parts[0])
+			ipStr := strings.TrimSpace(parts[0])
+			if net.ParseIP(ipStr) != nil {
+				return ipStr
+			}
 		}
 	}
 	if rip := r.Header.Get("X-Real-IP"); rip != "" {
-		return strings.TrimSpace(rip)
+		ipStr := strings.TrimSpace(rip)
+		if net.ParseIP(ipStr) != nil {
+			return ipStr
+		}
 	}
+
 	host, _, err := net.SplitHostPort(r.RemoteAddr)
 	if err != nil {
-		return r.RemoteAddr
+		host = r.RemoteAddr
 	}
-	return host
+	if net.ParseIP(host) != nil {
+		return host
+	}
+
+	return ""
 }
