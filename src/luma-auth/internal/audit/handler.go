@@ -41,7 +41,12 @@ func (h *Handler) Me(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, pageResponse(page, q))
+	canViewPII := claims.Role == "builtin:instance-owner"
+	if !canViewPII && h.canDo != nil {
+		canViewPII, _ = h.canDo(r.Context(), claims.Subject, "audit:read-pii")
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, pageResponse(page, q, canViewPII))
 }
 
 // All handles GET /api/auth/audit — returns the global audit log.
@@ -74,7 +79,12 @@ func (h *Handler) All(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	httputil.WriteJSON(w, http.StatusOK, pageResponse(page, q))
+	canViewPII := claims.Role == "builtin:instance-owner"
+	if !canViewPII && h.canDo != nil {
+		canViewPII, _ = h.canDo(r.Context(), claims.Subject, "audit:read-pii")
+	}
+
+	httputil.WriteJSON(w, http.StatusOK, pageResponse(page, q, canViewPII))
 }
 
 // parseQuery reads filter + pagination params from the request.
@@ -152,10 +162,15 @@ type pageJSON struct {
 	Offset int         `json:"offset"`
 }
 
-func pageResponse(page *Page, q AuditQuery) pageJSON {
+func pageResponse(page *Page, q AuditQuery, canViewPII bool) pageJSON {
 	events := make([]eventJSON, len(page.Rows))
 	for i, r := range page.Rows {
-		events[i] = rowToJSON(r)
+		ej := rowToJSON(r)
+		if !canViewPII {
+			ej.IPAddress = nil
+			ej.UserEmail = nil
+		}
+		events[i] = ej
 	}
 	return pageJSON{
 		Events: events,

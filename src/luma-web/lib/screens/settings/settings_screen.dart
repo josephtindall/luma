@@ -199,7 +199,8 @@ class _ProfileSectionState extends State<_ProfileSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save profile. Please try again.')),
+          const SnackBar(
+              content: Text('Could not save profile. Please try again.')),
         );
       }
     } finally {
@@ -314,7 +315,8 @@ class _PasswordSectionState extends State<_PasswordSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not change password. Please try again.')),
+          const SnackBar(
+              content: Text('Could not change password. Please try again.')),
         );
       }
     } finally {
@@ -440,7 +442,8 @@ class _TOTPSectionState extends State<_TOTPSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not start TOTP setup. Please try again.')),
+          const SnackBar(
+              content: Text('Could not start TOTP setup. Please try again.')),
         );
       }
       setState(() => _enrolling = false);
@@ -572,7 +575,9 @@ class _TOTPSectionState extends State<_TOTPSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not add authenticator app. Please try again.')),
+          const SnackBar(
+              content:
+                  Text('Could not add authenticator app. Please try again.')),
         );
       }
     } finally {
@@ -639,7 +644,9 @@ class _TOTPSectionState extends State<_TOTPSection> {
       _passwordCtrl.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not remove authenticator app. Please try again.')),
+          const SnackBar(
+              content: Text(
+                  'Could not remove authenticator app. Please try again.')),
         );
       }
     }
@@ -846,7 +853,8 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not add passkey. Please try again.')),
+          const SnackBar(
+              content: Text('Could not add passkey. Please try again.')),
         );
       }
     } finally {
@@ -899,7 +907,8 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
       passwordCtrl.dispose();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not remove passkey. Please try again.')),
+          const SnackBar(
+              content: Text('Could not remove passkey. Please try again.')),
         );
       }
     }
@@ -1166,7 +1175,8 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
                     .join('\n');
                 Clipboard.setData(ClipboardData(text: text));
                 ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('Recovery codes copied to clipboard')),
+                  const SnackBar(
+                      content: Text('Recovery codes copied to clipboard')),
                 );
               },
               icon: const Icon(Icons.copy),
@@ -1184,7 +1194,9 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not generate recovery codes. Please try again.')),
+          const SnackBar(
+              content:
+                  Text('Could not generate recovery codes. Please try again.')),
         );
       }
     } finally {
@@ -1365,7 +1377,9 @@ class _AccountRecoverySectionState extends State<_AccountRecoverySection> {
       _passwordCtrl.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not generate recovery token. Please try again.')),
+          const SnackBar(
+              content:
+                  Text('Could not generate recovery token. Please try again.')),
         );
       }
     } finally {
@@ -1397,7 +1411,8 @@ class _AccountRecoverySectionState extends State<_AccountRecoverySection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not generate PDF. Please try again.')),
+          const SnackBar(
+              content: Text('Could not generate PDF. Please try again.')),
         );
       }
     } finally {
@@ -1706,7 +1721,8 @@ class _PreferencesSectionState extends State<_PreferencesSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not save preference. Please try again.')),
+          const SnackBar(
+              content: Text('Could not save preference. Please try again.')),
         );
       }
     }
@@ -1841,7 +1857,8 @@ class _DevicesSectionState extends State<_DevicesSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Could not revoke device. Please try again.')),
+          const SnackBar(
+              content: Text('Could not revoke device. Please try again.')),
         );
       }
     }
@@ -1961,7 +1978,10 @@ class _DevicesSectionState extends State<_DevicesSection> {
     'token_reuse_detected' => (Icons.warning_amber, 'Token reuse detected'),
     // Admin: user management
     'admin_user_created' => (Icons.person_add, 'Admin: user created'),
-    'admin_force_password_change' => (Icons.password, 'Admin: force password change'),
+    'admin_force_password_change' => (
+        Icons.password,
+        'Admin: force password change'
+      ),
     'admin_password_reset_link' => (Icons.link, 'Admin: password reset link'),
     'admin_sessions_revoked' => (Icons.device_hub, 'Admin: sessions revoked'),
     'admin_totp_deleted' => (Icons.security, 'Admin: TOTP deleted'),
@@ -1984,7 +2004,10 @@ class _DevicesSectionState extends State<_DevicesSection> {
     'role_permission_set' => (Icons.policy, 'Role permission set'),
     'role_permission_removed' => (Icons.policy, 'Role permission removed'),
     'role_assigned_to_user' => (Icons.manage_accounts, 'Role assigned to user'),
-    'role_unassigned_from_user' => (Icons.manage_accounts, 'Role unassigned from user'),
+    'role_unassigned_from_user' => (
+        Icons.manage_accounts,
+        'Role unassigned from user'
+      ),
     // Admin: instance
     'instance_settings_updated' => (Icons.tune, 'Instance settings updated'),
     _ => (Icons.info_outline, event.replaceAll('_', ' ')),
@@ -2171,7 +2194,7 @@ class _AuditSectionState extends State<_AuditSection> {
     return ListTile(
       leading: Icon(icon, size: 20),
       title: Text(label),
-      subtitle: Text(event.ipAddress),
+      subtitle: event.ipAddress.isNotEmpty ? Text(event.ipAddress) : null,
       trailing: Text(
         auditFormatTime(event.occurredAt),
         style: Theme.of(context).textTheme.bodySmall,

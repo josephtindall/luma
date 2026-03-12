@@ -39,10 +39,10 @@ import (
 	"github.com/josephtindall/luma-auth/internal/migrate"
 	passwordresetpkg "github.com/josephtindall/luma-auth/internal/passwordreset"
 	passwordresetpg "github.com/josephtindall/luma-auth/internal/passwordreset/postgres"
-	recoverytokenpkg "github.com/josephtindall/luma-auth/internal/recoverytoken"
-	recoverytokenpg "github.com/josephtindall/luma-auth/internal/recoverytoken/postgres"
 	"github.com/josephtindall/luma-auth/internal/preferences"
 	prefpg "github.com/josephtindall/luma-auth/internal/preferences/postgres"
+	recoverytokenpkg "github.com/josephtindall/luma-auth/internal/recoverytoken"
+	recoverytokenpg "github.com/josephtindall/luma-auth/internal/recoverytoken/postgres"
 	"github.com/josephtindall/luma-auth/internal/session"
 	sessionpg "github.com/josephtindall/luma-auth/internal/session/postgres"
 	"github.com/josephtindall/luma-auth/internal/user"
@@ -221,6 +221,7 @@ func run() error {
 
 	r.Use(chimiddleware.Recoverer)
 	r.Use(pkgmiddleware.RequestID)
+	r.Use(pkgmiddleware.WithIPAddress)
 	r.Use(pkgmiddleware.Logger)
 	r.Use(func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -394,4 +395,3 @@ func run() error {
 	slog.Info("server stopped cleanly")
 	return nil
 }
-
