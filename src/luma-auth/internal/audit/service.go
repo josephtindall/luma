@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+
+	"github.com/josephtindall/luma-auth/pkg/middleware"
 )
 
 // Service is the interface the rest of the codebase calls to write audit events.
@@ -43,6 +45,12 @@ func NewAsyncService(repo Repository) *AsyncService {
 // stopped, the event is dropped and logged — availability beats perfect audit
 // completeness.
 func (s *AsyncService) WriteAsync(ctx context.Context, e Event) {
+	if e.IPAddress == "" {
+		if ip := middleware.IPFromContext(ctx); ip != nil {
+			e.IPAddress = *ip
+		}
+	}
+
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if s.stopped {

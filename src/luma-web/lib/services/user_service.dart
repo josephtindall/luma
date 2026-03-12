@@ -15,6 +15,8 @@ class UserService extends ChangeNotifier {
   bool _hasAdminAccess = false;
   Map<String, bool> _adminCaps = {};
   String _contentWidth = 'wide';
+  bool _showGithubButton = true;
+  bool _showDonateButton = true;
 
   UserService(this._api);
 
@@ -22,6 +24,8 @@ class UserService extends ChangeNotifier {
   UserPreferences? get preferences => _preferences;
   bool get hasAdminAccess => _hasAdminAccess;
   String get contentWidth => _contentWidth;
+  bool get showGithubButton => _showGithubButton;
+  bool get showDonateButton => _showDonateButton;
 
   // Fine-grained admin tab visibility — populated by _loadAdminCapabilities().
   bool get canManageUsers => _adminCaps['user:read'] == true;
@@ -30,25 +34,33 @@ class UserService extends ChangeNotifier {
   bool get canManageGroups => _adminCaps['group:read'] == true;
   bool get canManageRoles => _adminCaps['role:read'] == true;
   bool get isAdminOwner => _adminCaps['is_owner'] == true;
+  bool get canViewAuditLog => _adminCaps['audit:read-all'] == true;
+  bool get canExportAuditLog => _adminCaps['audit:export-all'] == true;
+  bool get canViewAuditPII => _adminCaps['audit:read-pii'] == true;
+  bool get hasAnyAdminAccess => _adminCaps.isNotEmpty;
 
   Future<void> loadProfile() async {
     final resp = await _api.get('/api/luma/user/me');
     if (resp.statusCode == 200) {
       _profile = UserProfile.fromJson(_unwrapUser(json.decode(resp.body)));
-      await Future.wait([_loadAdminCapabilities(), _loadContentWidth()]);
+      await Future.wait([_loadAdminCapabilities(), _loadPublicSettings()]);
       notifyListeners();
     }
   }
 
-  Future<void> _loadContentWidth() async {
+  Future<void> _loadPublicSettings() async {
     try {
-      final resp = await _api.get('/api/luma/health');
+      final resp = await _api.get('/api/luma/instance/ui');
       if (resp.statusCode == 200) {
         final data = json.decode(resp.body) as Map<String, dynamic>;
         _contentWidth = data['content_width'] as String? ?? 'wide';
+        _showGithubButton = data['show_github_button'] as bool? ?? true;
+        _showDonateButton = data['show_donate_button'] as bool? ?? true;
       }
     } catch (_) {
       _contentWidth = 'wide';
+      _showGithubButton = true;
+      _showDonateButton = true;
     }
   }
 
@@ -163,16 +175,56 @@ class UserService extends ChangeNotifier {
     }
   }
 
-  Future<List<AuditEvent>> loadAudit() async {
-    final resp = await _api.get('/api/luma/user/me/audit');
+  Future<AuditPage> loadAudit({
+    int limit = 10,
+    int offset = 0,
+    String? search,
+    String? eventFilter,
+    String exclude = 'token_refreshed',
+  }) async {
+    final params = <String, String>{
+      'limit': '$limit',
+      'offset': '$offset',
+      if (search != null && search.isNotEmpty) 'search': search,
+      if (eventFilter != null && eventFilter.isNotEmpty) 'event': eventFilter,
+      if (exclude.isNotEmpty) 'exclude': exclude,
+    };
+    final uri = Uri.parse('/api/luma/user/me/audit')
+        .replace(queryParameters: params)
+        .toString();
+    final resp = await _api.get(uri);
     if (resp.statusCode != 200) {
       throw Exception('Failed to load audit log');
     }
-    final data = json.decode(resp.body);
-    final items = _unwrapList(data, ['events', 'audit', 'data']);
-    return items
-        .map((e) => AuditEvent.fromJson(e as Map<String, dynamic>))
-        .toList();
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    return AuditPage.fromJson(data);
+  }
+
+  Future<AuditPage> loadAdminAudit({
+    int limit = 30,
+    int offset = 0,
+    String? search,
+    String? eventFilter,
+    DateTime? after,
+    DateTime? before,
+  }) async {
+    final params = <String, String>{
+      'limit': '$limit',
+      'offset': '$offset',
+      if (search != null && search.isNotEmpty) 'search': search,
+      if (eventFilter != null && eventFilter.isNotEmpty) 'event': eventFilter,
+      if (after != null) 'after': after.toUtc().toIso8601String(),
+      if (before != null) 'before': before.toUtc().toIso8601String(),
+    };
+    final uri = Uri.parse('/api/luma/admin/events')
+        .replace(queryParameters: params)
+        .toString();
+    final resp = await _api.get(uri);
+    if (resp.statusCode != 200) {
+      throw Exception('Failed to load audit log');
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    return AuditPage.fromJson(data);
   }
 
   // ── TOTP management ─────────────────────────────────────────────────────
@@ -331,9 +383,11 @@ class UserService extends ChangeNotifier {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['error'] ?? 'Failed to update instance settings');
     }
-    final updated =
-        InstanceSettings.fromJson(json.decode(resp.body) as Map<String, dynamic>);
+    final updated = InstanceSettings.fromJson(
+        json.decode(resp.body) as Map<String, dynamic>);
     _contentWidth = updated.contentWidth;
+    _showGithubButton = updated.showGithubButton;
+    _showDonateButton = updated.showDonateButton;
     notifyListeners();
     return updated;
   }
@@ -500,7 +554,8 @@ class UserService extends ChangeNotifier {
       throw Exception('Failed to load groups');
     }
     final data = json.decode(resp.body);
-    final items = data is List ? data : (data as Map<String, dynamic>)['groups'] ?? data;
+    final items =
+        data is List ? data : (data as Map<String, dynamic>)['groups'] ?? data;
     return (items as List<dynamic>)
         .map((e) => GroupRecord.fromJson(e as Map<String, dynamic>))
         .toList();
@@ -514,7 +569,8 @@ class UserService extends ChangeNotifier {
 
   Future<GroupRecord> createGroup(String name, {String? description}) async {
     final body = <String, dynamic>{'name': name};
-    if (description != null && description.isNotEmpty) body['description'] = description;
+    if (description != null && description.isNotEmpty)
+      body['description'] = description;
     final resp = await _api.post('/api/luma/admin/groups', body);
     if (resp.statusCode != 201) {
       final b = json.decode(resp.body) as Map<String, dynamic>;
@@ -523,7 +579,8 @@ class UserService extends ChangeNotifier {
     return GroupRecord.fromJson(json.decode(resp.body) as Map<String, dynamic>);
   }
 
-  Future<GroupRecord> renameGroup(String id, String name, {String? description, bool clearDescription = false}) async {
+  Future<GroupRecord> renameGroup(String id, String name,
+      {String? description, bool clearDescription = false}) async {
     final body = <String, dynamic>{'name': name};
     if (clearDescription) {
       body['description'] = null;
@@ -560,8 +617,8 @@ class UserService extends ChangeNotifier {
 
   Future<void> removeGroupMember(
       String groupId, String memberType, String memberId) async {
-    final resp = await _api
-        .delete('/api/luma/admin/groups/$groupId/members/$memberType/$memberId');
+    final resp = await _api.delete(
+        '/api/luma/admin/groups/$groupId/members/$memberType/$memberId');
     if (resp.statusCode != 204 && resp.statusCode != 200) {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['message'] ?? 'Failed to remove member');
@@ -569,8 +626,8 @@ class UserService extends ChangeNotifier {
   }
 
   Future<void> assignRoleToGroup(String groupId, String roleId) async {
-    final resp = await _api
-        .post('/api/luma/admin/groups/$groupId/roles/$roleId', {});
+    final resp =
+        await _api.post('/api/luma/admin/groups/$groupId/roles/$roleId', {});
     if (resp.statusCode != 204 && resp.statusCode != 200) {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['message'] ?? 'Failed to assign role');
@@ -606,10 +663,12 @@ class UserService extends ChangeNotifier {
         json.decode(resp.body) as Map<String, dynamic>);
   }
 
-  Future<CustomRoleRecord> createCustomRole(String name, {int? priority, String? description}) async {
+  Future<CustomRoleRecord> createCustomRole(String name,
+      {int? priority, String? description}) async {
     final body = <String, dynamic>{'name': name};
     if (priority != null) body['priority'] = priority;
-    if (description != null && description.isNotEmpty) body['description'] = description;
+    if (description != null && description.isNotEmpty)
+      body['description'] = description;
     final resp = await _api.post('/api/luma/admin/custom-roles', body);
     if (resp.statusCode != 201) {
       final b = json.decode(resp.body) as Map<String, dynamic>;
@@ -620,7 +679,10 @@ class UserService extends ChangeNotifier {
   }
 
   Future<CustomRoleRecord> updateCustomRole(String id, String name,
-      {int? priority, bool clearPriority = false, String? description, bool clearDescription = false}) async {
+      {int? priority,
+      bool clearPriority = false,
+      String? description,
+      bool clearDescription = false}) async {
     final body = <String, dynamic>{'name': name};
     if (clearPriority) {
       body['priority'] = null;
@@ -673,8 +735,7 @@ class UserService extends ChangeNotifier {
   // ── Admin: user custom role assignments ──────────────────────────────────
 
   Future<List<CustomRoleRecord>> getUserCustomRoles(String userId) async {
-    final resp =
-        await _api.get('/api/luma/admin/users/$userId/custom-roles');
+    final resp = await _api.get('/api/luma/admin/users/$userId/custom-roles');
     if (resp.statusCode != 200) throw Exception('Failed to load user roles');
     final data = json.decode(resp.body);
     final List<dynamic> items = data is List<dynamic> ? data : [];
@@ -693,8 +754,8 @@ class UserService extends ChangeNotifier {
   }
 
   Future<void> removeCustomRoleFromUser(String userId, String roleId) async {
-    final resp = await _api
-        .delete('/api/luma/admin/users/$userId/custom-roles/$roleId');
+    final resp =
+        await _api.delete('/api/luma/admin/users/$userId/custom-roles/$roleId');
     if (resp.statusCode != 204 && resp.statusCode != 200) {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['message'] ?? 'Failed to remove role');
@@ -707,6 +768,8 @@ class UserService extends ChangeNotifier {
     _hasAdminAccess = false;
     _adminCaps = {};
     _contentWidth = 'wide';
+    _showGithubButton = true;
+    _showDonateButton = true;
     notifyListeners();
   }
 
@@ -741,7 +804,8 @@ class UserService extends ChangeNotifier {
   /// Returns whether the current user has a recovery token stored.
   Future<bool> getRecoveryTokenStatus() async {
     final resp = await _api.get('/api/luma/auth/recovery/status');
-    if (resp.statusCode != 200) throw Exception('Failed to get recovery token status');
+    if (resp.statusCode != 200)
+      throw Exception('Failed to get recovery token status');
     final data = json.decode(resp.body) as Map<String, dynamic>;
     return data['has_token'] as bool? ?? false;
   }
@@ -757,7 +821,9 @@ class UserService extends ChangeNotifier {
     final resp = await _api.post('/api/luma/auth/recovery/generate', body);
     if (resp.statusCode != 200) {
       final data = json.decode(resp.body) as Map<String, dynamic>?;
-      throw Exception(data?['message'] ?? data?['error'] ?? 'Failed to generate recovery token');
+      throw Exception(data?['message'] ??
+          data?['error'] ??
+          'Failed to generate recovery token');
     }
     final data = json.decode(resp.body) as Map<String, dynamic>;
     return data['token'] as String;

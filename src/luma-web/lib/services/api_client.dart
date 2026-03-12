@@ -47,12 +47,12 @@ class ApiClient {
     if (resp.statusCode == 401) {
       final refreshed = await _authService.refresh();
       if (!refreshed) {
-        _authService.clearSession();
+        _authService.clearSessionAsExpired();
         throw const SessionExpiredException();
       }
       resp = await _doRequest(method, path, body);
       if (resp.statusCode == 401) {
-        _authService.clearSession();
+        _authService.clearSessionAsExpired();
         throw const SessionExpiredException();
       }
     }

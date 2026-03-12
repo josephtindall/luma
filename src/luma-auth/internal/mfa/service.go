@@ -840,8 +840,8 @@ func (s *Service) AdminDeleteAllTOTP(ctx context.Context, userID string) error {
 	}
 	s.audit.WriteAsync(ctx, audit.Event{
 		UserID:   userID,
-		Event:    audit.EventTOTPRemoved,
-		Metadata: map[string]any{"by": "admin", "all": true},
+		Event:    audit.EventAdminTOTPDeleted,
+		Metadata: map[string]any{"count": len(secrets)},
 	})
 	return nil
 }
@@ -865,8 +865,8 @@ func (s *Service) AdminRevokeAllPasskeys(ctx context.Context, userID string) err
 	}
 	s.audit.WriteAsync(ctx, audit.Event{
 		UserID:   userID,
-		Event:    audit.EventPasskeyRevoked,
-		Metadata: map[string]any{"by": "admin", "all": true},
+		Event:    audit.EventAdminPasskeysRevoked,
+		Metadata: map[string]any{"count": len(passkeys)},
 	})
 	return nil
 }

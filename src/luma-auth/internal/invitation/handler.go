@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/josephtindall/luma-auth/internal/audit"
 	"github.com/josephtindall/luma-auth/internal/authz"
 	pkgerrors "github.com/josephtindall/luma-auth/pkg/errors"
 	"github.com/josephtindall/luma-auth/pkg/httputil"
@@ -16,6 +17,7 @@ type Handler struct {
 	svc      *Service
 	baseURL  string // AUTH_BASE_URL — used to build join links, e.g. https://auth.example.com
 	authzSvc authz.Authorizer
+	audit    audit.Service
 }
 
 // NewHandler constructs the invitation handler.
@@ -25,6 +27,9 @@ func NewHandler(svc *Service, baseURL string) *Handler {
 
 // SetAuthorizer injects the authz evaluator.
 func (h *Handler) SetAuthorizer(a authz.Authorizer) { h.authzSvc = a }
+
+// SetAuditor injects the audit service.
+func (h *Handler) SetAuditor(a audit.Service) { h.audit = a }
 
 func (h *Handler) requirePerm(w http.ResponseWriter, r *http.Request, action string) bool {
 	claims := middleware.ClaimsFromContext(r.Context())
@@ -72,10 +77,21 @@ func (h *Handler) Create(w http.ResponseWriter, r *http.Request) {
 		Note:      req.Note,
 	})
 	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
 
+	if h.audit != nil {
+		h.audit.WriteAsync(r.Context(), audit.Event{
+			UserID: claims.Subject,
+			Event:  audit.EventInvitationCreated,
+			Metadata: map[string]any{
+				"invitation_id": inv.ID,
+				"email":         inv.Email,
+				"note":          inv.Note,
+			},
+		})
+	}
 	// The join URL encodes the raw token — clients show a QR code and copyable link.
 	httputil.WriteJSON(w, http.StatusCreated, map[string]any{
 		"id":         inv.ID,
@@ -91,7 +107,7 @@ func (h *Handler) List(w http.ResponseWriter, r *http.Request) {
 	}
 	invs, err := h.svc.List(r.Context())
 	if err != nil {
-		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "internal server error")
 		return
 	}
 	httputil.WriteJSON(w, http.StatusOK, invs)
@@ -106,6 +122,20 @@ func (h *Handler) Revoke(w http.ResponseWriter, r *http.Request) {
 	if err := h.svc.Revoke(r.Context(), id); err != nil {
 		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
 		return
+	}
+	if h.audit != nil {
+		claims := middleware.ClaimsFromContext(r.Context())
+		actorID := ""
+		if claims != nil {
+			actorID = claims.Subject
+		}
+		h.audit.WriteAsync(r.Context(), audit.Event{
+			UserID: actorID,
+			Event:  audit.EventInvitationRevoked,
+			Metadata: map[string]any{
+				"invitation_id": id,
+			},
+		})
 	}
 	w.WriteHeader(http.StatusNoContent)
 }

@@ -756,11 +756,13 @@ class _Step1 extends StatelessWidget {
           const SizedBox(height: 24),
           TextFormField(
             controller: nameCtrl,
+            autofocus: true,
             decoration: const InputDecoration(
               labelText: 'Instance name',
               hintText: 'e.g. My Home',
               border: OutlineInputBorder(),
             ),
+            onFieldSubmitted: (_) => onContinue(),
             validator: (v) {
               if (v == null || v.trim().length < 2) {
                 return 'Must be at least 2 characters.';
@@ -840,6 +842,7 @@ class _Step2 extends StatelessWidget {
           const SizedBox(height: 24),
           TextFormField(
             controller: fullNameCtrl,
+            autofocus: true,
             decoration: const InputDecoration(
               labelText: 'Name',
               border: OutlineInputBorder(),

@@ -8,9 +8,10 @@ type Repository interface {
 	// Insert writes one audit event. Never blocks the caller beyond a DB write.
 	Insert(ctx context.Context, e Event) error
 
-	// ListForUser returns the paginated audit history for a user.
-	ListForUser(ctx context.Context, userID string, limit, offset int) ([]*Row, error)
+	// ListForUser returns the filtered, paginated audit history for a single user.
+	ListForUser(ctx context.Context, userID string, q AuditQuery) (*Page, error)
 
-	// ListAll returns the paginated global audit log — owner only.
-	ListAll(ctx context.Context, limit, offset int) ([]*Row, error)
+	// ListAll returns the filtered, paginated global audit log.
+	// Row.UserEmail and Row.UserDisplayName are populated via JOIN.
+	ListAll(ctx context.Context, q AuditQuery) (*Page, error)
 }

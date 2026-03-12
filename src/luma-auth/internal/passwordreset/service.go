@@ -14,13 +14,14 @@ import (
 )
 
 const (
-	tokenSize        = 32 // bytes of raw entropy
-	adminResetExpiry = 24 * time.Hour
+	tokenSize         = 32 // bytes of raw entropy
+	adminResetExpiry  = 24 * time.Hour
 	forceChangeExpiry = 15 * time.Minute
 )
 
 // UserPasswordSetter is a narrow interface satisfied by user.Service.
 type UserPasswordSetter interface {
+	ValidateNewPassword(ctx context.Context, id, newPassword string) error
 	SetPasswordDirect(ctx context.Context, id, newPassword string) error
 	SetForcePasswordChange(ctx context.Context, targetID, requesterID string, force bool) error
 }
@@ -32,9 +33,9 @@ type UserGetter interface {
 
 // Service contains business logic for password reset tokens.
 type Service struct {
-	repo      Repository
-	userRepo  user.Repository
-	userSvc   UserPasswordSetter
+	repo     Repository
+	userRepo user.Repository
+	userSvc  UserPasswordSetter
 }
 
 // NewService constructs the password reset service.
@@ -107,14 +108,21 @@ func (s *Service) ResetPassword(ctx context.Context, rawToken, newPassword strin
 		return "", pkgerrors.ErrTokenInvalid
 	}
 
+	// Validate the new password before consuming the token.
+	// If validation fails (e.g., policy violation, reused password), we return
+	// the error early so the token remains valid for another attempt.
+	if err := s.userSvc.ValidateNewPassword(ctx, t.UserID, newPassword); err != nil {
+		return "", err
+	}
+
+	// Consume the token to prevent replay attacks.
+	if err := s.repo.Consume(ctx, t.ID); err != nil {
+		return "", fmt.Errorf("passwordreset.Service.ResetPassword consume: %w", err)
+	}
+
 	// Change the password (validates minimum length internally).
 	if err := s.userSvc.SetPasswordDirect(ctx, t.UserID, newPassword); err != nil {
 		return "", fmt.Errorf("passwordreset.Service.ResetPassword set password: %w", err)
-	}
-
-	// Consume the token.
-	if err := s.repo.Consume(ctx, t.ID); err != nil {
-		return "", fmt.Errorf("passwordreset.Service.ResetPassword consume: %w", err)
 	}
 
 	// If this was a force-change token, clear the flag.

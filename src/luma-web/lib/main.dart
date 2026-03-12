@@ -3,6 +3,7 @@ import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
+import 'services/theme_notifier.dart';
 import 'services/user_service.dart';
 import 'router.dart';
 
@@ -18,6 +19,7 @@ void main() async {
   final authService = AuthService(baseUrl);
   final apiClient = ApiClient(authService);
   final userService = UserService(apiClient);
+  final themeNotifier = ThemeNotifier();
 
   authService.onSessionCleared = userService.clear;
 
@@ -34,6 +36,7 @@ void main() async {
     authService: authService,
     apiClient: apiClient,
     userService: userService,
+    themeNotifier: themeNotifier,
   ));
 }
 
@@ -43,26 +46,27 @@ class LumaApp extends StatelessWidget {
   final AuthService authService;
   final ApiClient apiClient;
   final UserService userService;
+  final ThemeNotifier themeNotifier;
 
   const LumaApp({
     super.key,
     required this.authService,
     required this.apiClient,
     required this.userService,
+    required this.themeNotifier,
   });
 
   @override
   Widget build(BuildContext context) {
-    final router = buildRouter(authService, apiClient, userService);
+    final router =
+        buildRouter(authService, apiClient, userService, themeNotifier);
 
     return ListenableBuilder(
-      listenable: userService,
+      listenable: themeNotifier,
       builder: (context, _) {
-        final themeMode = _resolveThemeMode(userService.preferences?.theme);
-
         return MaterialApp.router(
           title: 'Luma',
-          themeMode: themeMode,
+          themeMode: themeNotifier.themeMode,
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
               seedColor: _seedColor,
@@ -93,13 +97,5 @@ class LumaApp extends StatelessWidget {
         );
       },
     );
-  }
-
-  static ThemeMode _resolveThemeMode(String? theme) {
-    return switch (theme) {
-      'light' => ThemeMode.light,
-      'dark' => ThemeMode.dark,
-      _ => ThemeMode.system,
-    };
   }
 }

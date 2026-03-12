@@ -94,6 +94,10 @@ class AuthService extends ChangeNotifier {
   // acknowledges the code on the recovery-code screen.
   String? _pendingRecoveryToken;
 
+  // Session expiry flag — set when an API call fails because the refresh
+  // token is also expired. Consumed once by the login screen to show a SnackBar.
+  bool _sessionJustExpired = false;
+
   /// Called when the session is cleared (logout, expiry) so dependent services
   /// can drop cached state. Set from main.dart to avoid circular imports.
   VoidCallback? onSessionCleared;
@@ -126,6 +130,20 @@ class AuthService extends ChangeNotifier {
   void acknowledgeRecoveryToken() {
     _pendingRecoveryToken = null;
     notifyListeners();
+  }
+
+  /// True when the session was cleared due to expiry (not explicit logout).
+  /// Consumed once by the login screen initState.
+  bool get sessionJustExpired => _sessionJustExpired;
+
+  /// Clears the expiry flag — call after showing the snackbar.
+  void clearSessionExpiredFlag() => _sessionJustExpired = false;
+
+  /// Clears the session and marks it as expired so the login screen
+  /// can show a contextual message. Called by ApiClient on refresh failure.
+  void clearSessionAsExpired() {
+    _sessionJustExpired = true;
+    clearSession();
   }
 
   /// Called from main.dart before runApp. Probes auth service state and attempts
@@ -259,6 +277,35 @@ class AuthService extends ChangeNotifier {
     final data = json.decode(resp.body) as Map<String, dynamic>;
     _accessToken = data['access_token'] as String?;
     _forceChangeToken = null;
+    notifyListeners();
+  }
+
+  /// Resets the password using the 64-digit account recovery token.
+  /// Issues a new session on success. The user must provide a new password
+  /// as part of the recovery flow.
+  Future<void> resetWithAccountRecovery(
+      String email, String token, String newPassword) async {
+    final resp = await http.post(
+      Uri.parse('$_baseUrl/api/luma/auth/recovery/reset-password'),
+      headers: {'Content-Type': 'application/json'},
+      body: json.encode({
+        'email': email,
+        'token': token,
+        'new_password': newPassword,
+        'platform': 'web',
+        'device_name': detectBrowserName(),
+        'fingerprint': getDeviceFingerprint(),
+      }),
+    );
+    if (resp.statusCode != 200) {
+      final data = json.decode(resp.body) as Map<String, dynamic>;
+      throw AuthException(
+          (data['message'] ?? data['error'] ?? 'Recovery failed').toString());
+    }
+    final data = json.decode(resp.body) as Map<String, dynamic>;
+    _accessToken = data['access_token'] as String?;
+    _mfaToken = null;
+    _mfaMethods = [];
     notifyListeners();
   }
 

@@ -87,6 +87,7 @@ func (h *Handler) AdminCapabilities(w http.ResponseWriter, r *http.Request) {
 		"group:add-member", "group:remove-member", "group:assign-role", "group:unassign-role",
 		"role:read", "role:create", "role:update", "role:delete",
 		"role:set-permission", "role:remove-permission", "role:assign-user", "role:unassign-user",
+		"audit:read-all", "audit:export-all", "audit:read-pii",
 	}
 	caps := map[string]any{"is_owner": isOwner}
 
@@ -131,6 +132,15 @@ func (h *Handler) UpdateProfile(w http.ResponseWriter, r *http.Request) {
 	}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid body")
+		return
+	}
+
+	if len(req.DisplayName) > 64 {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "display_name too long (max 64 characters)")
+		return
+	}
+	if len(req.Email) > 254 {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "email too long (max 254 characters)")
 		return
 	}
 

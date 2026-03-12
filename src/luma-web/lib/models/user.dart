@@ -279,6 +279,9 @@ class AuditEvent {
   final String event;
   final String ipAddress;
   final String userAgent;
+  final String? userId;
+  final String? userEmail;
+  final String? userDisplayName;
   final Map<String, dynamic> metadata;
   final DateTime occurredAt;
 
@@ -287,23 +290,63 @@ class AuditEvent {
     required this.event,
     required this.ipAddress,
     required this.userAgent,
+    this.userId,
+    this.userEmail,
+    this.userDisplayName,
     required this.metadata,
     required this.occurredAt,
   });
 
   factory AuditEvent.fromJson(Map<String, dynamic> json) {
-    // The auth service's audit.Row struct has no json tags, so Go marshals with
-    // PascalCase field names (Event, IPAddress, OccurredAt, etc.).
-    final meta = _get(json, 'Metadata', 'metadata');
+    // New handler emits snake_case json tags; keep PascalCase fallback for
+    // backward compatibility during any transition period.
+    final meta = json['metadata'] ?? json['Metadata'];
     return AuditEvent(
-      id: _str(_get(json, 'ID', 'id')),
-      event: _str(_get(json, 'Event', 'event')),
-      ipAddress: _str(_get(json, 'IPAddress', 'ip_address')),
-      userAgent: _str(_get(json, 'UserAgent', 'user_agent')),
+      id: _str(json['id'] ?? json['ID']),
+      event: _str(json['event'] ?? json['Event']),
+      ipAddress: _str(json['ip_address'] ?? json['IPAddress']),
+      userAgent: _str(json['user_agent'] ?? json['UserAgent']),
+      userId: json['user_id'] as String?,
+      userEmail: json['user_email'] as String?,
+      userDisplayName: json['user_display_name'] as String?,
       metadata: (meta is Map<String, dynamic>) ? meta : const {},
-      occurredAt: _dt(_get(json, 'OccurredAt', 'occurred_at')),
+      occurredAt: _dt(json['occurred_at'] ?? json['OccurredAt']),
     );
   }
+
+  /// Best display name for this event's actor (admin view).
+  String get actorLabel =>
+      userDisplayName ?? userEmail ?? userId ?? '—';
+}
+
+class AuditPage {
+  final List<AuditEvent> events;
+  final int total;
+  final int limit;
+  final int offset;
+
+  const AuditPage({
+    required this.events,
+    required this.total,
+    required this.limit,
+    required this.offset,
+  });
+
+  factory AuditPage.fromJson(Map<String, dynamic> json) {
+    final items = json['events'] as List<dynamic>? ?? [];
+    return AuditPage(
+      events: items
+          .map((e) => AuditEvent.fromJson(e as Map<String, dynamic>))
+          .toList(),
+      total: (json['total'] as num?)?.toInt() ?? 0,
+      limit: (json['limit'] as num?)?.toInt() ?? 10,
+      offset: (json['offset'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  bool get hasMore => offset + events.length < total;
+  int get totalPages => limit > 0 ? ((total + limit - 1) ~/ limit) : 1;
+  int get currentPage => limit > 0 ? offset ~/ limit : 0;
 }
 
 /// Looks up a JSON key by trying the PascalCase name first (Go default when

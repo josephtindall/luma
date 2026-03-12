@@ -24,6 +24,9 @@ enum _LoginStep {
 
   /// Warning shown after a recovery code is consumed.
   recoveryWarning,
+
+  /// Account recovery using the 64-digit recovery token (not MFA codes).
+  accountRecovery,
 }
 
 class LoginScreen extends StatefulWidget {
@@ -44,6 +47,12 @@ class _LoginScreenState extends State<LoginScreen> {
   final _totpCtrl = TextEditingController();
   final _recoveryCtrl = TextEditingController();
 
+  // Account recovery (64-digit token) controllers.
+  final _acctRecoveryTokenCtrl = TextEditingController();
+  final _acctRecoveryNewPwCtrl = TextEditingController();
+  final _acctRecoveryConfirmPwCtrl = TextEditingController();
+  bool _acctRecoveryObscure = true;
+
   _LoginStep _step = _LoginStep.email;
   bool _loading = false;
   bool _obscure = true;
@@ -55,11 +64,29 @@ class _LoginScreenState extends State<LoginScreen> {
   IdentifyResult? _identified;
 
   @override
+  void initState() {
+    super.initState();
+    if (widget.auth.sessionJustExpired) {
+      widget.auth.clearSessionExpiredFlag();
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
+              content: Text(
+                  'Your session has expired. Please sign in again.')));
+        }
+      });
+    }
+  }
+
+  @override
   void dispose() {
     _emailCtrl.dispose();
     _passwordCtrl.dispose();
     _totpCtrl.dispose();
     _recoveryCtrl.dispose();
+    _acctRecoveryTokenCtrl.dispose();
+    _acctRecoveryNewPwCtrl.dispose();
+    _acctRecoveryConfirmPwCtrl.dispose();
     super.dispose();
   }
 
@@ -82,6 +109,8 @@ class _LoginScreenState extends State<LoginScreen> {
       } else {
         _goToStep(_LoginStep.passwordMfa);
       }
+    } else if (_step == _LoginStep.accountRecovery) {
+      _goToStep(_LoginStep.password);
     } else {
       _goToStep(_LoginStep.email);
       _emailCtrl.clear();
@@ -336,6 +365,8 @@ class _LoginScreenState extends State<LoginScreen> {
         return _buildRecoveryCodeStep();
       case _LoginStep.recoveryWarning:
         return _buildRecoveryWarningStep();
+      case _LoginStep.accountRecovery:
+        return _buildAccountRecoveryStep();
     }
   }
 
@@ -487,8 +518,114 @@ class _LoginScreenState extends State<LoginScreen> {
           onPressed: _loading ? null : _signInWithPassword,
           child: _loading ? const _ButtonSpinner() : const Text('Sign in'),
         ),
+        const SizedBox(height: 8),
+        TextButton(
+          onPressed: () => _goToStep(_LoginStep.accountRecovery),
+          child: const Text('Use Recovery Code'),
+        ),
       ],
     );
+  }
+
+  Widget _buildAccountRecoveryStep() {
+    return Column(
+      key: const ValueKey('accountRecovery'),
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        _buildBackButton(),
+        const SizedBox(height: 8),
+        Text('Account Recovery',
+            style: Theme.of(context).textTheme.headlineMedium),
+        const SizedBox(height: 4),
+        Text(
+          'Enter your 64-digit recovery token. This will set a new password and sign you in.',
+          style: Theme.of(context).textTheme.bodyMedium,
+        ),
+        const SizedBox(height: 24),
+        if (_error != null) _buildError(),
+        TextField(
+          controller: _acctRecoveryTokenCtrl,
+          autofocus: true,
+          keyboardType: TextInputType.number,
+          decoration: const InputDecoration(
+            labelText: 'Recovery Token',
+            hintText: 'Enter your 64-digit recovery code',
+            border: OutlineInputBorder(),
+          ),
+          onSubmitted: (_) => _submitAccountRecovery(),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _acctRecoveryNewPwCtrl,
+          obscureText: _acctRecoveryObscure,
+          decoration: InputDecoration(
+            labelText: 'New Password',
+            border: const OutlineInputBorder(),
+            suffixIcon: IconButton(
+              icon: Icon(
+                  _acctRecoveryObscure ? Icons.visibility : Icons.visibility_off),
+              onPressed: () =>
+                  setState(() => _acctRecoveryObscure = !_acctRecoveryObscure),
+            ),
+          ),
+          onFieldSubmitted: (_) => _submitAccountRecovery(),
+        ),
+        const SizedBox(height: 12),
+        TextFormField(
+          controller: _acctRecoveryConfirmPwCtrl,
+          obscureText: _acctRecoveryObscure,
+          decoration: const InputDecoration(
+            labelText: 'Confirm New Password',
+            border: OutlineInputBorder(),
+          ),
+          onFieldSubmitted: (_) => _submitAccountRecovery(),
+        ),
+        const SizedBox(height: 24),
+        FilledButton(
+          onPressed: _loading ? null : _submitAccountRecovery,
+          child: _loading
+              ? const _ButtonSpinner()
+              : const Text('Reset & Sign In'),
+        ),
+      ],
+    );
+  }
+
+  Future<void> _submitAccountRecovery() async {
+    final token = _acctRecoveryTokenCtrl.text.trim();
+    final newPw = _acctRecoveryNewPwCtrl.text;
+    final confirm = _acctRecoveryConfirmPwCtrl.text;
+
+    if (token.isEmpty) {
+      setState(() => _error = 'Enter your recovery token.');
+      return;
+    }
+    if (newPw.isEmpty) {
+      setState(() => _error = 'Enter a new password.');
+      return;
+    }
+    if (newPw != confirm) {
+      setState(() => _error = 'Passwords do not match.');
+      return;
+    }
+
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
+
+    try {
+      await widget.auth.resetWithAccountRecovery(_email, token, newPw);
+      _emailStore.addEmail(_email);
+      await _loadUserDataAndFinish();
+    } on AuthException catch (e) {
+      setState(() => _error = e.message);
+    } catch (_) {
+      setState(() => _error = 'Could not reach the server. Try again.');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   Widget _buildPasswordMfaStep() {
@@ -541,6 +678,7 @@ class _LoginScreenState extends State<LoginScreen> {
           ),
           onChanged: (value) {
             if (value.length == 6) {
+              setState(() => _loading = true);
               _submitPasswordAndTotp();
             }
           },

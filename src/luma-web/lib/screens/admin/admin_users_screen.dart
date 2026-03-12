@@ -40,7 +40,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
         isSelf: widget.userService.profile?.id == user.id,
         onChanged: _reload,
       ),
-    );
+    ).then((_) => _reload());
   }
 
   void _showCreateUserDialog() {
@@ -264,7 +264,13 @@ class _UserManageDialogState extends State<_UserManageDialog> {
           _allRoles = results[1];
         });
       }
-    } catch (_) {}
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Could not load role assignments')),
+        );
+      }
+    }
   }
 
   Future<void> _removeCustomRole(String roleId) async {
@@ -274,7 +280,7 @@ class _UserManageDialogState extends State<_UserManageDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString()),
+          content: const Text('Something went wrong. Please try again.'),
           backgroundColor: Theme.of(context).colorScheme.error,
         ));
       }
@@ -291,7 +297,7 @@ class _UserManageDialogState extends State<_UserManageDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString()),
+          content: const Text('Something went wrong. Please try again.'),
           backgroundColor: Theme.of(context).colorScheme.error,
         ));
       }
@@ -335,7 +341,7 @@ class _UserManageDialogState extends State<_UserManageDialog> {
       if (mounted) {
         setState(() => _loading = false);
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString()),
+          content: const Text('Something went wrong. Please try again.'),
           backgroundColor: Theme.of(context).colorScheme.error,
         ));
       }
@@ -354,7 +360,7 @@ class _UserManageDialogState extends State<_UserManageDialog> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-          content: Text(e.toString()),
+          content: const Text('Something went wrong. Please try again.'),
           backgroundColor: Theme.of(context).colorScheme.error,
         ));
       }
@@ -807,7 +813,7 @@ class _CreateUserDialogState extends State<_CreateUserDialog> {
       );
       if (mounted) Navigator.pop(context);
     } catch (e) {
-      setState(() => _error = e.toString());
+      setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _loading = false);
     }

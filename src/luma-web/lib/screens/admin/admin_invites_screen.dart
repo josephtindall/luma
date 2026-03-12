@@ -16,6 +16,7 @@ class AdminInvitesScreen extends StatefulWidget {
 
 class _AdminInvitesScreenState extends State<AdminInvitesScreen> {
   late Future<List<InvitationRecord>> _invFuture;
+  bool _loading = false;
 
   @override
   void initState() {
@@ -25,6 +26,7 @@ class _AdminInvitesScreenState extends State<AdminInvitesScreen> {
 
   void _reload() {
     setState(() {
+      _loading = false;
       _invFuture = widget.userService.listInvitations();
     });
   }
@@ -63,6 +65,7 @@ class _AdminInvitesScreenState extends State<AdminInvitesScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
+    setState(() => _loading = true);
     try {
       await widget.userService.revokeInvitation(inv.id);
       _reload();
@@ -70,7 +73,7 @@ class _AdminInvitesScreenState extends State<AdminInvitesScreen> {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
-          content: Text(e.toString()),
+          content: const Text('Could not revoke invitation. Please try again.'),
           backgroundColor: Theme.of(context).colorScheme.error,
         ),
       );
@@ -81,6 +84,7 @@ class _AdminInvitesScreenState extends State<AdminInvitesScreen> {
   Widget build(BuildContext context) {
     return _InvitationsContent(
       future: _invFuture,
+      loading: _loading,
       onRevoke: _revokeWithConfirm,
       onReinvite: (inv) => _showInvitePanel(inv.email, inv.id),
       onCreateInvite: () => _showInvitePanel(),
@@ -93,6 +97,7 @@ class _AdminInvitesScreenState extends State<AdminInvitesScreen> {
 
 class _InvitationsContent extends StatefulWidget {
   final Future<List<InvitationRecord>> future;
+  final bool loading;
   final void Function(InvitationRecord) onRevoke;
   final void Function(InvitationRecord) onReinvite;
   final VoidCallback onCreateInvite;
@@ -100,6 +105,7 @@ class _InvitationsContent extends StatefulWidget {
 
   const _InvitationsContent({
     required this.future,
+    required this.loading,
     required this.onRevoke,
     required this.onReinvite,
     required this.onCreateInvite,
@@ -128,7 +134,7 @@ class _InvitationsContentState extends State<_InvitationsContent> {
     return FutureBuilder<List<InvitationRecord>>(
       future: widget.future,
       builder: (context, snap) {
-        if (snap.connectionState == ConnectionState.waiting) {
+        if (widget.loading || snap.connectionState == ConnectionState.waiting) {
           return const Center(child: CircularProgressIndicator());
         }
         if (snap.hasError) {
@@ -429,7 +435,7 @@ class _InvitePanelState extends State<_InvitePanel> {
     } catch (e) {
       setState(() {
         _creating = false;
-        _error = e.toString();
+        _error = e.toString().replaceFirst('Exception: ', '');
       });
     }
   }
@@ -550,12 +556,6 @@ class _InvitePanelState extends State<_InvitePanel> {
                       onPressed: _creating ? null : _create,
                     ),
                   ],
-                ),
-                const SizedBox(height: 12),
-                OutlinedButton.icon(
-                  icon: const Icon(Icons.email_outlined),
-                  label: const Text('Send invite via Email'),
-                  onPressed: null,
                 ),
                 const SizedBox(height: 24),
                 Center(

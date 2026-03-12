@@ -1,44 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../services/user_service.dart';
-
-class AdminLayout extends StatelessWidget {
+class SettingsLayout extends StatelessWidget {
   final Widget child;
-  final UserService userService;
 
-  const AdminLayout({super.key, required this.child, required this.userService});
+  const SettingsLayout({super.key, required this.child});
+
+  static const _tabs = [
+    _SettingsTab(label: 'Profile', route: '/settings/profile'),
+    _SettingsTab(label: 'Security', route: '/settings/security'),
+    _SettingsTab(label: 'Activity', route: '/settings/activity'),
+  ];
 
   @override
   Widget build(BuildContext context) {
-    return ListenableBuilder(
-      listenable: userService,
-      builder: (context, _) => _buildContent(context),
-    );
-  }
-
-  Widget _buildContent(BuildContext context) {
     final path = GoRouterState.of(context).uri.path;
     final colorScheme = Theme.of(context).colorScheme;
     final borderColor = colorScheme.outlineVariant.withAlpha(128);
 
-    final tabs = [
-      if (userService.canManageUsers)
-        _AdminTab(label: 'Users', route: '/admin/users'),
-      if (userService.canManageInvitations)
-        _AdminTab(label: 'Invitations', route: '/admin/invites'),
-      if (userService.canManageGroups) _AdminTab(label: 'Groups', route: '/admin/groups'),
-      if (userService.canManageRoles) _AdminTab(label: 'Roles', route: '/admin/roles'),
-      if (userService.canManageInstanceSettings)
-        _AdminTab(label: 'Settings', route: '/admin/settings'),
-      if (userService.canViewAuditLog)
-        _AdminTab(label: 'Events', route: '/admin/events'),
-    ];
-
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // Top tab bar
+        // Tab bar
         Container(
           height: 48,
           decoration: BoxDecoration(
@@ -46,10 +29,9 @@ class AdminLayout extends StatelessWidget {
           ),
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
-            children: tabs.map((tab) {
-              final isActive = path == tab.route ||
-                  (tab.route != '/admin/users' && path.startsWith(tab.route));
-              return _AdminTabButton(
+            children: _tabs.map((tab) {
+              final isActive = path.startsWith(tab.route);
+              return _SettingsTabButton(
                 label: tab.label,
                 isActive: isActive,
                 onTap: () => context.go(tab.route),
@@ -64,18 +46,18 @@ class AdminLayout extends StatelessWidget {
   }
 }
 
-class _AdminTab {
+class _SettingsTab {
   final String label;
   final String route;
-  const _AdminTab({required this.label, required this.route});
+  const _SettingsTab({required this.label, required this.route});
 }
 
-class _AdminTabButton extends StatelessWidget {
+class _SettingsTabButton extends StatelessWidget {
   final String label;
   final bool isActive;
   final VoidCallback onTap;
 
-  const _AdminTabButton({
+  const _SettingsTabButton({
     required this.label,
     required this.isActive,
     required this.onTap,
@@ -85,7 +67,8 @@ class _AdminTabButton extends StatelessWidget {
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
     final textStyle = Theme.of(context).textTheme.bodyMedium?.copyWith(
-          color: isActive ? colorScheme.primary : colorScheme.onSurfaceVariant,
+          color:
+              isActive ? colorScheme.primary : colorScheme.onSurfaceVariant,
           fontWeight: isActive ? FontWeight.w600 : FontWeight.normal,
         );
 

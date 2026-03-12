@@ -39,10 +39,10 @@ import (
 	"github.com/josephtindall/luma-auth/internal/migrate"
 	passwordresetpkg "github.com/josephtindall/luma-auth/internal/passwordreset"
 	passwordresetpg "github.com/josephtindall/luma-auth/internal/passwordreset/postgres"
-	recoverytokenpkg "github.com/josephtindall/luma-auth/internal/recoverytoken"
-	recoverytokenpg "github.com/josephtindall/luma-auth/internal/recoverytoken/postgres"
 	"github.com/josephtindall/luma-auth/internal/preferences"
 	prefpg "github.com/josephtindall/luma-auth/internal/preferences/postgres"
+	recoverytokenpkg "github.com/josephtindall/luma-auth/internal/recoverytoken"
+	recoverytokenpg "github.com/josephtindall/luma-auth/internal/recoverytoken/postgres"
 	"github.com/josephtindall/luma-auth/internal/session"
 	sessionpg "github.com/josephtindall/luma-auth/internal/session/postgres"
 	"github.com/josephtindall/luma-auth/internal/user"
@@ -203,12 +203,32 @@ func run() error {
 	groupHandler.SetAuthorizer(authzAuthorizer)
 	roleHandler.SetAuthorizer(authzAuthorizer)
 
+	// Inject audit service into handlers that emit admin-action events.
+	invHandler.SetAuditor(auditSvc)
+	bootstrapHandler.SetAuditor(auditSvc)
+	groupHandler.SetAuditor(auditSvc)
+	roleHandler.SetAuditor(auditSvc)
+	passwordResetHandler.SetAuditor(auditSvc)
+	sessionHandler.SetAuditor(auditSvc)
+
+	auditHTTPHandler := audit.NewHandler(auditRepo, func(ctx context.Context, userID, action string) (bool, error) {
+		result, err := authzAuthorizer.Check(ctx, authz.CheckRequest{UserID: userID, Action: action})
+		return err == nil && result.Allowed, err
+	})
+
 	// ── 9. Router ─────────────────────────────────────────────────────────────
 	r := chi.NewRouter()
 
 	r.Use(chimiddleware.Recoverer)
 	r.Use(pkgmiddleware.RequestID)
+	r.Use(pkgmiddleware.WithIPAddress)
 	r.Use(pkgmiddleware.Logger)
+	r.Use(func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			r.Body = http.MaxBytesReader(w, r.Body, 1<<20) // 1 MB
+			next.ServeHTTP(w, r)
+		})
+	})
 	r.Use(bootstrapGate.Middleware) // enforced on every request
 
 	// ── Health (always reachable, all bootstrap states) ───────────────────────
@@ -253,6 +273,9 @@ func run() error {
 	// ── Invitation join (unauthenticated — accessed before account creation) ──
 	r.Get("/api/auth/join", invHandler.Join)
 
+	// ── Public instance UI settings (unauthenticated) ─────────────────────────
+	r.Get("/api/auth/instance/ui", bootstrapHandler.GetPublicUISettings)
+
 	// ── Protected routes (Bearer token required) ──────────────────────────────
 	authMiddleware := pkgmiddleware.RequireAuth(cfg.JWTSigningKey, cfg.JWTSigningKeyPrev)
 
@@ -286,8 +309,8 @@ func run() error {
 		r.Get("/api/auth/passkeys", mfaHandler.ListPasskeys)
 		r.Delete("/api/auth/passkeys/{id}", mfaHandler.RevokePasskey)
 
-		r.Get("/api/auth/audit/me", auditHandler(auditRepo, false))
-		r.Get("/api/auth/audit", auditHandler(auditRepo, true))
+		r.Get("/api/auth/audit/me", auditHTTPHandler.Me)
+		r.Get("/api/auth/audit", auditHTTPHandler.All)
 
 		r.Post("/api/auth/authz/check", authzHandler.Check)
 
@@ -371,34 +394,4 @@ func run() error {
 	}
 	slog.Info("server stopped cleanly")
 	return nil
-}
-
-// auditHandler is an inline handler for the audit log endpoints until audit
-// grows its own Handler type.
-func auditHandler(repo audit.Repository, all bool) http.HandlerFunc {
-	return func(w http.ResponseWriter, r *http.Request) {
-		claims := pkgmiddleware.ClaimsFromContext(r.Context())
-		if claims == nil {
-			httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
-			return
-		}
-		if all && claims.Role != "builtin:instance-owner" {
-			httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "owner role required")
-			return
-		}
-		var (
-			rows []*audit.Row
-			err  error
-		)
-		if all {
-			rows, err = repo.ListAll(r.Context(), 100, 0)
-		} else {
-			rows, err = repo.ListForUser(r.Context(), claims.Subject, 100, 0)
-		}
-		if err != nil {
-			httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to load audit log")
-			return
-		}
-		httputil.WriteJSON(w, http.StatusOK, rows)
-	}
 }

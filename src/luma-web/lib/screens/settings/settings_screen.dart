@@ -12,76 +12,113 @@ import '../../services/webauthn_interop.dart' as webauthn;
 import '../../widgets/user_avatar.dart';
 import '../login/login_email_store.dart';
 
-class SettingsScreen extends StatefulWidget {
+// ── Profile tab: avatar, display name, email, preferences ──────────────────
+class SettingsProfileTab extends StatelessWidget {
   final UserService userService;
 
-  const SettingsScreen({super.key, required this.userService});
+  const SettingsProfileTab({super.key, required this.userService});
 
   @override
-  State<SettingsScreen> createState() => _SettingsScreenState();
+  Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: userService,
+      builder: (context, _) => SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Column(
+              children: [
+                _ProfileSection(userService: userService),
+                const SizedBox(height: 24),
+                _PreferencesSection(userService: userService),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
-class _SettingsScreenState extends State<SettingsScreen> {
+// ── Security tab: password, MFA, passkeys, recovery codes, devices ──────────
+class SettingsSecurityTab extends StatefulWidget {
+  final UserService userService;
+
+  const SettingsSecurityTab({super.key, required this.userService});
+
+  @override
+  State<SettingsSecurityTab> createState() => _SettingsSecurityTabState();
+}
+
+class _SettingsSecurityTabState extends State<SettingsSecurityTab> {
   bool _hasTOTP = false;
 
   @override
   void initState() {
     super.initState();
-    // Load initial TOTP state.
     widget.userService.loadTOTPApps().then((apps) {
       if (mounted) setState(() => _hasTOTP = apps.isNotEmpty);
     });
   }
 
-  void _onTOTPChanged(bool hasTOTP) {
-    setState(() => _hasTOTP = hasTOTP);
-  }
+  void _onTOTPChanged(bool hasTOTP) => setState(() => _hasTOTP = hasTOTP);
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      body: ListenableBuilder(
-        listenable: widget.userService,
-        builder: (context, _) {
-          return SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
-            child: Center(
-              child: ConstrainedBox(
-                constraints: const BoxConstraints(maxWidth: 600),
-                child: Column(
-                  children: [
-                    _ProfileSection(userService: widget.userService),
-                    const SizedBox(height: 24),
-                    _PasswordSection(userService: widget.userService),
-                    const SizedBox(height: 24),
-                    _TOTPSection(
-                      userService: widget.userService,
-                      onTOTPChanged: _onTOTPChanged,
-                    ),
-                    const SizedBox(height: 24),
-                    _PasskeysSection(
-                      userService: widget.userService,
-                      hasTOTP: _hasTOTP,
-                    ),
-                    const SizedBox(height: 24),
-                    _RecoveryCodesSection(
-                      userService: widget.userService,
-                      hasTOTP: _hasTOTP,
-                    ),
-                    const SizedBox(height: 24),
-                    _AccountRecoverySection(userService: widget.userService),
-                    const SizedBox(height: 24),
-                    _PreferencesSection(userService: widget.userService),
-                    const SizedBox(height: 24),
-                    _DevicesSection(userService: widget.userService),
-                    const SizedBox(height: 24),
-                    _AuditSection(userService: widget.userService),
-                  ],
+    return ListenableBuilder(
+      listenable: widget.userService,
+      builder: (context, _) => SingleChildScrollView(
+        padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+        child: Center(
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 600),
+            child: Column(
+              children: [
+                _PasswordSection(userService: widget.userService),
+                const SizedBox(height: 24),
+                _TOTPSection(
+                  userService: widget.userService,
+                  onTOTPChanged: _onTOTPChanged,
                 ),
-              ),
+                const SizedBox(height: 24),
+                _PasskeysSection(
+                  userService: widget.userService,
+                  hasTOTP: _hasTOTP,
+                ),
+                const SizedBox(height: 24),
+                _RecoveryCodesSection(
+                  userService: widget.userService,
+                  hasTOTP: _hasTOTP,
+                ),
+                const SizedBox(height: 24),
+                _AccountRecoverySection(userService: widget.userService),
+                const SizedBox(height: 24),
+                _DevicesSection(userService: widget.userService),
+              ],
             ),
-          );
-        },
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+// ── Activity tab: paginated, filterable audit log ───────────────────────────
+class SettingsActivityTab extends StatelessWidget {
+  final UserService userService;
+
+  const SettingsActivityTab({super.key, required this.userService});
+
+  @override
+  Widget build(BuildContext context) {
+    return SingleChildScrollView(
+      padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 16),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 700),
+          child: _AuditSection(userService: userService),
+        ),
       ),
     );
   }
@@ -136,6 +173,13 @@ class _ProfileSectionState extends State<_ProfileSection> {
     final oldEmail = widget.userService.profile?.email;
     final newEmail = _emailCtrl.text.trim();
 
+    if (newEmail.isNotEmpty &&
+        !RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$').hasMatch(newEmail)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Please enter a valid email address')));
+      return;
+    }
+
     setState(() => _saving = true);
     try {
       await widget.userService.updateProfile(
@@ -155,7 +199,8 @@ class _ProfileSectionState extends State<_ProfileSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(
+              content: Text('Could not save profile. Please try again.')),
         );
       }
     } finally {
@@ -184,6 +229,7 @@ class _ProfileSectionState extends State<_ProfileSection> {
             const SizedBox(height: 16),
             TextField(
               controller: _nameCtrl,
+              maxLength: 64,
               decoration: const InputDecoration(
                 labelText: 'Display name',
                 border: OutlineInputBorder(),
@@ -269,7 +315,8 @@ class _PasswordSectionState extends State<_PasswordSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(
+              content: Text('Could not change password. Please try again.')),
         );
       }
     } finally {
@@ -395,7 +442,8 @@ class _TOTPSectionState extends State<_TOTPSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(
+              content: Text('Could not start TOTP setup. Please try again.')),
         );
       }
       setState(() => _enrolling = false);
@@ -527,7 +575,9 @@ class _TOTPSectionState extends State<_TOTPSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(
+              content:
+                  Text('Could not add authenticator app. Please try again.')),
         );
       }
     } finally {
@@ -594,7 +644,9 @@ class _TOTPSectionState extends State<_TOTPSection> {
       _passwordCtrl.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(
+              content: Text(
+                  'Could not remove authenticator app. Please try again.')),
         );
       }
     }
@@ -801,7 +853,8 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(
+              content: Text('Could not add passkey. Please try again.')),
         );
       }
     } finally {
@@ -854,7 +907,8 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
       passwordCtrl.dispose();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(
+              content: Text('Could not remove passkey. Please try again.')),
         );
       }
     }
@@ -929,6 +983,7 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
                   Expanded(
                     child: TextField(
                       controller: _nameCtrl,
+                      maxLength: 128,
                       decoration: const InputDecoration(
                         labelText: 'Passkey nickname (optional)',
                         hintText: 'e.g. MacBook Touch ID',
@@ -1103,11 +1158,25 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
           actions: [
             FilledButton.icon(
               onPressed: () {
-                // In a real app we'd trigger a file download using universal_html
-                // or similar, but for now we instruct the user to copy.
+                final text = codes
+                    .asMap()
+                    .entries
+                    .map((e) {
+                      final i = e.key;
+                      final code = e.value;
+                      if (i % 2 == 0 && i < codes.length - 1) {
+                        return '${code.padRight(28)}${codes[i + 1]}';
+                      } else if (i % 2 == 0) {
+                        return code;
+                      }
+                      return null;
+                    })
+                    .where((l) => l != null)
+                    .join('\n');
+                Clipboard.setData(ClipboardData(text: text));
                 ScaffoldMessenger.of(context).showSnackBar(
                   const SnackBar(
-                      content: Text('Please select and copy the codes above')),
+                      content: Text('Recovery codes copied to clipboard')),
                 );
               },
               icon: const Icon(Icons.copy),
@@ -1125,7 +1194,9 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error generating codes: $e')),
+          const SnackBar(
+              content:
+                  Text('Could not generate recovery codes. Please try again.')),
         );
       }
     } finally {
@@ -1306,7 +1377,9 @@ class _AccountRecoverySectionState extends State<_AccountRecoverySection> {
       _passwordCtrl.clear();
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(
+              content:
+                  Text('Could not generate recovery token. Please try again.')),
         );
       }
     } finally {
@@ -1338,7 +1411,8 @@ class _AccountRecoverySectionState extends State<_AccountRecoverySection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Could not generate PDF: $e')),
+          const SnackBar(
+              content: Text('Could not generate PDF. Please try again.')),
         );
       }
     } finally {
@@ -1357,9 +1431,8 @@ class _AccountRecoverySectionState extends State<_AccountRecoverySection> {
           crossAxisAlignment: pw.CrossAxisAlignment.start,
           children: [
             pw.Text(
-              'Luma — Account Recovery Code',
-              style: pw.TextStyle(
-                  fontSize: 22, fontWeight: pw.FontWeight.bold),
+              'Luma Account Recovery Code',
+              style: pw.TextStyle(fontSize: 22, fontWeight: pw.FontWeight.bold),
             ),
             pw.SizedBox(height: 24),
             pw.Text(
@@ -1368,42 +1441,43 @@ class _AccountRecoverySectionState extends State<_AccountRecoverySection> {
               style: const pw.TextStyle(fontSize: 11),
             ),
             pw.SizedBox(height: 32),
-            ...List.generate(4, (row) => pw.Padding(
-                  padding: const pw.EdgeInsets.only(bottom: 14),
-                  child: pw.Row(
-                    children: List.generate(4, (col) {
-                      final idx = row * 4 + col;
-                      return pw.Padding(
-                        padding: const pw.EdgeInsets.only(right: 14),
-                        child: pw.Container(
-                          width: 72,
-                          padding: const pw.EdgeInsets.symmetric(
-                              horizontal: 10, vertical: 10),
-                          decoration: pw.BoxDecoration(
-                            border: pw.Border.all(
-                                color: PdfColors.grey400, width: 1),
-                            borderRadius: const pw.BorderRadius.all(
-                                pw.Radius.circular(4)),
-                          ),
-                          child: pw.Text(
-                            idx < groups.length ? groups[idx] : '',
-                            style: pw.TextStyle(
-                              fontSize: 18,
-                              fontWeight: pw.FontWeight.bold,
-                              font: pw.Font.courier(),
+            ...List.generate(
+                4,
+                (row) => pw.Padding(
+                      padding: const pw.EdgeInsets.only(bottom: 14),
+                      child: pw.Row(
+                        children: List.generate(4, (col) {
+                          final idx = row * 4 + col;
+                          return pw.Padding(
+                            padding: const pw.EdgeInsets.only(right: 14),
+                            child: pw.Container(
+                              width: 72,
+                              padding: const pw.EdgeInsets.symmetric(
+                                  horizontal: 10, vertical: 10),
+                              decoration: pw.BoxDecoration(
+                                border: pw.Border.all(
+                                    color: PdfColors.grey400, width: 1),
+                                borderRadius: const pw.BorderRadius.all(
+                                    pw.Radius.circular(4)),
+                              ),
+                              child: pw.Text(
+                                idx < groups.length ? groups[idx] : '',
+                                style: pw.TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: pw.FontWeight.bold,
+                                  font: pw.Font.courier(),
+                                ),
+                                textAlign: pw.TextAlign.center,
+                              ),
                             ),
-                            textAlign: pw.TextAlign.center,
-                          ),
-                        ),
-                      );
-                    }),
-                  ),
-                )),
+                          );
+                        }),
+                      ),
+                    )),
             pw.SizedBox(height: 32),
             pw.Text(
               'Do not share this code with anyone.',
-              style: const pw.TextStyle(
-                  fontSize: 10, color: PdfColors.red900),
+              style: const pw.TextStyle(fontSize: 10, color: PdfColors.red900),
             ),
           ],
         ),
@@ -1438,7 +1512,6 @@ class _AccountRecoverySectionState extends State<_AccountRecoverySection> {
               style: Theme.of(context).textTheme.bodySmall,
             ),
             const SizedBox(height: 16),
-
             if (_loading)
               const CircularProgressIndicator()
             else if (_newToken != null)
@@ -1536,38 +1609,56 @@ class _NewTokenPanel extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 16),
-        // 4×4 grid
-        ...List.generate(4, (row) => Padding(
-              padding: const EdgeInsets.only(bottom: 8),
-              child: Row(
-                children: List.generate(4, (col) {
-                  final idx = row * 4 + col;
-                  final group = idx < groups.length ? groups[idx] : '';
-                  return Expanded(
-                    child: Padding(
-                      padding: EdgeInsets.only(right: col < 3 ? 8 : 0),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        decoration: BoxDecoration(
-                          border: Border.all(color: colorScheme.outline),
-                          borderRadius: BorderRadius.circular(6),
-                          color: colorScheme.surfaceContainerHighest,
+        // 4×4 grid — LayoutBuilder avoids Expanded-in-Column width ambiguity
+        LayoutBuilder(
+          builder: (context, constraints) {
+            const cellGap = 8.0;
+            final cellWidth = ((constraints.maxWidth - cellGap * 3) / 4)
+                .clamp(0.0, double.infinity);
+            return Column(
+              children: List.generate(
+                  4,
+                  (row) => Padding(
+                        padding: const EdgeInsets.only(bottom: 8),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: List.generate(4, (col) {
+                            final idx = row * 4 + col;
+                            final group =
+                                idx < groups.length ? groups[idx] : '';
+                            return Padding(
+                              padding:
+                                  EdgeInsets.only(right: col < 3 ? cellGap : 0),
+                              child: SizedBox(
+                                width: cellWidth,
+                                child: Container(
+                                  padding:
+                                      const EdgeInsets.symmetric(vertical: 10),
+                                  decoration: BoxDecoration(
+                                    border:
+                                        Border.all(color: colorScheme.outline),
+                                    borderRadius: BorderRadius.circular(6),
+                                    color: colorScheme.surfaceContainerHighest,
+                                  ),
+                                  child: Text(
+                                    group,
+                                    textAlign: TextAlign.center,
+                                    style:
+                                        theme.textTheme.titleMedium?.copyWith(
+                                      fontFamily: 'monospace',
+                                      fontWeight: FontWeight.bold,
+                                      letterSpacing: 2,
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            );
+                          }),
                         ),
-                        child: Text(
-                          group,
-                          textAlign: TextAlign.center,
-                          style: theme.textTheme.titleMedium?.copyWith(
-                            fontFamily: 'monospace',
-                            fontWeight: FontWeight.bold,
-                            letterSpacing: 2,
-                          ),
-                        ),
-                      ),
-                    ),
-                  );
-                }),
-              ),
-            )),
+                      )),
+            );
+          },
+        ),
         const SizedBox(height: 16),
         Row(
           children: [
@@ -1630,7 +1721,8 @@ class _PreferencesSectionState extends State<_PreferencesSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Failed to save preference: $e')),
+          const SnackBar(
+              content: Text('Could not save preference. Please try again.')),
         );
       }
     }
@@ -1765,7 +1857,8 @@ class _DevicesSectionState extends State<_DevicesSection> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Error: $e')),
+          const SnackBar(
+              content: Text('Could not revoke device. Please try again.')),
         );
       }
     }
@@ -1858,6 +1951,80 @@ class _DevicesSectionState extends State<_DevicesSection> {
 // Audit log
 // ---------------------------------------------------------------------------
 
+// ── Event metadata helpers (shared with admin_events_screen) ───────────────
+
+(IconData, String) auditEventMeta(String event) {
+  return switch (event) {
+    'login_success' => (Icons.login, 'Signed in'),
+    'login_failed' => (Icons.error_outline, 'Failed sign-in'),
+    'logout' => (Icons.logout, 'Signed out'),
+    'logout_all' => (Icons.logout, 'Signed out everywhere'),
+    'password_changed' => (Icons.lock, 'Password changed'),
+    'device_registered' => (Icons.devices, 'Device registered'),
+    'device_revoked' => (Icons.phonelink_erase, 'Device revoked'),
+    'profile_updated' => (Icons.person, 'Profile updated'),
+    'preferences_updated' => (Icons.settings, 'Preferences updated'),
+    'totp_enrolled' => (Icons.security, 'Authenticator added'),
+    'totp_removed' => (Icons.security, 'Authenticator removed'),
+    'mfa_challenge_success' => (Icons.verified_user, 'MFA verified'),
+    'mfa_challenge_failed' => (Icons.gpp_bad, 'MFA failed'),
+    'passkey_registered' => (Icons.fingerprint, 'Passkey registered'),
+    'passkey_login' => (Icons.fingerprint, 'Signed in with passkey'),
+    'passkey_revoked' => (Icons.fingerprint, 'Passkey revoked'),
+    'account_locked' => (Icons.lock_person, 'Account locked'),
+    'account_unlocked' => (Icons.lock_open, 'Account unlocked'),
+    'user_registered' => (Icons.person_add, 'Account created'),
+    'authz_denied' => (Icons.block, 'Access denied'),
+    'token_reuse_detected' => (Icons.warning_amber, 'Token reuse detected'),
+    // Admin: user management
+    'admin_user_created' => (Icons.person_add, 'Admin: user created'),
+    'admin_force_password_change' => (
+        Icons.password,
+        'Admin: force password change'
+      ),
+    'admin_password_reset_link' => (Icons.link, 'Admin: password reset link'),
+    'admin_sessions_revoked' => (Icons.device_hub, 'Admin: sessions revoked'),
+    'admin_totp_deleted' => (Icons.security, 'Admin: TOTP deleted'),
+    'admin_passkeys_revoked' => (Icons.fingerprint, 'Admin: passkeys revoked'),
+    // Admin: invitations
+    'invitation_created' => (Icons.mail_outline, 'Invitation created'),
+    'invitation_revoked' => (Icons.mail, 'Invitation revoked'),
+    // Admin: groups
+    'group_created' => (Icons.group_add, 'Group created'),
+    'group_renamed' => (Icons.drive_file_rename_outline, 'Group renamed'),
+    'group_deleted' => (Icons.group_remove, 'Group deleted'),
+    'group_member_added' => (Icons.person_add_alt, 'Group member added'),
+    'group_member_removed' => (Icons.person_remove, 'Group member removed'),
+    'group_role_assigned' => (Icons.badge, 'Group role assigned'),
+    'group_role_removed' => (Icons.badge, 'Group role removed'),
+    // Admin: custom roles
+    'role_created' => (Icons.admin_panel_settings, 'Role created'),
+    'role_updated' => (Icons.admin_panel_settings, 'Role updated'),
+    'role_deleted' => (Icons.admin_panel_settings, 'Role deleted'),
+    'role_permission_set' => (Icons.policy, 'Role permission set'),
+    'role_permission_removed' => (Icons.policy, 'Role permission removed'),
+    'role_assigned_to_user' => (Icons.manage_accounts, 'Role assigned to user'),
+    'role_unassigned_from_user' => (
+        Icons.manage_accounts,
+        'Role unassigned from user'
+      ),
+    // Admin: instance
+    'instance_settings_updated' => (Icons.tune, 'Instance settings updated'),
+    _ => (Icons.info_outline, event.replaceAll('_', ' ')),
+  };
+}
+
+String auditFormatTime(DateTime dt) {
+  final now = DateTime.now();
+  final diff = now.difference(dt);
+  if (diff.inMinutes < 1) return 'just now';
+  if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
+  if (diff.inHours < 24) return '${diff.inHours}h ago';
+  return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
+}
+
+// ── Audit section in Settings ───────────────────────────────────────────────
+
 class _AuditSection extends StatefulWidget {
   final UserService userService;
 
@@ -1868,48 +2035,154 @@ class _AuditSection extends StatefulWidget {
 }
 
 class _AuditSectionState extends State<_AuditSection> {
-  late final Future<List<AuditEvent>> _future;
+  AuditPage? _page;
+  bool _loading = false;
+  String _search = '';
+  String? _selectedEvent;
+
+  static const _limit = 10;
+
+  // Available event type options (excludes token_refreshed — hidden from users)
+  static const _eventOptions = <(String?, String)>[
+    (null, 'All activity'),
+    ('login_success', 'Signed in'),
+    ('login_failed', 'Failed sign-in'),
+    ('logout', 'Signed out'),
+    ('password_changed', 'Password changed'),
+    ('device_revoked', 'Device revoked'),
+    ('profile_updated', 'Profile updated'),
+    ('totp_enrolled', 'Authenticator added'),
+    ('totp_removed', 'Authenticator removed'),
+    ('passkey_registered', 'Passkey registered'),
+    ('passkey_revoked', 'Passkey revoked'),
+    ('mfa_challenge_failed', 'MFA failed'),
+  ];
 
   @override
   void initState() {
     super.initState();
-    _future = widget.userService.loadAudit();
+    _load(offset: 0);
   }
+
+  Future<void> _load({required int offset}) async {
+    setState(() => _loading = true);
+    try {
+      final page = await widget.userService.loadAudit(
+        limit: _limit,
+        offset: offset,
+        search: _search.isEmpty ? null : _search,
+        eventFilter: _selectedEvent,
+      );
+      if (mounted) setState(() => _page = page);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not load activity: $e')),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _applyFilters() => _load(offset: 0);
 
   @override
   Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    final page = _page;
+
     return Card(
       child: Padding(
         padding: const EdgeInsets.all(24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Activity log',
-                style: Theme.of(context).textTheme.titleMedium),
+            Text('Activity log', style: theme.textTheme.titleMedium),
             const SizedBox(height: 16),
-            FutureBuilder<List<AuditEvent>>(
-              future: _future,
-              builder: (context, snap) {
-                if (snap.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
-                }
-                if (snap.hasError) {
-                  return Text('Could not load activity: ${snap.error}',
-                      style: TextStyle(
-                          color: Theme.of(context).colorScheme.error));
-                }
-                final events = snap.data ?? [];
-                if (events.isEmpty) {
-                  return const Text('No activity yet.');
-                }
-                return Column(
-                  children: events
-                      .take(50)
-                      .map((e) => _eventTile(context, e))
+
+            // Filter row
+            Row(
+              children: [
+                Expanded(
+                  child: TextField(
+                    decoration: const InputDecoration(
+                      hintText: 'Search activity…',
+                      prefixIcon: Icon(Icons.search, size: 18),
+                      isDense: true,
+                      border: OutlineInputBorder(),
+                      contentPadding:
+                          EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    ),
+                    onChanged: (v) => _search = v,
+                    onSubmitted: (_) => _applyFilters(),
+                  ),
+                ),
+                const SizedBox(width: 12),
+                DropdownButtonFormField<String?>(
+                  initialValue: _selectedEvent,
+                  decoration: const InputDecoration(
+                    isDense: true,
+                    border: OutlineInputBorder(),
+                    contentPadding:
+                        EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  ),
+                  items: _eventOptions
+                      .map((opt) => DropdownMenuItem(
+                            value: opt.$1,
+                            child: Text(opt.$2),
+                          ))
                       .toList(),
-                );
-              },
+                  onChanged: (v) {
+                    setState(() => _selectedEvent = v);
+                    _applyFilters();
+                  },
+                ),
+              ],
             ),
+
+            const SizedBox(height: 12),
+
+            // Content
+            if (_loading && page == null)
+              const Center(child: CircularProgressIndicator())
+            else if (page == null || page.events.isEmpty)
+              const Text('No activity yet.')
+            else
+              Column(
+                children:
+                    page.events.map((e) => _eventTile(context, e)).toList(),
+              ),
+
+            // Pagination
+            if (page != null && page.total > _limit) ...[
+              const SizedBox(height: 12),
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    'Page ${page.currentPage + 1} of ${page.totalPages}',
+                    style: theme.textTheme.bodySmall,
+                  ),
+                  Row(
+                    children: [
+                      TextButton(
+                        onPressed: page.offset > 0
+                            ? () => _load(offset: page.offset - _limit)
+                            : null,
+                        child: const Text('← Prev'),
+                      ),
+                      TextButton(
+                        onPressed: page.hasMore
+                            ? () => _load(offset: page.offset + _limit)
+                            : null,
+                        child: const Text('Next →'),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ],
           ],
         ),
       ),
@@ -1917,38 +2190,15 @@ class _AuditSectionState extends State<_AuditSection> {
   }
 
   Widget _eventTile(BuildContext context, AuditEvent event) {
-    final (icon, label) = _eventMeta(event.event);
+    final (icon, label) = auditEventMeta(event.event);
     return ListTile(
       leading: Icon(icon, size: 20),
       title: Text(label),
-      subtitle: Text(event.ipAddress),
+      subtitle: event.ipAddress.isNotEmpty ? Text(event.ipAddress) : null,
       trailing: Text(
-        _formatTime(event.occurredAt),
+        auditFormatTime(event.occurredAt),
         style: Theme.of(context).textTheme.bodySmall,
       ),
     );
-  }
-
-  (IconData, String) _eventMeta(String event) {
-    return switch (event) {
-      'login_success' => (Icons.login, 'Signed in'),
-      'login_failed' => (Icons.error_outline, 'Failed sign-in attempt'),
-      'logout' => (Icons.logout, 'Signed out'),
-      'password_changed' => (Icons.lock, 'Password changed'),
-      'device_revoked' => (Icons.phonelink_erase, 'Device revoked'),
-      'token_refreshed' => (Icons.refresh, 'Session refreshed'),
-      'profile_updated' => (Icons.person, 'Profile updated'),
-      'preferences_updated' => (Icons.settings, 'Preferences updated'),
-      _ => (Icons.info_outline, event.replaceAll('_', ' ')),
-    };
-  }
-
-  String _formatTime(DateTime dt) {
-    final now = DateTime.now();
-    final diff = now.difference(dt);
-    if (diff.inMinutes < 1) return 'just now';
-    if (diff.inMinutes < 60) return '${diff.inMinutes}m ago';
-    if (diff.inHours < 24) return '${diff.inHours}h ago';
-    return '${dt.year}-${dt.month.toString().padLeft(2, '0')}-${dt.day.toString().padLeft(2, '0')}';
   }
 }

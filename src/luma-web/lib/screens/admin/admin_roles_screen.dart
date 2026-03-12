@@ -5,17 +5,91 @@ import '../../services/user_service.dart';
 
 // Canonical action groups for permissions UI
 const _actionGroups = <String, List<String>>{
-  'Pages': ['page:read', 'page:create', 'page:edit', 'page:delete', 'page:archive', 'page:version', 'page:restore-version', 'page:share', 'page:transclude'],
-  'Tasks': ['task:read', 'task:create', 'task:edit', 'task:delete', 'task:assign', 'task:close', 'task:comment'],
-  'Flows': ['flow:read', 'flow:create', 'flow:edit', 'flow:delete', 'flow:publish', 'flow:execute', 'flow:comment'],
-  'Vaults': ['vault:read', 'vault:create', 'vault:edit', 'vault:delete', 'vault:archive', 'vault:manage-members', 'vault:manage-roles'],
-  'Users': ['user:read', 'user:invite', 'user:edit', 'user:delete', 'user:lock', 'user:unlock', 'user:revoke-sessions'],
-  'Audit': ['audit:read-own', 'audit:read-all'],
-  'Instance': ['instance:read', 'instance:configure', 'instance:backup', 'instance:restore'],
-  'Notifications': ['notification:read', 'notification:configure-own', 'notification:configure-all'],
+  'Pages': [
+    'page:read',
+    'page:create',
+    'page:edit',
+    'page:delete',
+    'page:archive',
+    'page:version',
+    'page:restore-version',
+    'page:share',
+    'page:transclude'
+  ],
+  'Tasks': [
+    'task:read',
+    'task:create',
+    'task:edit',
+    'task:delete',
+    'task:assign',
+    'task:close',
+    'task:comment'
+  ],
+  'Flows': [
+    'flow:read',
+    'flow:create',
+    'flow:edit',
+    'flow:delete',
+    'flow:publish',
+    'flow:execute',
+    'flow:comment'
+  ],
+  'Vaults': [
+    'vault:read',
+    'vault:create',
+    'vault:edit',
+    'vault:delete',
+    'vault:archive',
+    'vault:manage-members',
+    'vault:manage-roles'
+  ],
+  'Users': [
+    'user:read',
+    'user:invite',
+    'user:edit',
+    'user:delete',
+    'user:lock',
+    'user:unlock',
+    'user:revoke-sessions'
+  ],
+  'Audit': [
+    'audit:read-own',
+    'audit:read-all',
+    'audit:export-all',
+    'audit:read-pii'
+  ],
+  'Instance': [
+    'instance:read',
+    'instance:configure',
+    'instance:backup',
+    'instance:restore'
+  ],
+  'Notifications': [
+    'notification:read',
+    'notification:configure-own',
+    'notification:configure-all'
+  ],
   'Invitations': ['invitation:create', 'invitation:revoke', 'invitation:list'],
-  'Groups': ['group:read', 'group:create', 'group:rename', 'group:delete', 'group:add-member', 'group:remove-member', 'group:assign-role', 'group:unassign-role'],
-  'Roles': ['role:read', 'role:create', 'role:update', 'role:delete', 'role:set-permission', 'role:remove-permission', 'role:assign-user', 'role:unassign-user'],
+  'Groups': [
+    'group:read',
+    'group:create',
+    'group:rename',
+    'group:delete',
+    'group:add-member',
+    'group:remove-member',
+    'group:assign-role',
+    'group:unassign-role'
+  ],
+  'Roles': [
+    'role:read',
+    'role:create',
+    'role:update',
+    'role:delete',
+    'role:set-permission',
+    'role:remove-permission',
+    'role:assign-user',
+    'role:unassign-user'
+  ],
 };
 
 class AdminRolesScreen extends StatefulWidget {
@@ -38,12 +112,23 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() {
+      _loading = true;
+      _error = null;
+    });
     try {
       final roles = await widget.userService.listCustomRoles();
-      if (mounted) setState(() { _roles = roles; _loading = false; });
+      if (mounted)
+        setState(() {
+          _roles = roles;
+          _loading = false;
+        });
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _loading = false; });
+      if (mounted)
+        setState(() {
+          _error = 'Could not load roles. Please try again.';
+          _loading = false;
+        });
     }
   }
 
@@ -144,7 +229,8 @@ class _RoleRow extends StatelessWidget {
               children: [
                 Row(
                   children: [
-                    Text(role.name, style: Theme.of(context).textTheme.bodyLarge),
+                    Text(role.name,
+                        style: Theme.of(context).textTheme.bodyLarge),
                     if (role.isSystem) ...[
                       const SizedBox(width: 8),
                       _SystemRoleBadge(),
@@ -155,7 +241,9 @@ class _RoleRow extends StatelessWidget {
                 Row(
                   children: [
                     _InfoChip(
-                      label: role.priority != null ? 'Priority ${role.priority}' : 'No priority',
+                      label: role.priority != null
+                          ? 'Priority ${role.priority}'
+                          : 'No priority',
                       color: role.priority != null
                           ? colorScheme.primaryContainer
                           : colorScheme.surfaceContainerHighest,
@@ -198,7 +286,8 @@ class _InfoChip extends StatelessWidget {
   final Color color;
   final Color textColor;
 
-  const _InfoChip({required this.label, required this.color, required this.textColor});
+  const _InfoChip(
+      {required this.label, required this.color, required this.textColor});
 
   @override
   Widget build(BuildContext context) {
@@ -210,7 +299,8 @@ class _InfoChip extends StatelessWidget {
       ),
       child: Text(
         label,
-        style: Theme.of(context).textTheme.labelSmall?.copyWith(color: textColor),
+        style:
+            Theme.of(context).textTheme.labelSmall?.copyWith(color: textColor),
       ),
     );
   }
@@ -259,7 +349,10 @@ class _CreateRoleDialogState extends State<_CreateRoleDialog> {
     }
 
     final desc = _descCtrl.text.trim();
-    setState(() { _saving = true; _error = null; });
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await widget.userService.createCustomRole(
         name,
@@ -271,7 +364,11 @@ class _CreateRoleDialogState extends State<_CreateRoleDialog> {
         widget.onCreated();
       }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _saving = false; });
+      if (mounted)
+        setState(() {
+          _error = e.toString().replaceFirst('Exception: ', '');
+          _saving = false;
+        });
     }
   }
 
@@ -302,21 +399,30 @@ class _CreateRoleDialogState extends State<_CreateRoleDialog> {
             const SizedBox(height: 12),
             TextField(
               controller: _descCtrl,
-              decoration: const InputDecoration(labelText: 'Description (optional)'),
+              decoration:
+                  const InputDecoration(labelText: 'Description (optional)'),
               maxLines: 2,
             ),
             if (_error != null) ...[
               const SizedBox(height: 8),
-              Text(_error!, style: TextStyle(color: Theme.of(context).colorScheme.error)),
+              Text(_error!,
+                  style: TextStyle(color: Theme.of(context).colorScheme.error)),
             ],
           ],
         ),
       ),
       actions: [
-        TextButton(onPressed: () => Navigator.of(context).pop(), child: const Text('Cancel')),
+        TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: const Text('Cancel')),
         FilledButton(
           onPressed: _saving ? null : _submit,
-          child: _saving ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2)) : const Text('Create'),
+          child: _saving
+              ? const SizedBox(
+                  width: 16,
+                  height: 16,
+                  child: CircularProgressIndicator(strokeWidth: 2))
+              : const Text('Create'),
         ),
       ],
     );
@@ -381,7 +487,8 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
         setState(() {
           _role = fresh;
           _nameCtrl.text = fresh.name;
-          _priorityCtrl.text = fresh.priority != null ? '${fresh.priority}' : '';
+          _priorityCtrl.text =
+              fresh.priority != null ? '${fresh.priority}' : '';
           _descCtrl.text = fresh.description ?? '';
           _permMap = {for (final p in fresh.permissions) p.action: p.effect};
         });
@@ -403,7 +510,10 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
     }
 
     final desc = _descCtrl.text.trim();
-    setState(() { _saving = true; _error = null; });
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
     try {
       await widget.userService.updateCustomRole(
         _role.id,
@@ -416,7 +526,8 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
       await _reload();
       widget.onChanged();
     } catch (e) {
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted)
+        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     } finally {
       if (mounted) setState(() => _saving = false);
     }
@@ -427,11 +538,15 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Delete role?'),
-        content: Text('Delete "${_role.name}"? This will remove all assignments.'),
+        content:
+            Text('Delete "${_role.name}"? This will remove all assignments.'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Cancel')),
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
           FilledButton(
-            style: FilledButton.styleFrom(backgroundColor: Theme.of(context).colorScheme.error),
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error),
             onPressed: () => Navigator.pop(context, true),
             child: const Text('Delete'),
           ),
@@ -448,7 +563,11 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
         widget.onChanged();
       }
     } catch (e) {
-      if (mounted) setState(() { _error = e.toString(); _deleting = false; });
+      if (mounted)
+        setState(() {
+          _error = e.toString().replaceFirst('Exception: ', '');
+          _deleting = false;
+        });
     }
   }
 
@@ -465,13 +584,15 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
       if (effect.isEmpty) {
         await widget.userService.removeCustomRolePermission(_role.id, action);
       } else {
-        await widget.userService.setCustomRolePermission(_role.id, action, effect);
+        await widget.userService
+            .setCustomRolePermission(_role.id, action, effect);
       }
       widget.onChanged();
     } catch (e) {
       // Revert on failure
       await _reload();
-      if (mounted) setState(() => _error = e.toString());
+      if (mounted)
+        setState(() => _error = e.toString().replaceFirst('Exception: ', ''));
     }
   }
 
@@ -491,7 +612,8 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
               padding: const EdgeInsets.fromLTRB(24, 20, 16, 0),
               child: Row(
                 children: [
-                  Text('Manage Role', style: Theme.of(context).textTheme.titleLarge),
+                  Text('Manage Role',
+                      style: Theme.of(context).textTheme.titleLarge),
                   const Spacer(),
                   IconButton(
                     icon: const Icon(Icons.close),
@@ -517,7 +639,9 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
                           color: colorScheme.errorContainer,
                           borderRadius: BorderRadius.circular(8),
                         ),
-                        child: Text(_error!, style: TextStyle(color: colorScheme.onErrorContainer)),
+                        child: Text(_error!,
+                            style:
+                                TextStyle(color: colorScheme.onErrorContainer)),
                       ),
                       const SizedBox(height: 12),
                     ],
@@ -527,7 +651,8 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
                     const SizedBox(height: 12),
                     TextField(
                       controller: _nameCtrl,
-                      decoration: const InputDecoration(labelText: 'Role name', border: OutlineInputBorder()),
+                      decoration: const InputDecoration(
+                          labelText: 'Role name', border: OutlineInputBorder()),
                     ),
                     const SizedBox(height: 12),
                     TextField(
@@ -535,7 +660,8 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
                       keyboardType: TextInputType.number,
                       decoration: const InputDecoration(
                         labelText: 'Priority (optional)',
-                        hintText: 'Lower number = higher priority; blank = lowest',
+                        hintText:
+                            'Lower number = higher priority; blank = lowest',
                         border: OutlineInputBorder(),
                       ),
                     ),
@@ -562,14 +688,19 @@ class _RoleManageDialogState extends State<_RoleManageDialog> {
                         OutlinedButton.icon(
                           icon: const Icon(Icons.delete_outline, size: 18),
                           label: const Text('Delete role'),
-                          style: OutlinedButton.styleFrom(foregroundColor: colorScheme.error),
+                          style: OutlinedButton.styleFrom(
+                              foregroundColor: colorScheme.error),
                           onPressed: _deleting ? null : _delete,
                         ),
                         const Spacer(),
                         FilledButton(
                           onPressed: _saving ? null : _saveDetails,
                           child: _saving
-                              ? const SizedBox(width: 16, height: 16, child: CircularProgressIndicator(strokeWidth: 2))
+                              ? const SizedBox(
+                                  width: 16,
+                                  height: 16,
+                                  child:
+                                      CircularProgressIndicator(strokeWidth: 2))
                               : const Text('Save'),
                         ),
                       ],
@@ -652,7 +783,8 @@ class _PermissionGroupState extends State<_PermissionGroup> {
   bool _expanded = false;
 
   // Count set permissions in this group
-  int get _setCount => widget.actions.where((a) => widget.permMap.containsKey(a)).length;
+  int get _setCount =>
+      widget.actions.where((a) => widget.permMap.containsKey(a)).length;
 
   @override
   Widget build(BuildContext context) {
@@ -675,7 +807,10 @@ class _PermissionGroupState extends State<_PermissionGroup> {
                 const SizedBox(width: 8),
                 Text(
                   widget.groupName,
-                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                  style: Theme.of(context)
+                      .textTheme
+                      .bodyMedium
+                      ?.copyWith(fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(width: 8),
                 if (_setCount > 0)
@@ -705,7 +840,8 @@ class _PermissionRow extends StatelessWidget {
   final String effect; // "" | "allow" | "allow_cascade" | "deny"
   final Future<void> Function(String action, String effect) onSet;
 
-  const _PermissionRow({required this.action, required this.effect, required this.onSet});
+  const _PermissionRow(
+      {required this.action, required this.effect, required this.onSet});
 
   // Pretty label: strip the prefix (e.g. "page:read" -> "read")
   String get _label {
@@ -769,7 +905,8 @@ class _EffectToggle extends StatelessWidget {
       style: ButtonStyle(
         tapTargetSize: MaterialTapTargetSize.shrinkWrap,
         visualDensity: VisualDensity.compact,
-        padding: const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 6)),
+        padding:
+            const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 6)),
       ),
       showSelectedIcon: false,
     );
@@ -793,7 +930,8 @@ class _SystemRoleBadge extends StatelessWidget {
       child: Row(
         mainAxisSize: MainAxisSize.min,
         children: [
-          Icon(Icons.lock_outline, size: 11, color: colorScheme.onTertiaryContainer),
+          Icon(Icons.lock_outline,
+              size: 11, color: colorScheme.onTertiaryContainer),
           const SizedBox(width: 3),
           Text(
             'System',

@@ -40,6 +40,9 @@ type InstanceState struct {
 	// ContentWidth controls the width of the main content area site-wide.
 	// Valid values: "narrow" | "wide" | "max". Defaults to "wide".
 	ContentWidth string
+	// UI button visibility
+	ShowGithubButton bool
+	ShowDonateButton bool
 }
 
 // InstanceSettingsParams holds fields for a partial PATCH of instance settings.
@@ -53,6 +56,8 @@ type InstanceSettingsParams struct {
 	PasswordRequireSymbols   *bool
 	PasswordHistoryCount     *int
 	ContentWidth             *string
+	ShowGithubButton         *bool
+	ShowDonateButton         *bool
 }
 
 // CreateOwnerParams carries all fields required to atomically create the
