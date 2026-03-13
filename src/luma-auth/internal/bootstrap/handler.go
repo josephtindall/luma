@@ -310,7 +310,7 @@ func (h *Handler) GetPublicUISettings(w http.ResponseWriter, r *http.Request) {
 		httputil.WriteJSON(w, http.StatusOK, map[string]any{
 			"show_github_button": true,
 			"show_donate_button": true,
-			"content_width":      "wide",
+			"content_width":      "max",
 		})
 		return
 	}
@@ -344,7 +344,6 @@ func errorCode(err error) string {
 		return "INTERNAL_ERROR"
 	}
 }
-
 
 // remoteIP strips the port from r.RemoteAddr so it can be stored as INET.
 func remoteIP(r *http.Request) string {
