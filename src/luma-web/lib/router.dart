@@ -3,11 +3,14 @@ import 'package:go_router/go_router.dart';
 
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
+import 'services/page_service.dart';
 import 'services/theme_notifier.dart';
 import 'services/user_service.dart';
 import 'screens/setup/setup_wizard_screen.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
+import 'screens/pages/vault_pages_screen.dart';
+import 'screens/pages/page_editor_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/settings/settings_layout.dart';
 import 'screens/admin/admin_layout.dart';
@@ -27,6 +30,7 @@ GoRouter buildRouter(
   ApiClient apiClient,
   UserService userService,
   ThemeNotifier themeNotifier,
+  PageService pageService,
 ) {
   return GoRouter(
     refreshListenable: authService,
@@ -117,6 +121,7 @@ GoRouter buildRouter(
           auth: authService,
           userService: userService,
           themeNotifier: themeNotifier,
+          pageService: pageService,
           child: child,
         ),
         routes: [
@@ -124,6 +129,20 @@ GoRouter buildRouter(
             path: '/home',
             builder: (_, __) => HomeScreen(
               api: apiClient,
+            ),
+          ),
+          GoRoute(
+            path: '/vaults/:slug',
+            builder: (_, state) => VaultPagesScreen(
+              slug: state.pathParameters['slug']!,
+              pageService: pageService,
+            ),
+          ),
+          GoRoute(
+            path: '/pages/:shortId',
+            builder: (_, state) => PageEditorScreen(
+              shortId: state.pathParameters['shortId']!,
+              pageService: pageService,
             ),
           ),
           GoRoute(

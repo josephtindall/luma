@@ -17,6 +17,8 @@ import (
 
 	"github.com/josephtindall/luma/internal/auth"
 	"github.com/josephtindall/luma/internal/migrate"
+	pagesPkg "github.com/josephtindall/luma/internal/pages"
+	pagesPostgres "github.com/josephtindall/luma/internal/pages/postgres"
 	vaultsPkg "github.com/josephtindall/luma/internal/vaults"
 	vaultsPostgres "github.com/josephtindall/luma/internal/vaults/postgres"
 	"github.com/josephtindall/luma/pkg/authz"
@@ -76,6 +78,11 @@ func run() error {
 	vaultService := vaultsPkg.NewService(vaultRepo)
 	vaultHandler := vaultsPkg.NewHandler(vaultService, authorizer)
 
+	// Pages
+	pageRepo := pagesPostgres.NewRepository(pool)
+	pageService := pagesPkg.NewService(pageRepo)
+	pageHandler := pagesPkg.NewHandler(pageService, authorizer)
+
 	// Router
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
@@ -128,6 +135,7 @@ func run() error {
 		r.Use(authMiddleware.Authenticate)
 		r.Use(ensureVaultMw)
 		r.Mount("/vaults", vaultHandler.Routes())
+		r.Mount("/pages", pageHandler.Routes())
 		r.Mount("/user", authHandler.UserRoutes())
 		r.Mount("/admin", authHandler.AdminRoutes())
 	})

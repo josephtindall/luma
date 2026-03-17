@@ -10,6 +10,7 @@ import 'package:flutter/rendering.dart';
 import 'package:go_router/go_router.dart';
 
 import '../services/auth_service.dart';
+import '../services/page_service.dart';
 import '../services/theme_notifier.dart';
 import '../services/user_service.dart';
 import '../widgets/user_avatar.dart';
@@ -45,6 +46,7 @@ class MainLayout extends StatefulWidget {
   final AuthService auth;
   final UserService userService;
   final ThemeNotifier themeNotifier;
+  final PageService pageService;
 
   const MainLayout({
     super.key,
@@ -52,6 +54,7 @@ class MainLayout extends StatefulWidget {
     required this.auth,
     required this.userService,
     required this.themeNotifier,
+    required this.pageService,
   });
 
   @override
@@ -61,6 +64,7 @@ class MainLayout extends StatefulWidget {
 class _MainLayoutState extends State<MainLayout> {
   late bool _isSidebarExpanded;
   bool _isHoveringLogo = false;
+  final Set<String> _expandedVaults = {};
 
   /// Key on the RepaintBoundary wrapping the Scaffold — used to capture the
   /// screen before switching themes.
@@ -271,23 +275,30 @@ class _MainLayoutState extends State<MainLayout> {
                       children: [
                         const SizedBox(height: 16),
                         _buildNavItem(
-                          icon: Icons.folder_outlined,
-                          activeIcon: Icons.folder,
-                          label: 'My Space',
+                          icon: Icons.grid_view_outlined,
+                          activeIcon: Icons.grid_view,
+                          label: 'All Items',
                           isSelected: GoRouterState.of(context)
                               .uri
-                              .path
-                              .startsWith('/home'),
+                              .path == '/home',
                           onTap: () => context.go('/home'),
                         ),
+                        const Divider(height: 1, indent: 12, endIndent: 12),
+                        const SizedBox(height: 4),
+                        Expanded(
+                          child: ListenableBuilder(
+                            listenable: widget.pageService,
+                            builder: (context, _) => _buildVaultTree(context),
+                          ),
+                        ),
+                        const Divider(height: 1, indent: 12, endIndent: 12),
                         _buildNavItem(
-                          icon: Icons.people_outline,
-                          activeIcon: Icons.people,
-                          label: 'Shared',
+                          icon: Icons.delete_outline,
+                          activeIcon: Icons.delete,
+                          label: 'Trash',
                           isSelected: false,
                           onTap: () {},
                         ),
-                        const Spacer(),
                         ListenableBuilder(
                           listenable: widget.userService,
                           builder: (context, _) {
@@ -332,6 +343,264 @@ class _MainLayoutState extends State<MainLayout> {
               ),
             ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Future<void> _createPageInVault(String vaultId) async {
+    setState(() => _expandedVaults.add(vaultId));
+    try {
+      final page = await widget.pageService.createPage(vaultId);
+      if (mounted) context.go('/pages/${page.shortId}');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not create page: $e')),
+        );
+      }
+    }
+  }
+
+  Future<void> _showCreateVaultDialog() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('New Vault'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: const InputDecoration(
+            labelText: 'Vault name',
+            hintText: 'e.g. Work',
+          ),
+          textInputAction: TextInputAction.done,
+          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: const Text('Cancel'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+            child: const Text('Create'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null || result.isEmpty) return;
+    try {
+      final vault = await widget.pageService.createVault(result);
+      if (mounted) context.go('/vaults/${vault.slug}');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Could not create vault: $e')),
+        );
+      }
+    }
+  }
+
+  Widget _buildVaultTree(BuildContext context) {
+    if (!_isSidebarExpanded) {
+      final currentPath = GoRouterState.of(context).uri.path;
+      return Align(
+        alignment: Alignment.topLeft,
+        child: _buildNavItem(
+          icon: Icons.description_outlined,
+          activeIcon: Icons.description,
+          label: 'Pages',
+          isSelected: currentPath.startsWith('/vaults') ||
+              currentPath.startsWith('/pages'),
+          onTap: _toggleSidebar,
+        ),
+      );
+    }
+
+    if (widget.pageService.isLoadingVaults) {
+      return const Center(
+        child: SizedBox(
+          width: 20,
+          height: 20,
+          child: CircularProgressIndicator(strokeWidth: 2),
+        ),
+      );
+    }
+
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+
+    final items = <Widget>[];
+
+    // Section header: "Vaults" label + "New Vault" button.
+    items.add(Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 4, 4),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              'Vaults',
+              style: theme.textTheme.labelSmall?.copyWith(
+                color: colorScheme.onSurfaceVariant,
+                letterSpacing: 0.8,
+              ),
+            ),
+          ),
+          IconButton(
+            icon: const Icon(Icons.add, size: 16),
+            tooltip: 'New vault',
+            visualDensity: VisualDensity.compact,
+            style: IconButton.styleFrom(
+              minimumSize: const Size(28, 28),
+              padding: EdgeInsets.zero,
+              tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+            ),
+            onPressed: _showCreateVaultDialog,
+          ),
+        ],
+      ),
+    ));
+
+    for (final vault in widget.pageService.vaults) {
+      final isExpanded = _expandedVaults.contains(vault.id);
+      items.add(_buildVaultRow(context, vault, isExpanded));
+      if (isExpanded) {
+        final pages = widget.pageService.pagesByVault[vault.id] ?? [];
+        for (final page in pages) {
+          items.add(_buildPageItem(context, page));
+        }
+      }
+    }
+    return ListView(
+      padding: const EdgeInsets.only(bottom: 8),
+      children: items,
+    );
+  }
+
+  Widget _buildVaultRow(
+      BuildContext context, VaultSummary vault, bool isExpanded) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
+      child: Material(
+        color: Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: colorScheme.surfaceContainerHighest,
+          onTap: () {
+            setState(() => _expandedVaults.add(vault.id));
+            widget.pageService.loadPagesForVault(vault.id);
+            context.go('/vaults/${vault.slug}');
+          },
+          child: Container(
+            height: 40,
+            padding: const EdgeInsets.only(left: 8, right: 4),
+            child: Row(
+              children: [
+                Icon(Icons.folder_outlined,
+                    size: 18, color: colorScheme.onSurfaceVariant),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    vault.name,
+                    style: theme.textTheme.bodyMedium
+                        ?.copyWith(color: colorScheme.onSurface),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+                IconButton(
+                  icon: const Icon(Icons.add),
+                  iconSize: 16,
+                  tooltip: 'New page',
+                  visualDensity: VisualDensity.compact,
+                  style: IconButton.styleFrom(
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    minimumSize: const Size(28, 28),
+                    padding: EdgeInsets.zero,
+                  ),
+                  onPressed: () => _createPageInVault(vault.id),
+                ),
+                IconButton(
+                  icon: Icon(
+                    isExpanded ? Icons.expand_less : Icons.expand_more,
+                    size: 16,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                  visualDensity: VisualDensity.compact,
+                  style: IconButton.styleFrom(
+                    minimumSize: const Size(28, 28),
+                    padding: EdgeInsets.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      if (isExpanded) {
+                        _expandedVaults.remove(vault.id);
+                      } else {
+                        _expandedVaults.add(vault.id);
+                        widget.pageService.loadPagesForVault(vault.id);
+                      }
+                    });
+                  },
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildPageItem(BuildContext context, PageSummary page) {
+    final theme = Theme.of(context);
+    final colorScheme = theme.colorScheme;
+    final isSelected =
+        GoRouterState.of(context).uri.path == '/pages/${page.shortId}';
+    return Padding(
+      padding: const EdgeInsets.only(left: 20, right: 12, top: 2, bottom: 2),
+      child: Material(
+        color: isSelected ? colorScheme.secondaryContainer : Colors.transparent,
+        borderRadius: BorderRadius.circular(8),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(8),
+          hoverColor: colorScheme.surfaceContainerHighest,
+          onTap: () => context.go('/pages/${page.shortId}'),
+          child: Container(
+            height: 36,
+            padding: const EdgeInsets.symmetric(horizontal: 8),
+            alignment: Alignment.centerLeft,
+            child: Row(
+              children: [
+                Icon(
+                  Icons.article_outlined,
+                  size: 16,
+                  color: isSelected
+                      ? colorScheme.onSecondaryContainer
+                      : colorScheme.onSurfaceVariant,
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    page.title,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: isSelected
+                          ? colorScheme.onSecondaryContainer
+                          : colorScheme.onSurface,
+                      fontWeight: isSelected
+                          ? FontWeight.w600
+                          : FontWeight.normal,
+                    ),
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ),
+              ],
+            ),
+          ),
         ),
       ),
     );

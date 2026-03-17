@@ -1,8 +1,11 @@
+import 'package:appflowy_editor/appflowy_editor.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_web_plugins/url_strategy.dart';
 
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
+import 'services/page_service.dart';
 import 'services/theme_notifier.dart';
 import 'services/user_service.dart';
 import 'router.dart';
@@ -19,9 +22,13 @@ void main() async {
   final authService = AuthService(baseUrl);
   final apiClient = ApiClient(authService);
   final userService = UserService(apiClient);
+  final pageService = PageService(apiClient);
   final themeNotifier = ThemeNotifier();
 
-  authService.onSessionCleared = userService.clear;
+  authService.onSessionCleared = () {
+    userService.clear();
+    pageService.clear();
+  };
 
   await authService.initialize();
 
@@ -29,6 +36,7 @@ void main() async {
     await Future.wait([
       userService.loadProfile(),
       userService.loadPreferences(),
+      pageService.loadVaults(),
     ]);
   }
 
@@ -36,6 +44,7 @@ void main() async {
     authService: authService,
     apiClient: apiClient,
     userService: userService,
+    pageService: pageService,
     themeNotifier: themeNotifier,
   ));
 }
@@ -46,6 +55,7 @@ class LumaApp extends StatelessWidget {
   final AuthService authService;
   final ApiClient apiClient;
   final UserService userService;
+  final PageService pageService;
   final ThemeNotifier themeNotifier;
 
   const LumaApp({
@@ -53,13 +63,19 @@ class LumaApp extends StatelessWidget {
     required this.authService,
     required this.apiClient,
     required this.userService,
+    required this.pageService,
     required this.themeNotifier,
   });
 
   @override
   Widget build(BuildContext context) {
-    final router =
-        buildRouter(authService, apiClient, userService, themeNotifier);
+    final router = buildRouter(
+      authService,
+      apiClient,
+      userService,
+      themeNotifier,
+      pageService,
+    );
 
     return ListenableBuilder(
       listenable: themeNotifier,
@@ -67,6 +83,14 @@ class LumaApp extends StatelessWidget {
         return MaterialApp.router(
           title: 'Luma',
           themeMode: themeNotifier.themeMode,
+          localizationsDelegates: const [
+            AppFlowyEditorLocalizations.delegate,
+            GlobalMaterialLocalizations.delegate,
+            GlobalCupertinoLocalizations.delegate,
+            GlobalWidgetsLocalizations.delegate,
+          ],
+          supportedLocales:
+              AppFlowyEditorLocalizations.delegate.supportedLocales,
           theme: ThemeData(
             colorScheme: ColorScheme.fromSeed(
               seedColor: _seedColor,
