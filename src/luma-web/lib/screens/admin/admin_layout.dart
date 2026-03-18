@@ -29,6 +29,8 @@ class AdminLayout extends StatelessWidget {
         _AdminTab(label: 'Invitations', route: '/admin/invites'),
       if (userService.canManageGroups) _AdminTab(label: 'Groups', route: '/admin/groups'),
       if (userService.canManageRoles) _AdminTab(label: 'Roles', route: '/admin/roles'),
+      if (userService.canManageVaults)
+        _AdminTab(label: 'Vaults', route: '/admin/vaults'),
       if (userService.canManageInstanceSettings)
         _AdminTab(label: 'Settings', route: '/admin/settings'),
       if (userService.canViewAuditLog)

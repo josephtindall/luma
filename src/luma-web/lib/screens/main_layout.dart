@@ -364,36 +364,54 @@ class _MainLayoutState extends State<MainLayout> {
 
   Future<void> _showCreateVaultDialog() async {
     final controller = TextEditingController();
+    bool isPrivate = true;
     final result = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('New Vault'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Vault name',
-            hintText: 'e.g. Work',
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) => AlertDialog(
+          title: const Text('New Vault'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: controller,
+                autofocus: true,
+                decoration: const InputDecoration(
+                  labelText: 'Vault name',
+                  hintText: 'e.g. Work',
+                ),
+                textInputAction: TextInputAction.done,
+                onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+              ),
+              SwitchListTile(
+                title: const Text('Private'),
+                subtitle: const Text('Only members can access'),
+                value: isPrivate,
+                onChanged: (v) => setDialogState(() => isPrivate = v),
+                contentPadding: EdgeInsets.zero,
+              ),
+            ],
           ),
-          textInputAction: TextInputAction.done,
-          onSubmitted: (v) => Navigator.of(ctx).pop(v.trim()),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+              child: const Text('Create'),
+            ),
+          ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: const Text('Cancel'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-            child: const Text('Create'),
-          ),
-        ],
       ),
     );
     controller.dispose();
     if (result == null || result.isEmpty) return;
     try {
-      final vault = await widget.pageService.createVault(result);
+      final vault = await widget.pageService.createVault(
+        result,
+        isPrivate: isPrivate,
+      );
       if (mounted) context.go('/vaults/${vault.slug}');
     } catch (e) {
       if (mounted) {

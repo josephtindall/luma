@@ -12,15 +12,22 @@ import (
 	"github.com/josephtindall/luma/pkg/errors"
 )
 
+// VaultPrivacyChecker allows the page handler to determine vault visibility
+// without a direct dependency on the vaults package.
+type VaultPrivacyChecker interface {
+	IsVaultPrivate(ctx context.Context, vaultID string) (bool, error)
+}
+
 // Handler handles HTTP requests for pages.
 type Handler struct {
-	service *Service
-	authz   *authz.Authorizer
+	service      *Service
+	authz        *authz.Authorizer
+	vaultChecker VaultPrivacyChecker
 }
 
 // NewHandler creates a new page handler.
-func NewHandler(service *Service, authorizer *authz.Authorizer) *Handler {
-	return &Handler{service: service, authz: authorizer}
+func NewHandler(service *Service, authorizer *authz.Authorizer, vaultChecker VaultPrivacyChecker) *Handler {
+	return &Handler{service: service, authz: authorizer, vaultChecker: vaultChecker}
 }
 
 // Routes returns a chi router with all page routes.
@@ -44,8 +51,20 @@ func (h *Handler) Routes() chi.Router {
 	return r
 }
 
-// listPages returns all pages in a vault. Access is filtered by vault membership
-// in the authz layer; no explicit RequireCan needed per the plan.
+// isPrivateVault returns true if the vault requires explicit membership.
+// Defaults to true (private) on error to fail-safe.
+func (h *Handler) isPrivateVault(ctx context.Context, vaultID string) bool {
+	if h.vaultChecker == nil {
+		return true
+	}
+	priv, err := h.vaultChecker.IsVaultPrivate(ctx, vaultID)
+	if err != nil {
+		return true
+	}
+	return priv
+}
+
+// listPages returns all pages in a vault.
 func (h *Handler) listPages(w http.ResponseWriter, r *http.Request) {
 	identity := auth.IdentityFromContext(r.Context())
 	if identity == nil {
@@ -57,6 +76,16 @@ func (h *Handler) listPages(w http.ResponseWriter, r *http.Request) {
 	if vaultID == "" {
 		http.Error(w, `{"error":"vault_id query parameter required"}`, http.StatusBadRequest)
 		return
+	}
+
+	if h.isPrivateVault(r.Context(), vaultID) {
+		if !h.authz.RequireCan(r.Context(), w, "page:read", authz.Resource{
+			Type:    "vault",
+			ID:      vaultID,
+			VaultID: vaultID,
+		}) {
+			return
+		}
 	}
 
 	includeArchived := r.URL.Query().Get("include_archived") == "true"
@@ -108,12 +137,14 @@ func (h *Handler) getPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authz.RequireCan(r.Context(), w, "page:read", authz.Resource{
-		Type:    "page",
-		ID:      shortID,
-		VaultID: page.VaultID,
-	}) {
-		return
+	if h.isPrivateVault(r.Context(), page.VaultID) {
+		if !h.authz.RequireCan(r.Context(), w, "page:read", authz.Resource{
+			Type:    "page",
+			ID:      shortID,
+			VaultID: page.VaultID,
+		}) {
+			return
+		}
 	}
 
 	writeJSON(w, http.StatusOK, page)
@@ -235,12 +266,14 @@ func (h *Handler) listRevisions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authz.RequireCan(r.Context(), w, "page:version", authz.Resource{
-		Type:    "page",
-		ID:      shortID,
-		VaultID: page.VaultID,
-	}) {
-		return
+	if h.isPrivateVault(r.Context(), page.VaultID) {
+		if !h.authz.RequireCan(r.Context(), w, "page:version", authz.Resource{
+			Type:    "page",
+			ID:      shortID,
+			VaultID: page.VaultID,
+		}) {
+			return
+		}
 	}
 
 	revs, err := h.service.ListRevisions(r.Context(), shortID)
@@ -321,12 +354,14 @@ func (h *Handler) getRevision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authz.RequireCan(r.Context(), w, "page:version", authz.Resource{
-		Type:    "page",
-		ID:      shortID,
-		VaultID: page.VaultID,
-	}) {
-		return
+	if h.isPrivateVault(r.Context(), page.VaultID) {
+		if !h.authz.RequireCan(r.Context(), w, "page:version", authz.Resource{
+			Type:    "page",
+			ID:      shortID,
+			VaultID: page.VaultID,
+		}) {
+			return
+		}
 	}
 
 	rev, err := h.service.GetRevision(r.Context(), shortID, revID)
@@ -380,12 +415,14 @@ func (h *Handler) listTransclusions(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authz.RequireCan(r.Context(), w, "page:read", authz.Resource{
-		Type:    "page",
-		ID:      shortID,
-		VaultID: page.VaultID,
-	}) {
-		return
+	if h.isPrivateVault(r.Context(), page.VaultID) {
+		if !h.authz.RequireCan(r.Context(), w, "page:read", authz.Resource{
+			Type:    "page",
+			ID:      shortID,
+			VaultID: page.VaultID,
+		}) {
+			return
+		}
 	}
 
 	pages, err := h.service.ListTransclusions(r.Context(), shortID)

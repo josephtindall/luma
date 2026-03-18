@@ -20,6 +20,8 @@ import 'screens/admin/admin_settings_screen.dart';
 import 'screens/admin/admin_groups_screen.dart';
 import 'screens/admin/admin_roles_screen.dart';
 import 'screens/admin/admin_events_screen.dart';
+import 'screens/admin/admin_vaults_screen.dart';
+import 'screens/pages/vault_settings_screen.dart';
 import 'screens/register/register_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/auth/recovery_code_screen.dart';
@@ -139,6 +141,13 @@ GoRouter buildRouter(
             ),
           ),
           GoRoute(
+            path: '/vaults/:slug/settings',
+            builder: (_, state) => VaultSettingsScreen(
+              slug: state.pathParameters['slug']!,
+              pageService: pageService,
+            ),
+          ),
+          GoRoute(
             path: '/pages/:shortId',
             builder: (_, state) => PageEditorScreen(
               shortId: state.pathParameters['shortId']!,
@@ -199,6 +208,20 @@ GoRouter buildRouter(
                 path: '/admin/events',
                 builder: (_, __) =>
                     AdminEventsScreen(userService: userService),
+              ),
+              GoRoute(
+                path: '/admin/vaults',
+                builder: (_, __) =>
+                    AdminVaultsScreen(userService: userService),
+              ),
+              GoRoute(
+                path: '/admin/vaults/:id/settings',
+                builder: (_, state) => VaultSettingsScreen(
+                  vaultId: state.pathParameters['id']!,
+                  pageService: pageService,
+                  userService: userService,
+                  adminMode: true,
+                ),
               ),
             ],
           ),

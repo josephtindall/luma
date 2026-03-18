@@ -20,6 +20,7 @@ class VaultPagesScreen extends StatefulWidget {
 class _VaultPagesScreenState extends State<VaultPagesScreen> {
   bool _loading = false;
   String? _error;
+  bool _canManageMembers = false;
 
   VaultSummary? get _vault {
     try {
@@ -44,13 +45,22 @@ class _VaultPagesScreenState extends State<VaultPagesScreen> {
   Future<void> _ensureLoaded() async {
     final vaultId = _vault?.id;
     if (vaultId == null) return;
-    if (widget.pageService.pagesByVault.containsKey(vaultId)) return;
     setState(() {
       _loading = true;
       _error = null;
     });
     try {
-      await widget.pageService.loadPagesForVault(vaultId);
+      await Future.wait([
+        if (!widget.pageService.pagesByVault.containsKey(vaultId))
+          widget.pageService.loadPagesForVault(vaultId),
+        widget.pageService
+            .fetchVaultPermissions(vaultId)
+            .then((p) {
+          if (mounted) {
+            setState(() => _canManageMembers = p['can_manage_members'] == true);
+          }
+        }),
+      ]);
     } catch (e) {
       if (mounted) setState(() => _error = e.toString());
     } finally {
@@ -87,6 +97,12 @@ class _VaultPagesScreenState extends State<VaultPagesScreen> {
       appBar: AppBar(
         title: Text(vault.name),
         actions: [
+          if (_canManageMembers)
+            IconButton(
+              tooltip: 'Vault settings',
+              icon: const Icon(Icons.settings_outlined),
+              onPressed: () => context.go('/vaults/${widget.slug}/settings'),
+            ),
           IconButton(
             tooltip: 'New page',
             icon: const Icon(Icons.add),

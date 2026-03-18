@@ -66,6 +66,17 @@ func (m *mockRepository) Archive(_ context.Context, id, _ string) error {
 	return nil
 }
 
+func (m *mockRepository) ListAll(_ context.Context, includeArchived bool) ([]*Vault, error) {
+	var result []*Vault
+	for _, v := range m.vaults {
+		if !includeArchived && v.IsArchived {
+			continue
+		}
+		result = append(result, v)
+	}
+	return result, nil
+}
+
 func (m *mockRepository) HasPersonalVault(_ context.Context, userID string) (bool, error) {
 	for _, v := range m.vaults {
 		if v.OwnerID == userID && v.Type == VaultTypePersonal {
@@ -144,6 +155,35 @@ func (m *mockRepository) GetMember(_ context.Context, vaultID, userID string) (*
 
 func (m *mockRepository) CountAdmins(_ context.Context, vaultID string) (int, error) {
 	return m.adminCounts[vaultID], nil
+}
+
+func (m *mockRepository) GetSystemSharedVaultID(_ context.Context) (string, error) {
+	for _, v := range m.vaults {
+		if v.OwnerID == "system" && !v.IsPrivate && !v.IsArchived {
+			return v.ID, nil
+		}
+	}
+	return "", errors.ErrNotFound
+}
+
+func (m *mockRepository) AddGroupMember(_ context.Context, _ *VaultGroupMember) error {
+	return nil
+}
+
+func (m *mockRepository) RemoveGroupMember(_ context.Context, _, _ string) error {
+	return nil
+}
+
+func (m *mockRepository) UpdateGroupMemberRole(_ context.Context, _, _, _ string) error {
+	return nil
+}
+
+func (m *mockRepository) ListGroupMembers(_ context.Context, _ string) ([]*VaultGroupMember, error) {
+	return nil, nil
+}
+
+func (m *mockRepository) GetGroupMember(_ context.Context, _, groupID string) (*VaultGroupMember, error) {
+	return nil, errors.ErrNotFound
 }
 
 // --- Tests ---

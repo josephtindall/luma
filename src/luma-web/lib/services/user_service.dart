@@ -6,6 +6,32 @@ import '../models/group.dart';
 import '../models/instance_settings.dart';
 import '../models/user.dart';
 import 'api_client.dart';
+import 'page_service.dart' show VaultMemberDetail, VaultGroupMemberDetail;
+
+class AdminVaultRecord {
+  final String id;
+  final String name;
+  final String slug;
+  final bool isPrivate;
+  final DateTime createdAt;
+
+  const AdminVaultRecord({
+    required this.id,
+    required this.name,
+    required this.slug,
+    required this.isPrivate,
+    required this.createdAt,
+  });
+
+  factory AdminVaultRecord.fromJson(Map<String, dynamic> j) => AdminVaultRecord(
+        id: j['id'] as String? ?? '',
+        name: j['name'] as String? ?? '',
+        slug: j['slug'] as String? ?? '',
+        isPrivate: j['is_private'] as bool? ?? true,
+        createdAt: DateTime.tryParse(j['created_at'] as String? ?? '') ??
+            DateTime.now(),
+      );
+}
 
 class UserService extends ChangeNotifier {
   final ApiClient _api;
@@ -37,6 +63,7 @@ class UserService extends ChangeNotifier {
   bool get canViewAuditLog => _adminCaps['audit:read-all'] == true;
   bool get canExportAuditLog => _adminCaps['audit:export-all'] == true;
   bool get canViewAuditPII => _adminCaps['audit:read-pii'] == true;
+  bool get canManageVaults => _adminCaps['instance:read'] == true;
   bool get hasAnyAdminAccess => _adminCaps.isNotEmpty;
 
   Future<void> loadProfile() async {
@@ -759,6 +786,139 @@ class UserService extends ChangeNotifier {
     if (resp.statusCode != 204 && resp.statusCode != 200) {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['message'] ?? 'Failed to remove role');
+    }
+  }
+
+  // ── Admin: vault management ──────────────────────────────────────────────
+
+  Future<List<AdminVaultRecord>> listAllVaults({
+    bool includeArchived = false,
+  }) async {
+    final path = includeArchived
+        ? '/api/luma/admin/vaults?include_archived=true'
+        : '/api/luma/admin/vaults';
+    final resp = await _api.get(path);
+    if (resp.statusCode != 200) {
+      throw Exception('Failed to load vaults');
+    }
+    final data = json.decode(resp.body);
+    final items = data is List ? data : [];
+    return (items as List<dynamic>)
+        .map((e) => AdminVaultRecord.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> adminUpdateVault(
+    String vaultId, {
+    String? name,
+    bool? isPrivate,
+  }) async {
+    final body = <String, dynamic>{};
+    if (name != null) body['name'] = name;
+    if (isPrivate != null) body['is_private'] = isPrivate;
+    final resp = await _api.patch('/api/luma/admin/vaults/$vaultId', body);
+    if (resp.statusCode != 200) {
+      throw Exception('Failed to update vault: ${resp.statusCode}');
+    }
+  }
+
+  Future<List<VaultMemberDetail>> adminListVaultMembers(String vaultId) async {
+    final resp = await _api.get('/api/luma/admin/vaults/$vaultId/members');
+    if (resp.statusCode != 200) {
+      throw Exception('Failed to list vault members: ${resp.statusCode}');
+    }
+    final data = json.decode(resp.body);
+    final items = data is List ? data : [];
+    return (items as List<dynamic>)
+        .map((e) => VaultMemberDetail.fromJson(e as Map<String, dynamic>))
+        .toList();
+  }
+
+  Future<void> adminAddVaultMember(
+    String vaultId,
+    String userId,
+    String roleId,
+  ) async {
+    final resp = await _api.post('/api/luma/admin/vaults/$vaultId/members', {
+      'user_id': userId,
+      'role_id': roleId,
+    });
+    if (resp.statusCode != 201) {
+      throw Exception('Failed to add vault member: ${resp.statusCode}');
+    }
+  }
+
+  Future<void> adminUpdateMemberRole(
+    String vaultId,
+    String userId,
+    String roleId,
+  ) async {
+    final resp = await _api.patch(
+      '/api/luma/admin/vaults/$vaultId/members/$userId',
+      {'role_id': roleId},
+    );
+    if (resp.statusCode != 204) {
+      throw Exception('Failed to update member role: ${resp.statusCode}');
+    }
+  }
+
+  Future<void> adminRemoveVaultMember(String vaultId, String userId) async {
+    final resp =
+        await _api.delete('/api/luma/admin/vaults/$vaultId/members/$userId');
+    if (resp.statusCode != 204) {
+      throw Exception('Failed to remove vault member: ${resp.statusCode}');
+    }
+  }
+
+  Future<void> adminArchiveVault(String vaultId) async {
+    final resp = await _api.delete('/api/luma/admin/vaults/$vaultId');
+    if (resp.statusCode != 204) {
+      throw Exception('Failed to archive vault: ${resp.statusCode}');
+    }
+  }
+
+  Future<List<VaultGroupMemberDetail>> adminListVaultGroupMembers(
+      String vaultId) async {
+    final resp =
+        await _api.get('/api/luma/admin/vaults/$vaultId/groups');
+    if (resp.statusCode != 200) return [];
+    final data = json.decode(resp.body);
+    if (data is! List) return [];
+    return (data as List<dynamic>)
+        .whereType<Map<String, dynamic>>()
+        .map(VaultGroupMemberDetail.fromJson)
+        .toList();
+  }
+
+  Future<void> adminAddVaultGroupMember(
+      String vaultId, String groupId, String roleId) async {
+    final resp = await _api
+        .post('/api/luma/admin/vaults/$vaultId/groups', {
+      'group_id': groupId,
+      'role_id': roleId,
+    });
+    if (resp.statusCode != 201) {
+      throw Exception('Failed to add group member: ${resp.statusCode}');
+    }
+  }
+
+  Future<void> adminUpdateGroupMemberRole(
+      String vaultId, String groupId, String roleId) async {
+    final resp = await _api.patch(
+      '/api/luma/admin/vaults/$vaultId/groups/$groupId',
+      {'role_id': roleId},
+    );
+    if (resp.statusCode != 204) {
+      throw Exception('Failed to update group role: ${resp.statusCode}');
+    }
+  }
+
+  Future<void> adminRemoveVaultGroupMember(
+      String vaultId, String groupId) async {
+    final resp = await _api
+        .delete('/api/luma/admin/vaults/$vaultId/groups/$groupId');
+    if (resp.statusCode != 204) {
+      throw Exception('Failed to remove group member: ${resp.statusCode}');
     }
   }
 

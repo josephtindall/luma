@@ -30,6 +30,14 @@ void main() async {
     pageService.clear();
   };
 
+  authService.onLogin = () {
+    Future.wait([
+      userService.loadProfile(),
+      userService.loadPreferences(),
+      pageService.loadVaults(),
+    ]);
+  };
+
   await authService.initialize();
 
   if (authService.isLoggedIn) {

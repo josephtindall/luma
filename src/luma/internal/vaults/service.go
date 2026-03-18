@@ -10,6 +10,17 @@ import (
 	"github.com/josephtindall/luma/pkg/shortid"
 )
 
+// Deterministic UUIDs for luma-auth system groups — seeded in luma-auth migrations.
+// Used in vault_group_members so luma can resolve actual group membership via luma-auth.
+const (
+	systemGroupUsers      = "00000000-0000-0000-0000-000000000003" // "Users" — every instance member
+	systemGroupSuperAdmins = "00000000-0000-0000-0000-000000000002" // "Super Admins"
+)
+
+// legacySystemGroups are old string identifiers replaced by the real luma-auth UUIDs.
+// Rows with these IDs are removed on first startup after the upgrade.
+var legacySystemGroups = []string{"system:users", "system:superadmins"}
+
 // Service contains all business logic for vaults.
 type Service struct {
 	repo Repository
@@ -29,13 +40,14 @@ func (s *Service) CreateSharedVault(ctx context.Context, ownerID string, req Cre
 	slug := generateSlug(req.Name)
 
 	vault := &Vault{
-		Name:    req.Name,
-		Slug:    slug,
-		Type:    VaultTypeShared,
-		OwnerID: ownerID,
+		Name:        req.Name,
+		Slug:        slug,
+		Type:        VaultTypeShared,
+		OwnerID:     ownerID,
+		IsPrivate:   req.IsPrivate,
 		Description: req.Description,
-		Icon:    req.Icon,
-		Color:   req.Color,
+		Icon:        req.Icon,
+		Color:       req.Color,
 	}
 
 	if err := s.repo.Create(ctx, vault); err != nil {
@@ -117,6 +129,9 @@ func (s *Service) UpdateVault(ctx context.Context, id string, req UpdateVaultReq
 			return nil, fmt.Errorf("vault name: %w", errors.ErrValidation)
 		}
 		vault.Name = *req.Name
+	}
+	if req.IsPrivate != nil {
+		vault.IsPrivate = *req.IsPrivate
 	}
 	if req.Description != nil {
 		vault.Description = req.Description
@@ -226,6 +241,24 @@ func (s *Service) UpdateMemberRole(ctx context.Context, vaultID, userID, newRole
 	return nil
 }
 
+// ListAllVaults returns all vaults on the instance (admin use only).
+func (s *Service) ListAllVaults(ctx context.Context, includeArchived bool) ([]*Vault, error) {
+	vaults, err := s.repo.ListAll(ctx, includeArchived)
+	if err != nil {
+		return nil, fmt.Errorf("listing all vaults: %w", err)
+	}
+	return vaults, nil
+}
+
+// IsVaultPrivate returns whether the vault requires explicit membership.
+func (s *Service) IsVaultPrivate(ctx context.Context, vaultID string) (bool, error) {
+	vault, err := s.repo.GetByID(ctx, vaultID)
+	if err != nil {
+		return true, fmt.Errorf("checking vault privacy: %w", err)
+	}
+	return vault.IsPrivate, nil
+}
+
 // ListMembers returns all members of a vault.
 func (s *Service) ListMembers(ctx context.Context, vaultID string) ([]*VaultMember, error) {
 	members, err := s.repo.ListMembers(ctx, vaultID)
@@ -235,15 +268,130 @@ func (s *Service) ListMembers(ctx context.Context, vaultID string) ([]*VaultMemb
 	return members, nil
 }
 
-func generateSlug(name string) string {
-	slug := strings.ToLower(strings.TrimSpace(name))
-	slug = strings.ReplaceAll(slug, " ", "-")
-
-	// Append a short random suffix to avoid slug collisions.
-	suffix, err := shortid.Generate()
-	if err != nil {
-		// Extremely unlikely — fall back to timestamp-based uniqueness.
-		return slug + "-" + fmt.Sprintf("%d", time.Now().UnixNano())
+// EnsureSharedVault creates the instance-wide "Shared" vault if it doesn't exist,
+// and ensures system groups have the correct roles:
+//   - Users (systemGroupUsers)      → builtin:vault-editor
+//   - Super Admins (systemGroupSuperAdmins) → builtin:vault-admin
+//
+// Any legacy "system:*" rows from earlier versions are removed on first run.
+func (s *Service) EnsureSharedVault(ctx context.Context) error {
+	id, err := s.repo.GetSystemSharedVaultID(ctx)
+	if errors.Is(err, errors.ErrNotFound) {
+		vault, createErr := s.createSystemVault(ctx)
+		if createErr != nil {
+			return fmt.Errorf("creating shared vault: %w", createErr)
+		}
+		id = vault.ID
+	} else if err != nil {
+		return fmt.Errorf("getting shared vault: %w", err)
 	}
-	return slug + "-" + suffix[:6]
+
+	// Remove legacy system: prefixed rows from earlier versions.
+	for _, legacyID := range legacySystemGroups {
+		if rmErr := s.repo.RemoveGroupMember(ctx, id, legacyID); rmErr != nil && !errors.Is(rmErr, errors.ErrNotFound) {
+			return fmt.Errorf("removing legacy group %s: %w", legacyID, rmErr)
+		}
+	}
+
+	type systemGroup struct {
+		id   string
+		role string
+	}
+	desired := []systemGroup{
+		{systemGroupUsers, "builtin:vault-editor"},
+		{systemGroupSuperAdmins, "builtin:vault-admin"},
+	}
+	for _, sg := range desired {
+		existing, getErr := s.repo.GetGroupMember(ctx, id, sg.id)
+		if errors.Is(getErr, errors.ErrNotFound) {
+			if addErr := s.repo.AddGroupMember(ctx, &VaultGroupMember{
+				VaultID: id,
+				GroupID: sg.id,
+				RoleID:  sg.role,
+			}); addErr != nil {
+				return fmt.Errorf("adding %s to shared vault: %w", sg.id, addErr)
+			}
+		} else if getErr == nil && existing.RoleID != sg.role {
+			if updErr := s.repo.UpdateGroupMemberRole(ctx, id, sg.id, sg.role); updErr != nil {
+				return fmt.Errorf("updating %s role in shared vault: %w", sg.id, updErr)
+			}
+		}
+	}
+	return nil
+}
+
+func (s *Service) createSystemVault(ctx context.Context) (*Vault, error) {
+	slug := generateSlug("Shared")
+	vault := &Vault{
+		Name:      "Shared",
+		Slug:      slug,
+		Type:      VaultTypeShared,
+		OwnerID:   "system",
+		IsPrivate: false,
+	}
+	if err := s.repo.Create(ctx, vault); err != nil {
+		return nil, fmt.Errorf("creating system vault: %w", err)
+	}
+	return vault, nil
+}
+
+// AddGroupMember adds a group to a vault.
+func (s *Service) AddGroupMember(ctx context.Context, vaultID string, req AddGroupMemberRequest, addedBy string) error {
+	vault, err := s.repo.GetByID(ctx, vaultID)
+	if err != nil {
+		return fmt.Errorf("getting vault for add group: %w", err)
+	}
+	if vault.IsArchived {
+		return fmt.Errorf("cannot add group: %w", errors.ErrArchived)
+	}
+
+	existing, err := s.repo.GetGroupMember(ctx, vaultID, req.GroupID)
+	if err != nil && !errors.Is(err, errors.ErrNotFound) {
+		return fmt.Errorf("checking existing group member: %w", err)
+	}
+	if existing != nil {
+		return fmt.Errorf("group already a member: %w", errors.ErrAlreadyExists)
+	}
+
+	addedByPtr := addedBy
+	member := &VaultGroupMember{
+		VaultID: vaultID,
+		GroupID: req.GroupID,
+		RoleID:  req.RoleID,
+		AddedBy: &addedByPtr,
+	}
+	return s.repo.AddGroupMember(ctx, member)
+}
+
+// RemoveGroupMember removes a group from a vault.
+func (s *Service) RemoveGroupMember(ctx context.Context, vaultID, groupID string) error {
+	if err := s.repo.RemoveGroupMember(ctx, vaultID, groupID); err != nil {
+		return fmt.Errorf("removing group member: %w", err)
+	}
+	return nil
+}
+
+// UpdateGroupMemberRole changes a group's vault role.
+func (s *Service) UpdateGroupMemberRole(ctx context.Context, vaultID, groupID, newRoleID string) error {
+	if err := s.repo.UpdateGroupMemberRole(ctx, vaultID, groupID, newRoleID); err != nil {
+		return fmt.Errorf("updating group member role: %w", err)
+	}
+	return nil
+}
+
+// ListGroupMembers returns all group members of a vault.
+func (s *Service) ListGroupMembers(ctx context.Context, vaultID string) ([]*VaultGroupMember, error) {
+	members, err := s.repo.ListGroupMembers(ctx, vaultID)
+	if err != nil {
+		return nil, fmt.Errorf("listing group members: %w", err)
+	}
+	return members, nil
+}
+
+func generateSlug(_ string) string {
+	id, err := shortid.Generate()
+	if err != nil {
+		return fmt.Sprintf("%d", time.Now().UnixNano())
+	}
+	return id
 }

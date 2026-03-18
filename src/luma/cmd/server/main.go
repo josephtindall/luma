@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -76,12 +77,17 @@ func run() error {
 	// Vaults
 	vaultRepo := vaultsPostgres.NewRepository(pool)
 	vaultService := vaultsPkg.NewService(vaultRepo)
-	vaultHandler := vaultsPkg.NewHandler(vaultService, authorizer)
+	vaultHandler := vaultsPkg.NewHandler(vaultService, authorizer, authClient)
 
 	// Pages
 	pageRepo := pagesPostgres.NewRepository(pool)
 	pageService := pagesPkg.NewService(pageRepo)
-	pageHandler := pagesPkg.NewHandler(pageService, authorizer)
+	pageHandler := pagesPkg.NewHandler(pageService, authorizer, vaultService)
+
+	// Ensure the instance-wide "Shared" vault exists (idempotent, runs at startup).
+	if err := vaultService.EnsureSharedVault(ctx); err != nil {
+		slog.Warn("ensuring shared vault", "error", err)
+	}
 
 	// Router
 	r := chi.NewRouter()
@@ -95,25 +101,6 @@ func run() error {
 		w.Header().Set("Content-Type", "application/json")
 		w.Write([]byte(`{"status":"ok"}`))
 	})
-
-	// Personal vault lazy creation — runs after auth, creates on first request.
-	ensureVaultMw := vaultsPkg.EnsurePersonalVaultMiddleware(
-		vaultService,
-		func(ctx context.Context) string {
-			id := auth.IdentityFromContext(ctx)
-			if id == nil {
-				return ""
-			}
-			return id.UserID
-		},
-		func(ctx context.Context, userID string) (string, error) {
-			user, err := authClient.GetUser(ctx, userID)
-			if err != nil {
-				return "", err
-			}
-			return user.DisplayName, nil
-		},
-	)
 
 	// Auth proxy — unauthenticated, outside the protected group
 	authHTTPClient := &http.Client{Timeout: 10 * time.Second}
@@ -133,11 +120,31 @@ func run() error {
 	// Protected routes
 	r.Route("/api/luma", func(r chi.Router) {
 		r.Use(authMiddleware.Authenticate)
-		r.Use(ensureVaultMw)
 		r.Mount("/vaults", vaultHandler.Routes())
 		r.Mount("/pages", pageHandler.Routes())
 		r.Mount("/user", authHandler.UserRoutes())
-		r.Mount("/admin", authHandler.AdminRoutes())
+		r.Get("/users", func(w http.ResponseWriter, r *http.Request) {
+			q := r.URL.Query().Get("search")
+			users, _ := authClient.ListUsers(r.Context(), q)
+			if users == nil {
+				users = []*auth.User{}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(users) //nolint:errcheck
+		})
+		r.Get("/groups", func(w http.ResponseWriter, r *http.Request) {
+			q := r.URL.Query().Get("search")
+			groups, _ := authClient.ListGroups(r.Context(), q)
+			if groups == nil {
+				groups = []*auth.Group{}
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode(groups) //nolint:errcheck
+		})
+		r.Route("/admin", func(r chi.Router) {
+			r.Mount("/vaults", vaultHandler.AdminRoutes())
+			r.Mount("/", authHandler.AdminRoutes())
+		})
 	})
 
 	// Static file serving — Flutter web SPA (when LUMA_STATIC_DIR is set).

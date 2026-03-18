@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
+	"net/url"
 	"time"
 
 	"github.com/josephtindall/luma/pkg/authz"
@@ -109,6 +110,54 @@ func (c *Client) CheckPermission(ctx context.Context, check authz.CheckRequest) 
 	return result.Allowed, nil
 }
 
+// ListUsers calls GET /api/auth/admin/users with an optional search query.
+// Returns an empty slice (no error) when the response is non-200 so callers
+// can degrade gracefully without surfacing auth errors to end-users.
+func (c *Client) ListUsers(ctx context.Context, search string) ([]*User, error) {
+	u := c.baseURL + "/api/auth/admin/users"
+	if search != "" {
+		u += "?search=" + search
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("auth: creating list users request: %w", err)
+	}
+
+	if token := tokenFromContext(ctx); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("auth: list users request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		// Non-200 means the caller lacks admin access — return empty, not an error.
+		return []*User{}, nil
+	}
+
+	// luma-auth may wrap the list under {"users":[...]} or return a bare array.
+	var raw json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return nil, fmt.Errorf("auth: decoding list users response: %w", err)
+	}
+	// Try bare array first.
+	var users []*User
+	if err := json.Unmarshal(raw, &users); err == nil {
+		return users, nil
+	}
+	// Try {"users":[...]} wrapper.
+	var wrapped struct {
+		Users []*User `json:"users"`
+	}
+	if err := json.Unmarshal(raw, &wrapped); err == nil {
+		return wrapped.Users, nil
+	}
+	return []*User{}, nil
+}
+
 // GetUser calls GET /api/auth/users/{id} to resolve user display info.
 func (c *Client) GetUser(ctx context.Context, userID string) (*User, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/auth/users/"+userID, nil)
@@ -135,4 +184,83 @@ func (c *Client) GetUser(ctx context.Context, userID string) (*User, error) {
 		return nil, fmt.Errorf("auth: decoding user response: %w", err)
 	}
 	return &user, nil
+}
+
+// Group represents a group returned by the auth service.
+type Group struct {
+	ID          string `json:"id"`
+	Name        string `json:"name"`
+	Description string `json:"description,omitempty"`
+}
+
+// GetGroup calls GET /api/auth/admin/groups/{id} to resolve group display info.
+func (c *Client) GetGroup(ctx context.Context, groupID string) (*Group, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/auth/admin/groups/"+groupID, nil)
+	if err != nil {
+		return nil, fmt.Errorf("auth: creating get group request: %w", err)
+	}
+
+	if token := tokenFromContext(ctx); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("auth: get group request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("auth: get group returned %d", resp.StatusCode)
+	}
+
+	var group Group
+	if err := json.NewDecoder(resp.Body).Decode(&group); err != nil {
+		return nil, fmt.Errorf("auth: decoding group response: %w", err)
+	}
+	return &group, nil
+}
+
+// ListGroups calls GET /api/auth/admin/groups with an optional search query.
+// Returns an empty slice (no error) when the response is non-200 so callers
+// can degrade gracefully without surfacing auth errors to end-users.
+func (c *Client) ListGroups(ctx context.Context, search string) ([]*Group, error) {
+	u := c.baseURL + "/api/auth/admin/groups"
+	if search != "" {
+		u += "?search=" + url.QueryEscape(search)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("auth: creating list groups request: %w", err)
+	}
+
+	if token := tokenFromContext(ctx); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("auth: list groups request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return []*Group{}, nil
+	}
+
+	var raw json.RawMessage
+	if err := json.NewDecoder(resp.Body).Decode(&raw); err != nil {
+		return []*Group{}, nil
+	}
+	var groups []*Group
+	if err := json.Unmarshal(raw, &groups); err == nil {
+		return groups, nil
+	}
+	var wrapped struct {
+		Groups []*Group `json:"groups"`
+	}
+	if err := json.Unmarshal(raw, &wrapped); err == nil {
+		return wrapped.Groups, nil
+	}
+	return []*Group{}, nil
 }

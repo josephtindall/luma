@@ -72,6 +72,28 @@ func (a *Authorizer) RequireCan(ctx context.Context, w http.ResponseWriter, acti
 	return true
 }
 
+// Can checks whether the authenticated user has permission to perform the action
+// without writing an HTTP response. Returns false on error (fail-safe).
+func (a *Authorizer) Can(ctx context.Context, action string, resource Resource) bool {
+	userID := a.userIDFromCtx(ctx)
+	if userID == "" {
+		return false
+	}
+
+	allowed, err := a.checker.CheckPermission(ctx, CheckRequest{
+		UserID:       userID,
+		Action:       action,
+		ResourceType: resource.Type,
+		ResourceID:   resource.ID,
+		VaultID:      resource.VaultID,
+	})
+	if err != nil {
+		slog.ErrorContext(ctx, "authz check failed", "action", action, "error", err)
+		return false
+	}
+	return allowed
+}
+
 func writeForbidden(w http.ResponseWriter) {
 	http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
 }
