@@ -50,7 +50,7 @@ class AdminLayout extends StatelessWidget {
           child: Row(
             children: tabs.map((tab) {
               final isActive = path == tab.route ||
-                  (tab.route != '/admin/users' && path.startsWith(tab.route));
+                  path.startsWith('${tab.route}/');
               return _AdminTabButton(
                 label: tab.label,
                 isActive: isActive,

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -52,12 +53,6 @@ func (r *Repository) GetInstanceRole(ctx context.Context, userID string) ([]auth
 		return nil, fmt.Errorf("authz.postgres.GetInstanceRole rows: %w", err)
 	}
 	return stmts, nil
-}
-
-// GetVaultRole returns policy statements for the user's role in a vault.
-// Not yet implemented (no vault_members table) — always returns nil.
-func (r *Repository) GetVaultRole(ctx context.Context, userID, vaultID string) ([]authz.PolicyStatement, error) {
-	return nil, nil
 }
 
 // GetResourcePermission returns an explicit allow/deny for the user on a
@@ -117,10 +112,33 @@ func (r *Repository) IsOwner(ctx context.Context, userID string) (bool, error) {
 	return isOwner, nil
 }
 
+// scopedVariants returns the set of action strings that should be matched for a
+// given check. In addition to the exact action it includes wildcard and
+// resource-scoped forms so custom roles can use e.g. "vault:*:manage-members"
+// or "vault:iqQW80mGe0:manage-members".
+func scopedVariants(action, resourceType, resourceID string) []string {
+	variants := []string{action}
+	if resourceType == "" {
+		return variants
+	}
+	// Extract the sub-action suffix (e.g. "manage-members" from "vault:manage-members").
+	suffix := action
+	if idx := strings.Index(action, ":"); idx >= 0 {
+		suffix = action[idx+1:]
+	}
+	variants = append(variants,
+		resourceType+":*:"+suffix,          // vault:*:manage-members
+		resourceType+":"+resourceID+":"+suffix, // vault:iqQW80mGe0:manage-members
+		resourceType+":*",                  // vault:* (all vault actions)
+		resourceType+":"+resourceID,        // vault:iqQW80mGe0 (all perms for resource)
+	)
+	return variants
+}
+
 // GetCustomRolePermissionsForUser returns all custom-role permission rows for the
-// given user and action, including permissions inherited through group membership at
-// all nesting depths. IsCascaded is true for depth > 0.
-func (r *Repository) GetCustomRolePermissionsForUser(ctx context.Context, userID, action string) ([]authz.CustomRolePerm, error) {
+// given user and action (including scoped variants), inherited through group
+// membership at all nesting depths. IsCascaded is true for depth > 0.
+func (r *Repository) GetCustomRolePermissionsForUser(ctx context.Context, userID, action, resourceType, resourceID string) ([]authz.CustomRolePerm, error) {
 	const q = `
 		WITH RECURSIVE user_groups(group_id, depth) AS (
 			SELECT group_id, 0
@@ -136,16 +154,17 @@ func (r *Repository) GetCustomRolePermissionsForUser(ctx context.Context, userID
 		FROM user_groups ug
 		JOIN auth.group_custom_roles gcr ON gcr.group_id = ug.group_id
 		JOIN auth.custom_roles cr ON cr.id = gcr.role_id
-		JOIN auth.custom_role_permissions crp ON crp.role_id = cr.id AND crp.action = $2
+		JOIN auth.custom_role_permissions crp ON crp.role_id = cr.id AND crp.action = ANY($2)
 		UNION ALL
 		-- Directly assigned permissions
 		SELECT cr.priority, crp.effect, false
 		FROM auth.user_custom_roles ucr
 		JOIN auth.custom_roles cr ON cr.id = ucr.role_id
-		JOIN auth.custom_role_permissions crp ON crp.role_id = cr.id AND crp.action = $2
+		JOIN auth.custom_role_permissions crp ON crp.role_id = cr.id AND crp.action = ANY($2)
 		WHERE ucr.user_id = $1`
 
-	rows, err := r.db.Query(ctx, q, userID, action)
+	variants := scopedVariants(action, resourceType, resourceID)
+	rows, err := r.db.Query(ctx, q, userID, variants)
 	if err != nil {
 		return nil, fmt.Errorf("authz.postgres.GetCustomRolePermissionsForUser: %w", err)
 	}

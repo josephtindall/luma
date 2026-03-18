@@ -8,9 +8,10 @@ import (
 
 // Resource identifies the target of a permission check.
 type Resource struct {
-	Type    string // page | task | flow | vault
-	ID      string // short ID or UUID
-	VaultID string // UUID of the owning vault
+	Type      string // page | task | flow | vault
+	ID        string // short ID or UUID
+	VaultID   string // UUID of the owning vault
+	VaultRole string // caller's vault membership role, e.g. "builtin:vault-admin"; empty = no membership
 }
 
 // PermissionChecker calls the auth service to check a permission.
@@ -25,6 +26,7 @@ type CheckRequest struct {
 	ResourceType string `json:"resource_type"`
 	ResourceID   string `json:"resource_id"`
 	VaultID      string `json:"vault_id"`
+	VaultRole    string `json:"vault_role,omitempty"`
 }
 
 // UserIDExtractor extracts the authenticated user's ID from the request context.
@@ -59,6 +61,7 @@ func (a *Authorizer) RequireCan(ctx context.Context, w http.ResponseWriter, acti
 		ResourceType: resource.Type,
 		ResourceID:   resource.ID,
 		VaultID:      resource.VaultID,
+		VaultRole:    resource.VaultRole,
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "authz check failed", "action", action, "error", err)
@@ -86,6 +89,7 @@ func (a *Authorizer) Can(ctx context.Context, action string, resource Resource) 
 		ResourceType: resource.Type,
 		ResourceID:   resource.ID,
 		VaultID:      resource.VaultID,
+		VaultRole:    resource.VaultRole,
 	})
 	if err != nil {
 		slog.ErrorContext(ctx, "authz check failed", "action", action, "error", err)

@@ -81,6 +81,34 @@ func (h *Handler) requireAdmin(w http.ResponseWriter, r *http.Request) bool {
 	return h.authz.RequireCan(r.Context(), w, "instance:read", authz.Resource{Type: "instance"})
 }
 
+// vaultRole looks up the caller's effective vault role (direct or via group membership).
+// Returns empty string if the user has no vault role.
+func (h *Handler) vaultRole(ctx context.Context, vaultID string) string {
+	identity := auth.IdentityFromContext(ctx)
+	if identity == nil {
+		return ""
+	}
+	return h.service.GetVaultMemberRole(ctx, vaultID, identity.UserID)
+}
+
+// vaultCan reports whether the caller has permission on the given vault,
+// taking their direct vault membership role into account.
+func (h *Handler) vaultCan(ctx context.Context, action, vaultID string) bool {
+	return h.authz.Can(ctx, action, authz.Resource{
+		Type: "vault", ID: vaultID, VaultID: vaultID,
+		VaultRole: h.vaultRole(ctx, vaultID),
+	})
+}
+
+// vaultRequireCan checks a vault permission and writes 403 on failure.
+func (h *Handler) vaultRequireCan(ctx context.Context, w http.ResponseWriter, action, vaultID string) bool {
+	if !h.vaultCan(ctx, action, vaultID) {
+		http.Error(w, `{"error":"forbidden"}`, http.StatusForbidden)
+		return false
+	}
+	return true
+}
+
 // listVaults returns all vaults the caller is a member of (plus non-private vaults).
 func (h *Handler) listVaults(w http.ResponseWriter, r *http.Request) {
 	identity := auth.IdentityFromContext(r.Context())
@@ -138,11 +166,7 @@ func (h *Handler) getVault(w http.ResponseWriter, r *http.Request) {
 
 	// Private vaults require explicit membership; public vaults are open to all.
 	if vault.IsPrivate {
-		if !h.authz.RequireCan(r.Context(), w, "vault:read", authz.Resource{
-			Type:    "vault",
-			ID:      id,
-			VaultID: id,
-		}) {
+		if !h.vaultRequireCan(r.Context(), w, "vault:read", id) {
 			return
 		}
 	}
@@ -153,11 +177,7 @@ func (h *Handler) getVault(w http.ResponseWriter, r *http.Request) {
 func (h *Handler) updateVault(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 
-	if !h.authz.RequireCan(r.Context(), w, "vault:edit", authz.Resource{
-		Type:    "vault",
-		ID:      id,
-		VaultID: id,
-	}) {
+	if !h.vaultRequireCan(r.Context(), w, "vault:edit", id) {
 		return
 	}
 
@@ -185,11 +205,7 @@ func (h *Handler) archiveVault(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authz.RequireCan(r.Context(), w, "vault:archive", authz.Resource{
-		Type:    "vault",
-		ID:      id,
-		VaultID: id,
-	}) {
+	if !h.vaultRequireCan(r.Context(), w, "vault:archive", id) {
 		return
 	}
 
@@ -211,11 +227,7 @@ func (h *Handler) listMembers(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if vault.IsPrivate {
-		if !h.authz.RequireCan(r.Context(), w, "vault:read", authz.Resource{
-			Type:    "vault",
-			ID:      id,
-			VaultID: id,
-		}) {
+		if !h.vaultRequireCan(r.Context(), w, "vault:read", id) {
 			return
 		}
 	}
@@ -238,11 +250,7 @@ func (h *Handler) addMember(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authz.RequireCan(r.Context(), w, "vault:manage-members", authz.Resource{
-		Type:    "vault",
-		ID:      id,
-		VaultID: id,
-	}) {
+	if !h.vaultRequireCan(r.Context(), w, "vault:manage-members", id) {
 		return
 	}
 
@@ -264,11 +272,7 @@ func (h *Handler) updateMemberRole(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	userID := chi.URLParam(r, "userId")
 
-	if !h.authz.RequireCan(r.Context(), w, "vault:manage-roles", authz.Resource{
-		Type:    "vault",
-		ID:      id,
-		VaultID: id,
-	}) {
+	if !h.vaultRequireCan(r.Context(), w, "vault:manage-roles", id) {
 		return
 	}
 
@@ -290,11 +294,7 @@ func (h *Handler) removeMember(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	userID := chi.URLParam(r, "userId")
 
-	if !h.authz.RequireCan(r.Context(), w, "vault:manage-members", authz.Resource{
-		Type:    "vault",
-		ID:      id,
-		VaultID: id,
-	}) {
+	if !h.vaultRequireCan(r.Context(), w, "vault:manage-members", id) {
 		return
 	}
 
@@ -458,9 +458,7 @@ func (h *Handler) listGroupMembers(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	if vault.IsPrivate {
-		if !h.authz.RequireCan(r.Context(), w, "vault:read", authz.Resource{
-			Type: "vault", ID: id, VaultID: id,
-		}) {
+		if !h.vaultRequireCan(r.Context(), w, "vault:read", id) {
 			return
 		}
 	}
@@ -481,9 +479,7 @@ func (h *Handler) addGroupMember(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized"}`, http.StatusUnauthorized)
 		return
 	}
-	if !h.authz.RequireCan(r.Context(), w, "vault:manage-members", authz.Resource{
-		Type: "vault", ID: id, VaultID: id,
-	}) {
+	if !h.vaultRequireCan(r.Context(), w, "vault:manage-members", id) {
 		return
 	}
 
@@ -503,9 +499,7 @@ func (h *Handler) updateGroupMemberRole(w http.ResponseWriter, r *http.Request) 
 	id := chi.URLParam(r, "id")
 	groupID := chi.URLParam(r, "groupId")
 
-	if !h.authz.RequireCan(r.Context(), w, "vault:manage-roles", authz.Resource{
-		Type: "vault", ID: id, VaultID: id,
-	}) {
+	if !h.vaultRequireCan(r.Context(), w, "vault:manage-roles", id) {
 		return
 	}
 
@@ -525,9 +519,7 @@ func (h *Handler) removeGroupMember(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
 	groupID := chi.URLParam(r, "groupId")
 
-	if !h.authz.RequireCan(r.Context(), w, "vault:manage-members", authz.Resource{
-		Type: "vault", ID: id, VaultID: id,
-	}) {
+	if !h.vaultRequireCan(r.Context(), w, "vault:manage-members", id) {
 		return
 	}
 	if err := h.service.RemoveGroupMember(r.Context(), id, groupID); err != nil {
@@ -609,12 +601,11 @@ func (h *Handler) adminRemoveGroupMember(w http.ResponseWriter, r *http.Request)
 
 func (h *Handler) myVaultPermissions(w http.ResponseWriter, r *http.Request) {
 	id := chi.URLParam(r, "id")
-	res := authz.Resource{Type: "vault", ID: id, VaultID: id}
 	writeJSON(w, http.StatusOK, map[string]bool{
-		"can_edit":           h.authz.Can(r.Context(), "vault:edit", res),
-		"can_archive":        h.authz.Can(r.Context(), "vault:archive", res),
-		"can_manage_members": h.authz.Can(r.Context(), "vault:manage-members", res),
-		"can_manage_roles":   h.authz.Can(r.Context(), "vault:manage-roles", res),
+		"can_edit":           h.vaultCan(r.Context(), "vault:edit", id),
+		"can_archive":        h.vaultCan(r.Context(), "vault:archive", id),
+		"can_manage_members": h.vaultCan(r.Context(), "vault:manage-members", id),
+		"can_manage_roles":   h.vaultCan(r.Context(), "vault:manage-roles", id),
 	})
 }
 

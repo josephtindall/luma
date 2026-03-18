@@ -265,6 +265,42 @@ func (h *Handler) AssignRole(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
+// GetUserGroups handles GET /api/auth/users/{id}/groups.
+// Returns all group IDs the specified user belongs to (direct + nested).
+// Any authenticated user may call this for themselves; owners/admins can call it for any user.
+func (h *Handler) GetUserGroups(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+	userID := chi.URLParam(r, "id")
+	// Allow own lookup, or require admin permission for cross-user lookups.
+	if claims.Subject != userID && claims.Role != "builtin:instance-owner" {
+		if h.authzSvc == nil {
+			httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
+			return
+		}
+		result, err := h.authzSvc.Check(r.Context(), authz.CheckRequest{
+			UserID: claims.Subject,
+			Action: "user:read",
+		})
+		if err != nil || !result.Allowed {
+			httputil.WriteError(w, http.StatusForbidden, "FORBIDDEN", "forbidden")
+			return
+		}
+	}
+	groupIDs, err := h.svc.GetUserGroupIDs(r.Context(), userID)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+	if groupIDs == nil {
+		groupIDs = []string{}
+	}
+	httputil.WriteJSON(w, http.StatusOK, map[string][]string{"group_ids": groupIDs})
+}
+
 // RemoveRole handles DELETE /api/auth/admin/groups/{id}/roles/{roleID}.
 func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 	if !h.requirePerm(w, r, "group:unassign-role") {

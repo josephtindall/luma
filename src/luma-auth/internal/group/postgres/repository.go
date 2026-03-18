@@ -214,6 +214,41 @@ func (r *Repository) WouldCycle(ctx context.Context, parentGroupID, candidateChi
 	return cycle, nil
 }
 
+// GetUserGroupIDs returns all group IDs the user belongs to (direct and
+// inherited through nested group membership at any depth).
+func (r *Repository) GetUserGroupIDs(ctx context.Context, userID string) ([]string, error) {
+	const q = `
+		WITH RECURSIVE user_groups(group_id) AS (
+			SELECT group_id
+			FROM auth.group_members
+			WHERE member_type = 'user' AND member_id = $1
+			UNION ALL
+			SELECT gm.group_id
+			FROM auth.group_members gm
+			JOIN user_groups ug ON gm.member_id = ug.group_id AND gm.member_type = 'group'
+		)
+		SELECT DISTINCT group_id::text FROM user_groups`
+
+	rows, err := r.db.Query(ctx, q, userID)
+	if err != nil {
+		return nil, fmt.Errorf("group.postgres.GetUserGroupIDs: %w", err)
+	}
+	defer rows.Close()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("group.postgres.GetUserGroupIDs scan: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("group.postgres.GetUserGroupIDs rows: %w", err)
+	}
+	return ids, nil
+}
+
 // AssignRole assigns a custom role to a group.
 func (r *Repository) AssignRole(ctx context.Context, groupID, roleID string) error {
 	const q = `

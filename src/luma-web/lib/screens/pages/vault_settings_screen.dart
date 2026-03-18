@@ -173,14 +173,11 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
       if (mounted) {
         setState(() {
           _members = results[0] as List<VaultMemberDetail>;
-          // Filter out system-managed groups — not manually editable.
-          // Covers both legacy "system:*" names and the luma-auth system group
-          // UUIDs (Super Admins = ...000002, Users = ...000003).
+          // Filter out legacy "system:*" group identifiers only.
+          // luma-auth system groups (Users, Super Admins) are shown so
+          // admins can see which system groups have vault access.
           _groupMembers = (results[1] as List<VaultGroupMemberDetail>)
-              .where((g) =>
-                  !g.groupId.startsWith('system:') &&
-                  g.groupId != '00000000-0000-0000-0000-000000000002' &&
-                  g.groupId != '00000000-0000-0000-0000-000000000003')
+              .where((g) => !g.groupId.startsWith('system:'))
               .toList();
           _loadingMembers = false;
         });

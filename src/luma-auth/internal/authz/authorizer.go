@@ -20,10 +20,11 @@ type Resource struct {
 // CheckRequest is the body of POST /api/auth/authz/check.
 type CheckRequest struct {
 	UserID       string `json:"user_id"`
-	Action       string `json:"action"`        // e.g. "page:edit"
-	ResourceType string `json:"resource_type"` // e.g. "page"
+	Action       string `json:"action"`                  // e.g. "page:edit"
+	ResourceType string `json:"resource_type"`           // e.g. "page"
 	ResourceID   string `json:"resource_id"`
 	VaultID      string `json:"vault_id"`
+	VaultRole    string `json:"vault_role,omitempty"`    // caller's vault membership role, e.g. "builtin:vault-admin"
 }
 
 // CheckResult is the response body.
@@ -43,9 +44,6 @@ type Repository interface {
 	// GetInstanceRole returns the policy set for the user's instance role.
 	GetInstanceRole(ctx context.Context, userID string) ([]PolicyStatement, error)
 
-	// GetVaultRole returns the policy set for the user's role in a vault.
-	GetVaultRole(ctx context.Context, userID, vaultID string) ([]PolicyStatement, error)
-
 	// GetResourcePermission returns explicit resource-level allow/deny for the user.
 	GetResourcePermission(ctx context.Context, userID, resourceType, resourceID string) (*ResourcePermission, error)
 
@@ -56,8 +54,9 @@ type Repository interface {
 	IsOwner(ctx context.Context, userID string) (bool, error)
 
 	// GetCustomRolePermissionsForUser returns all custom-role permission rows relevant
-	// to this user (direct + via groups, at all nesting depths) for the given action.
-	GetCustomRolePermissionsForUser(ctx context.Context, userID, action string) ([]CustomRolePerm, error)
+	// to this user (direct + via groups, at all nesting depths) matching the action
+	// or any scoped variant of it (e.g. "vault:*:edit", "vault:shortId:edit").
+	GetCustomRolePermissionsForUser(ctx context.Context, userID, action, resourceType, resourceID string) ([]CustomRolePerm, error)
 
 	// InvalidateUserCache removes all cached authz results for a user.
 	InvalidateUserCache(ctx context.Context, userID string) error
@@ -106,8 +105,8 @@ func NewDefaultAuthorizer(repo Repository, cache *redis.Client) *DefaultAuthoriz
 //  7. Instance role policies
 //  8. Default → DENY
 func (a *DefaultAuthorizer) Check(ctx context.Context, req CheckRequest) (CheckResult, error) {
-	cacheKey := fmt.Sprintf("authz:%s:%s:%s:%s:%s",
-		req.UserID, req.VaultID, req.ResourceType, req.ResourceID, req.Action)
+	cacheKey := fmt.Sprintf("authz:%s:%s:%s:%s:%s:%s",
+		req.UserID, req.VaultID, req.ResourceType, req.ResourceID, req.Action, req.VaultRole)
 
 	// Try cache first.
 	if a.cache != nil {
@@ -152,17 +151,13 @@ func (a *DefaultAuthorizer) Check(ctx context.Context, req CheckRequest) (CheckR
 		}
 	}
 
-	// 5. Vault role.
-	vaultPolicies, err := a.repo.GetVaultRole(ctx, req.UserID, req.VaultID)
-	if err != nil {
-		return CheckResult{}, fmt.Errorf("authz: vault role: %w", err)
-	}
-	if result, ok := evaluatePolicies(vaultPolicies, req.Action, "vault_role"); ok {
+	// 5. Vault role — derived from the VaultRole field sent by luma.
+	if result, ok := evaluatePolicies(builtinVaultPolicies(req.VaultRole), req.Action, "vault_role"); ok {
 		return a.cacheAndReturn(ctx, cacheKey, result)
 	}
 
 	// 6. Custom role evaluation.
-	if result, ok, err := a.evaluateCustomRoles(ctx, req.UserID, req.Action); err != nil {
+	if result, ok, err := a.evaluateCustomRoles(ctx, req.UserID, req.Action, req.ResourceType, req.ResourceID); err != nil {
 		return CheckResult{}, fmt.Errorf("authz: custom roles: %w", err)
 	} else if ok {
 		return a.cacheAndReturn(ctx, cacheKey, result)
@@ -193,8 +188,8 @@ type priorityBucket struct {
 //   - IsCascaded=true + Effect="allow" → dropped (non-cascading allow)
 //   - IsCascaded=true + Effect="allow_cascade" or "deny" → kept
 //   - Priority: lower number wins; nil = lowest; within same priority deny beats allow
-func (a *DefaultAuthorizer) evaluateCustomRoles(ctx context.Context, userID, action string) (CheckResult, bool, error) {
-	perms, err := a.repo.GetCustomRolePermissionsForUser(ctx, userID, action)
+func (a *DefaultAuthorizer) evaluateCustomRoles(ctx context.Context, userID, action, resourceType, resourceID string) (CheckResult, bool, error) {
+	perms, err := a.repo.GetCustomRolePermissionsForUser(ctx, userID, action, resourceType, resourceID)
 	if err != nil {
 		return CheckResult{}, false, err
 	}
@@ -320,6 +315,41 @@ func containsAction(actions []string, target string) bool {
 		}
 	}
 	return false
+}
+
+// builtinVaultPolicies maps a built-in vault role string to its policy statements.
+// Returns nil for an empty or unrecognised role (evaluation continues to next step).
+func builtinVaultPolicies(roleID string) []PolicyStatement {
+	allVault := []string{
+		"vault:read", "vault:edit", "vault:archive",
+		"vault:manage-members", "vault:manage-roles",
+	}
+	allContent := []string{
+		"page:read", "page:create", "page:edit", "page:delete", "page:archive",
+		"page:version", "page:restore-version", "page:share", "page:transclude",
+		"task:read", "task:create", "task:edit", "task:delete", "task:assign",
+		"task:close", "task:comment",
+		"flow:read", "flow:create", "flow:edit", "flow:delete", "flow:publish",
+		"flow:execute", "flow:comment",
+	}
+	switch roleID {
+	case "builtin:vault-admin":
+		actions := make([]string, 0, len(allVault)+len(allContent))
+		actions = append(actions, allVault...)
+		actions = append(actions, allContent...)
+		return []PolicyStatement{{Effect: "allow", Actions: actions}}
+	case "builtin:vault-editor":
+		actions := make([]string, 0, 1+len(allContent))
+		actions = append(actions, "vault:read")
+		actions = append(actions, allContent...)
+		return []PolicyStatement{{Effect: "allow", Actions: actions}}
+	case "builtin:vault-viewer":
+		return []PolicyStatement{{Effect: "allow", Actions: []string{
+			"vault:read", "page:read", "task:read", "flow:read",
+		}}}
+	default:
+		return nil
+	}
 }
 
 // domainOf extracts the domain from "domain:action" (e.g. "page" from "page:edit").

@@ -12,21 +12,25 @@ import (
 	"github.com/josephtindall/luma/pkg/errors"
 )
 
-// VaultPrivacyChecker allows the page handler to determine vault visibility
-// without a direct dependency on the vaults package.
-type VaultPrivacyChecker interface {
+// VaultChecker allows the page handler to determine vault visibility and
+// look up the caller's vault membership role without a direct dependency
+// on the vaults package.
+type VaultChecker interface {
 	IsVaultPrivate(ctx context.Context, vaultID string) (bool, error)
+	// GetVaultMemberRole returns the user's vault role (e.g. "builtin:vault-admin")
+	// or "" if the user is not a direct member.
+	GetVaultMemberRole(ctx context.Context, vaultID, userID string) string
 }
 
 // Handler handles HTTP requests for pages.
 type Handler struct {
 	service      *Service
 	authz        *authz.Authorizer
-	vaultChecker VaultPrivacyChecker
+	vaultChecker VaultChecker
 }
 
 // NewHandler creates a new page handler.
-func NewHandler(service *Service, authorizer *authz.Authorizer, vaultChecker VaultPrivacyChecker) *Handler {
+func NewHandler(service *Service, authorizer *authz.Authorizer, vaultChecker VaultChecker) *Handler {
 	return &Handler{service: service, authz: authorizer, vaultChecker: vaultChecker}
 }
 
@@ -64,6 +68,23 @@ func (h *Handler) isPrivateVault(ctx context.Context, vaultID string) bool {
 	return priv
 }
 
+// vaultResource builds an authz.Resource populated with the caller's vault role.
+func (h *Handler) vaultResource(ctx context.Context, resourceType, resourceID, vaultID string) authz.Resource {
+	role := ""
+	if h.vaultChecker != nil {
+		identity := auth.IdentityFromContext(ctx)
+		if identity != nil {
+			role = h.vaultChecker.GetVaultMemberRole(ctx, vaultID, identity.UserID)
+		}
+	}
+	return authz.Resource{
+		Type:      resourceType,
+		ID:        resourceID,
+		VaultID:   vaultID,
+		VaultRole: role,
+	}
+}
+
 // listPages returns all pages in a vault.
 func (h *Handler) listPages(w http.ResponseWriter, r *http.Request) {
 	identity := auth.IdentityFromContext(r.Context())
@@ -79,11 +100,7 @@ func (h *Handler) listPages(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.isPrivateVault(r.Context(), vaultID) {
-		if !h.authz.RequireCan(r.Context(), w, "page:read", authz.Resource{
-			Type:    "vault",
-			ID:      vaultID,
-			VaultID: vaultID,
-		}) {
+		if !h.authz.RequireCan(r.Context(), w, "page:read", h.vaultResource(r.Context(), "vault", vaultID, vaultID)) {
 			return
 		}
 	}
@@ -111,11 +128,7 @@ func (h *Handler) createPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authz.RequireCan(r.Context(), w, "page:create", authz.Resource{
-		Type:    "vault",
-		ID:      req.VaultID,
-		VaultID: req.VaultID,
-	}) {
+	if !h.authz.RequireCan(r.Context(), w, "page:create", h.vaultResource(r.Context(), "vault", req.VaultID, req.VaultID)) {
 		return
 	}
 
@@ -138,11 +151,7 @@ func (h *Handler) getPage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.isPrivateVault(r.Context(), page.VaultID) {
-		if !h.authz.RequireCan(r.Context(), w, "page:read", authz.Resource{
-			Type:    "page",
-			ID:      shortID,
-			VaultID: page.VaultID,
-		}) {
+		if !h.authz.RequireCan(r.Context(), w, "page:read", h.vaultResource(r.Context(), "page", shortID, page.VaultID)) {
 			return
 		}
 	}
@@ -165,11 +174,7 @@ func (h *Handler) updatePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authz.RequireCan(r.Context(), w, "page:edit", authz.Resource{
-		Type:    "page",
-		ID:      shortID,
-		VaultID: page.VaultID,
-	}) {
+	if !h.authz.RequireCan(r.Context(), w, "page:edit", h.vaultResource(r.Context(), "page", shortID, page.VaultID)) {
 		return
 	}
 
@@ -203,11 +208,7 @@ func (h *Handler) patchPage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authz.RequireCan(r.Context(), w, "page:edit", authz.Resource{
-		Type:    "page",
-		ID:      shortID,
-		VaultID: page.VaultID,
-	}) {
+	if !h.authz.RequireCan(r.Context(), w, "page:edit", h.vaultResource(r.Context(), "page", shortID, page.VaultID)) {
 		return
 	}
 
@@ -241,11 +242,7 @@ func (h *Handler) archivePage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authz.RequireCan(r.Context(), w, "page:archive", authz.Resource{
-		Type:    "page",
-		ID:      shortID,
-		VaultID: page.VaultID,
-	}) {
+	if !h.authz.RequireCan(r.Context(), w, "page:archive", h.vaultResource(r.Context(), "page", shortID, page.VaultID)) {
 		return
 	}
 
@@ -267,11 +264,7 @@ func (h *Handler) listRevisions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.isPrivateVault(r.Context(), page.VaultID) {
-		if !h.authz.RequireCan(r.Context(), w, "page:version", authz.Resource{
-			Type:    "page",
-			ID:      shortID,
-			VaultID: page.VaultID,
-		}) {
+		if !h.authz.RequireCan(r.Context(), w, "page:version", h.vaultResource(r.Context(), "page", shortID, page.VaultID)) {
 			return
 		}
 	}
@@ -321,11 +314,7 @@ func (h *Handler) createRevision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authz.RequireCan(r.Context(), w, "page:version", authz.Resource{
-		Type:    "page",
-		ID:      shortID,
-		VaultID: page.VaultID,
-	}) {
+	if !h.authz.RequireCan(r.Context(), w, "page:version", h.vaultResource(r.Context(), "page", shortID, page.VaultID)) {
 		return
 	}
 
@@ -355,11 +344,7 @@ func (h *Handler) getRevision(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.isPrivateVault(r.Context(), page.VaultID) {
-		if !h.authz.RequireCan(r.Context(), w, "page:version", authz.Resource{
-			Type:    "page",
-			ID:      shortID,
-			VaultID: page.VaultID,
-		}) {
+		if !h.authz.RequireCan(r.Context(), w, "page:version", h.vaultResource(r.Context(), "page", shortID, page.VaultID)) {
 			return
 		}
 	}
@@ -389,11 +374,7 @@ func (h *Handler) restoreRevision(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	if !h.authz.RequireCan(r.Context(), w, "page:restore-version", authz.Resource{
-		Type:    "page",
-		ID:      shortID,
-		VaultID: page.VaultID,
-	}) {
+	if !h.authz.RequireCan(r.Context(), w, "page:restore-version", h.vaultResource(r.Context(), "page", shortID, page.VaultID)) {
 		return
 	}
 
@@ -416,11 +397,7 @@ func (h *Handler) listTransclusions(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if h.isPrivateVault(r.Context(), page.VaultID) {
-		if !h.authz.RequireCan(r.Context(), w, "page:read", authz.Resource{
-			Type:    "page",
-			ID:      shortID,
-			VaultID: page.VaultID,
-		}) {
+		if !h.authz.RequireCan(r.Context(), w, "page:read", h.vaultResource(r.Context(), "page", shortID, page.VaultID)) {
 			return
 		}
 	}

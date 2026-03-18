@@ -288,6 +288,7 @@ func run() error {
 		r.Post("/api/auth/logout-all", sessionHandler.LogoutAll)
 
 		r.Get("/api/auth/users/{id}", userHandler.GetUser)
+		r.Get("/api/auth/users/{id}/groups", groupHandler.GetUserGroups)
 		r.Put("/api/auth/users/me/profile", userHandler.UpdateProfile)
 		r.Post("/api/auth/users/me/password", userHandler.ChangePassword)
 		r.Get("/api/auth/users/me/preferences", prefHandler.Get)

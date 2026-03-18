@@ -121,3 +121,8 @@ func (s *Service) AssignRole(ctx context.Context, groupID, roleID string) error 
 func (s *Service) RemoveRole(ctx context.Context, groupID, roleID string) error {
 	return s.repo.RemoveRole(ctx, groupID, roleID)
 }
+
+// GetUserGroupIDs returns all group IDs the user belongs to (direct and nested).
+func (s *Service) GetUserGroupIDs(ctx context.Context, userID string) ([]string, error) {
+	return s.repo.GetUserGroupIDs(ctx, userID)
+}

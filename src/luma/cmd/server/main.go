@@ -77,6 +77,7 @@ func run() error {
 	// Vaults
 	vaultRepo := vaultsPostgres.NewRepository(pool)
 	vaultService := vaultsPkg.NewService(vaultRepo)
+	vaultService.SetGroupResolver(authClient)
 	vaultHandler := vaultsPkg.NewHandler(vaultService, authorizer, authClient)
 
 	// Pages

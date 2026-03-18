@@ -21,14 +21,26 @@ const (
 // Rows with these IDs are removed on first startup after the upgrade.
 var legacySystemGroups = []string{"system:users", "system:superadmins"}
 
+// GroupResolver resolves a user's group memberships via the auth service.
+// Satisfied by auth.Client.
+type GroupResolver interface {
+	GetUserGroups(ctx context.Context, userID string) ([]string, error)
+}
+
 // Service contains all business logic for vaults.
 type Service struct {
-	repo Repository
+	repo          Repository
+	groupResolver GroupResolver // optional; enables group-based vault role resolution
 }
 
 // NewService creates a new vault service.
 func NewService(repo Repository) *Service {
 	return &Service{repo: repo}
+}
+
+// SetGroupResolver wires group membership resolution after construction.
+func (s *Service) SetGroupResolver(gr GroupResolver) {
+	s.groupResolver = gr
 }
 
 // CreateSharedVault creates a new shared vault and makes the creator a vault admin.
@@ -257,6 +269,67 @@ func (s *Service) IsVaultPrivate(ctx context.Context, vaultID string) (bool, err
 		return true, fmt.Errorf("checking vault privacy: %w", err)
 	}
 	return vault.IsPrivate, nil
+}
+
+// GetMember returns the vault membership record for a single user, or ErrNotFound.
+func (s *Service) GetMember(ctx context.Context, vaultID, userID string) (*VaultMember, error) {
+	m, err := s.repo.GetMember(ctx, vaultID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("getting vault member: %w", err)
+	}
+	return m, nil
+}
+
+// GetVaultMemberRole returns the user's effective vault role.
+// Checks direct membership first; if not found, resolves via group membership.
+// Returns "" if the user has no vault role through any path.
+// Satisfies pages.VaultChecker and vaults.Handler.vaultRole.
+func (s *Service) GetVaultMemberRole(ctx context.Context, vaultID, userID string) string {
+	// 1. Direct membership in vault_members.
+	if m, err := s.repo.GetMember(ctx, vaultID, userID); err == nil {
+		return m.RoleID
+	}
+
+	// 2. Group-based membership via vault_group_members.
+	if s.groupResolver == nil {
+		return ""
+	}
+	userGroupIDs, err := s.groupResolver.GetUserGroups(ctx, userID)
+	if err != nil || len(userGroupIDs) == 0 {
+		return ""
+	}
+	groupMembers, err := s.repo.ListGroupMembers(ctx, vaultID)
+	if err != nil || len(groupMembers) == 0 {
+		return ""
+	}
+	userGroupSet := make(map[string]struct{}, len(userGroupIDs))
+	for _, id := range userGroupIDs {
+		userGroupSet[id] = struct{}{}
+	}
+	best := ""
+	for _, gm := range groupMembers {
+		if _, ok := userGroupSet[gm.GroupID]; ok {
+			if vaultRoleRank(gm.RoleID) > vaultRoleRank(best) {
+				best = gm.RoleID
+			}
+		}
+	}
+	return best
+}
+
+// vaultRoleRank returns a numeric rank for comparing built-in vault roles.
+// Higher rank = more privilege.
+func vaultRoleRank(roleID string) int {
+	switch roleID {
+	case "builtin:vault-admin":
+		return 3
+	case "builtin:vault-editor":
+		return 2
+	case "builtin:vault-viewer":
+		return 1
+	default:
+		return 0
+	}
 }
 
 // ListMembers returns all members of a vault.

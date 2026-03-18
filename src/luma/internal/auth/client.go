@@ -158,6 +158,33 @@ func (c *Client) ListUsers(ctx context.Context, search string) ([]*User, error) 
 	return []*User{}, nil
 }
 
+// GetUserGroups calls GET /api/auth/users/{id}/groups to resolve the group IDs
+// a user belongs to (direct + nested). Returns empty slice on non-200 responses.
+func (c *Client) GetUserGroups(ctx context.Context, userID string) ([]string, error) {
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/auth/users/"+userID+"/groups", nil)
+	if err != nil {
+		return nil, fmt.Errorf("auth: creating get user groups request: %w", err)
+	}
+	if token := tokenFromContext(ctx); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("auth: get user groups request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return []string{}, nil
+	}
+	var body struct {
+		GroupIDs []string `json:"group_ids"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+		return []string{}, nil
+	}
+	return body.GroupIDs, nil
+}
+
 // GetUser calls GET /api/auth/users/{id} to resolve user display info.
 func (c *Client) GetUser(ctx context.Context, userID string) (*User, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.baseURL+"/api/auth/users/"+userID, nil)

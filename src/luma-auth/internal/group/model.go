@@ -43,4 +43,7 @@ type Repository interface {
 	WouldCycle(ctx context.Context, parentGroupID, candidateChildID string) (bool, error)
 	AssignRole(ctx context.Context, groupID, roleID string) error
 	RemoveRole(ctx context.Context, groupID, roleID string) error
+	// GetUserGroupIDs returns all group IDs the user belongs to, including
+	// groups inherited through nested group membership at any depth.
+	GetUserGroupIDs(ctx context.Context, userID string) ([]string, error)
 }
