@@ -56,14 +56,13 @@ class _AdminShellState extends State<_AdminShell> {
             icon: Icons.person_add_outlined,
           ),
       ],
-      if (us.canManageInvitations) ...[
+      if (us.canManageInvitations)
         _AdminSearchResult(
-          label: 'Invitations',
-          subtitle: 'Send and manage user invitations',
-          route: '/admin/invites',
+          label: 'Invite user',
+          subtitle: 'Send a user invitation',
+          route: '/admin/users',
           icon: Icons.mail_outlined,
         ),
-      ],
       if (us.canManageGroups) ...[
         _AdminSearchResult(
           label: 'Groups',
@@ -179,8 +178,6 @@ class _AdminShellState extends State<_AdminShell> {
     final tabs = [
       if (widget.userService.canManageUsers)
         _AdminTab(label: 'Users', route: '/admin/users'),
-      if (widget.userService.canManageInvitations)
-        _AdminTab(label: 'Invitations', route: '/admin/invites'),
       if (widget.userService.canManageGroups)
         _AdminTab(label: 'Groups', route: '/admin/groups'),
       if (widget.userService.canManageRoles)

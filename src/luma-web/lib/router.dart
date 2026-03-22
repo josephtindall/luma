@@ -15,7 +15,7 @@ import 'screens/settings/settings_screen.dart';
 import 'screens/settings/settings_layout.dart';
 import 'screens/admin/admin_layout.dart';
 import 'screens/admin/admin_users_screen.dart';
-import 'screens/admin/admin_invites_screen.dart';
+
 import 'screens/admin/admin_settings_screen.dart';
 import 'screens/admin/admin_groups_screen.dart';
 import 'screens/admin/admin_roles_screen.dart';
@@ -188,8 +188,7 @@ GoRouter buildRouter(
               ),
               GoRoute(
                 path: '/admin/invites',
-                builder: (_, __) =>
-                    AdminInvitesScreen(userService: userService),
+                redirect: (_, __) => '/admin/users',
               ),
               GoRoute(
                 path: '/admin/groups',

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../../models/custom_role.dart';
 import '../../services/user_service.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/data_table.dart';
 import '../../widgets/perm_button.dart';
 import '../../widgets/permission_matrix.dart';
 import '../../widgets/slideout_panel.dart';
@@ -19,6 +20,7 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
   List<CustomRoleRecord>? _roles;
   String? _error;
   bool _loading = false;
+  Set<int> _selected = {};
 
   @override
   void initState() {
@@ -27,7 +29,7 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() { _loading = true; _error = null; _selected = {}; });
     try {
       final roles = await widget.userService.listCustomRoles();
       if (mounted) setState(() { _roles = roles; _loading = false; });
@@ -70,9 +72,47 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
     );
   }
 
+  Future<void> _bulkDelete() async {
+    final roles = _roles!;
+    final targets = _selected
+        .map((i) => roles[i])
+        .where((r) => !r.isSystem)
+        .toList();
+    if (targets.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dlg) => AlertDialog(
+        title: const Text('Delete roles'),
+        content: Text(
+            'Delete ${targets.length} role(s)? '
+            'All assignments will be removed.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dlg, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () => Navigator.pop(dlg, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    for (final r in targets) {
+      try {
+        await widget.userService.deleteCustomRole(r.id);
+      } catch (_) {}
+    }
+    _load();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -87,15 +127,13 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text('Roles',
-                        style: Theme.of(context)
-                            .textTheme
-                            .titleMedium
+                        style: theme.textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
                     Text(
                       '${_roles?.length ?? 0} total \u00b7 Configure permission roles.',
-                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                            color: colorScheme.onSurfaceVariant),
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant),
                     ),
                   ],
                 ),
@@ -113,7 +151,7 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
           if (_error != null)
             Padding(
               padding: const EdgeInsets.only(bottom: 12),
-              child: Text(_error!, style: TextStyle(color: colorScheme.error)),
+              child: Text(_error!, style: TextStyle(color: cs.error)),
             ),
           if (_loading)
             const Expanded(child: Center(child: CircularProgressIndicator()))
@@ -121,19 +159,141 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
             const Expanded(child: Center(child: Text('No custom roles yet.')))
           else if (_roles != null)
             Expanded(
-              child: ListView.separated(
-                itemCount: _roles!.length,
-                separatorBuilder: (_, __) => const Divider(height: 1),
-                itemBuilder: (context, i) {
-                  final role = _roles![i];
-                  return _RoleRow(
-                    role: role,
-                    canManage: widget.userService.canEditRole,
-                    onManage: () => _showRoleSlideout(role),
-                  );
-                },
+              child: LumaDataTable<CustomRoleRecord>(
+                showCheckboxes: widget.userService.canEditRole,
+                selected: _selected,
+                onSelectionChanged: (s) => setState(() => _selected = s),
+                canSelect: (r, _) => !r.isSystem,
+                onRowTap: _showRoleSlideout,
+                bulkActionBar: (sel) => _BulkActionBar(
+                  count: sel.length,
+                  onClear: () => setState(() => _selected = {}),
+                  actions: [
+                    OutlinedButton.icon(
+                      icon: Icon(Icons.delete_outlined,
+                          size: 16, color: cs.error),
+                      label: Text('Delete',
+                          style: TextStyle(color: cs.error)),
+                      onPressed: _bulkDelete,
+                    ),
+                  ],
+                ),
+                columns: [
+                  LumaColumn<CustomRoleRecord>(
+                    label: 'Name',
+                    cellBuilder: (role, _) => Row(
+                      children: [
+                        Flexible(
+                          child: Text(role.name,
+                              style: theme.textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                        if (role.isSystem) ...[
+                          const SizedBox(width: 8),
+                          _SystemRoleBadge(),
+                        ],
+                      ],
+                    ),
+                  ),
+                  LumaColumn<CustomRoleRecord>(
+                    label: 'Priority',
+                    width: 110,
+                    cellBuilder: (role, _) => role.priority != null
+                        ? _InfoChip(
+                            label: 'Priority ${role.priority}',
+                            color: cs.primaryContainer,
+                            textColor: cs.onPrimaryContainer,
+                          )
+                        : Text('\u2014',
+                            style: theme.textTheme.bodySmall
+                                ?.copyWith(color: cs.onSurfaceVariant)),
+                  ),
+                  LumaColumn<CustomRoleRecord>(
+                    label: 'Permissions',
+                    width: 120,
+                    cellBuilder: (role, _) => Text(
+                      '${role.permissions.length} permissions',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  LumaColumn<CustomRoleRecord>(
+                    label: 'Assigned',
+                    width: 100,
+                    cellBuilder: (role, _) => Text(
+                      '${role.userCount + role.groupCount} assigned',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  LumaColumn<CustomRoleRecord>(
+                    label: '',
+                    width: 100,
+                    cellBuilder: (role, _) => Align(
+                      alignment: Alignment.centerRight,
+                      child: role.isSystem
+                          ? Tooltip(
+                              message: 'System roles cannot be modified',
+                              child: OutlinedButton.icon(
+                                icon: const Icon(Icons.lock_outline,
+                                    size: 14),
+                                label: const Text('Manage'),
+                                onPressed: null,
+                              ),
+                            )
+                          : PermButton(
+                              label: 'Manage',
+                              enabled: widget.userService.canEditRole,
+                              requiredPermission: 'role:update',
+                              onPressed: () => _showRoleSlideout(role),
+                            ),
+                    ),
+                  ),
+                ],
+                rows: _roles!,
               ),
             ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Bulk action bar ───────────────────────────────────────────────────────────
+
+class _BulkActionBar extends StatelessWidget {
+  final int count;
+  final VoidCallback onClear;
+  final List<Widget> actions;
+
+  const _BulkActionBar({
+    required this.count,
+    required this.onClear,
+    required this.actions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.primaryContainer.withAlpha(60),
+        border: Border(
+          bottom: BorderSide(color: cs.outlineVariant.withAlpha(128)),
+        ),
+      ),
+      child: Row(
+        children: [
+          Text('$count selected',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(width: 12),
+          ...actions,
+          const Spacer(),
+          TextButton(
+            onPressed: onClear,
+            child: const Text('Clear'),
+          ),
         ],
       ),
     );
@@ -451,89 +611,6 @@ class _RoleDetailContentState extends State<_RoleDetailContent> {
             readOnly: role.isSystem,
             onSet: _setPermission,
           ),
-        ],
-      ),
-    );
-  }
-}
-
-// ── Role row ─────────────────────────────────────────────────────────────────
-
-class _RoleRow extends StatelessWidget {
-  final CustomRoleRecord role;
-  final bool canManage;
-  final VoidCallback onManage;
-
-  const _RoleRow({required this.role, required this.canManage, required this.onManage});
-
-  @override
-  Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
-
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 8),
-      child: Row(
-        children: [
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Text(role.name, style: Theme.of(context).textTheme.bodyLarge),
-                    if (role.isSystem) ...[
-                      const SizedBox(width: 8),
-                      _SystemRoleBadge(),
-                    ],
-                  ],
-                ),
-                const SizedBox(height: 4),
-                Row(
-                  children: [
-                    _InfoChip(
-                      label: role.priority != null
-                          ? 'Priority ${role.priority}'
-                          : 'No priority',
-                      color: role.priority != null
-                          ? colorScheme.primaryContainer
-                          : colorScheme.surfaceContainerHighest,
-                      textColor: role.priority != null
-                          ? colorScheme.onPrimaryContainer
-                          : colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 6),
-                    _InfoChip(
-                      label: '${role.permissions.length} permissions',
-                      color: colorScheme.surfaceContainerHighest,
-                      textColor: colorScheme.onSurfaceVariant,
-                    ),
-                    const SizedBox(width: 6),
-                    _InfoChip(
-                      label: '${role.userCount + role.groupCount} assigned',
-                      color: colorScheme.surfaceContainerHighest,
-                      textColor: colorScheme.onSurfaceVariant,
-                    ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-          if (role.isSystem)
-            Tooltip(
-              message: 'System roles cannot be modified',
-              child: OutlinedButton.icon(
-                icon: const Icon(Icons.lock_outline, size: 14),
-                label: const Text('Manage'),
-                onPressed: null,
-              ),
-            )
-          else
-            PermButton(
-              label: 'Manage',
-              enabled: canManage,
-              requiredPermission: 'role:update',
-              onPressed: onManage,
-            ),
         ],
       ),
     );

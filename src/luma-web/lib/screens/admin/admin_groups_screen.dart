@@ -5,6 +5,7 @@ import '../../models/custom_role.dart';
 import '../../models/user.dart';
 import '../../services/user_service.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/data_table.dart';
 import '../../widgets/perm_button.dart';
 import '../../widgets/permission_matrix.dart';
 import '../../widgets/slideout_panel.dart';
@@ -21,6 +22,7 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
   List<GroupRecord>? _groups;
   String? _error;
   bool _loading = false;
+  Set<int> _selected = {};
 
   @override
   void initState() {
@@ -29,7 +31,7 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; });
+    setState(() { _loading = true; _error = null; _selected = {}; });
     try {
       final groups = await widget.userService.listGroups();
       if (mounted) setState(() { _groups = groups; _loading = false; });
@@ -70,84 +72,206 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
     );
   }
 
+  Future<void> _bulkDelete() async {
+    final groups = _groups!;
+    final targets = _selected
+        .map((i) => groups[i])
+        .where((g) => !g.isSystem && g.memberCount == 0)
+        .toList();
+    if (targets.isEmpty) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dlg) => AlertDialog(
+        title: const Text('Delete groups'),
+        content: Text('Delete ${targets.length} group(s)? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(dlg, false),
+              child: const Text('Cancel')),
+          FilledButton(
+            style: FilledButton.styleFrom(
+                backgroundColor: Theme.of(context).colorScheme.error),
+            onPressed: () => Navigator.pop(dlg, true),
+            child: const Text('Delete'),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    for (final g in targets) {
+      try {
+        await widget.userService.deleteGroup(g.id);
+      } catch (_) {}
+    }
+    _load();
+  }
+
   @override
   Widget build(BuildContext context) {
-    final colorScheme = Theme.of(context).colorScheme;
+    final cs = Theme.of(context).colorScheme;
+    final theme = Theme.of(context);
 
-    return Scaffold(
-      body: Padding(
-        padding: const EdgeInsets.all(24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text('Groups',
-                          style: Theme.of(context)
-                              .textTheme
-                              .titleMedium
-                              ?.copyWith(fontWeight: FontWeight.w600)),
-                      const SizedBox(height: 2),
-                      Text(
-                        '${_groups?.length ?? 0} total \u00b7 Organize users into teams.',
-                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                              color: colorScheme.onSurfaceVariant),
-                      ),
-                    ],
-                  ),
-                ),
-                PermButton(
-                  label: 'Create group',
-                  filled: true,
-                  enabled: widget.userService.canCreateGroup,
-                  requiredPermission: 'group:create',
-                  onPressed: _showCreateGroupSlideout,
-                ),
-              ],
-            ),
-            const SizedBox(height: 16),
-            if (_loading)
-              const Center(child: CircularProgressIndicator())
-            else if (_error != null)
-              Center(child: Text(_error!, style: TextStyle(color: colorScheme.error)))
-            else if (_groups == null || _groups!.isEmpty)
-              const Center(child: Text('No groups yet'))
-            else
+    return Padding(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               Expanded(
-                child: ListView.separated(
-                  itemCount: _groups!.length,
-                  separatorBuilder: (_, __) => const Divider(height: 1),
-                  itemBuilder: (_, i) {
-                    final g = _groups![i];
-                    return ListTile(
-                      title: Row(
-                        children: [
-                          Text(g.name),
-                          if (g.isSystem) ...[
-                            const SizedBox(width: 8),
-                            const _SystemBadge(),
-                          ],
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('Groups',
+                        style: theme.textTheme.titleMedium
+                            ?.copyWith(fontWeight: FontWeight.w600)),
+                    const SizedBox(height: 2),
+                    Text(
+                      '${_groups?.length ?? 0} total \u00b7 Organize users into teams.',
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(color: cs.onSurfaceVariant),
+                    ),
+                  ],
+                ),
+              ),
+              PermButton(
+                label: 'Create group',
+                filled: true,
+                enabled: widget.userService.canCreateGroup,
+                requiredPermission: 'group:create',
+                onPressed: _showCreateGroupSlideout,
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          if (_loading)
+            const Expanded(child: Center(child: CircularProgressIndicator()))
+          else if (_error != null)
+            Expanded(
+                child: Center(
+                    child: Text(_error!,
+                        style: TextStyle(color: cs.error))))
+          else if (_groups == null || _groups!.isEmpty)
+            const Expanded(child: Center(child: Text('No groups yet')))
+          else
+            Expanded(
+              child: LumaDataTable<GroupRecord>(
+                showCheckboxes: widget.userService.canEditGroup,
+                selected: _selected,
+                onSelectionChanged: (s) => setState(() => _selected = s),
+                canSelect: (g, _) => !g.isSystem,
+                onRowTap: widget.userService.canEditGroup
+                    ? _showGroupSlideout
+                    : null,
+                bulkActionBar: (sel) => _BulkActionBar(
+                  count: sel.length,
+                  onClear: () => setState(() => _selected = {}),
+                  actions: [
+                    OutlinedButton.icon(
+                      icon: Icon(Icons.delete_outlined,
+                          size: 16, color: cs.error),
+                      label: Text('Delete',
+                          style: TextStyle(color: cs.error)),
+                      onPressed: _bulkDelete,
+                    ),
+                  ],
+                ),
+                columns: [
+                  LumaColumn<GroupRecord>(
+                    label: 'Name',
+                    cellBuilder: (g, _) => Row(
+                      children: [
+                        Flexible(
+                          child: Text(g.name,
+                              style: theme.textTheme.bodyMedium
+                                  ?.copyWith(fontWeight: FontWeight.w600),
+                              overflow: TextOverflow.ellipsis),
+                        ),
+                        if (g.isSystem) ...[
+                          const SizedBox(width: 8),
+                          const _SystemBadge(),
                         ],
-                      ),
-                      subtitle: Text('${g.memberCount} member${g.memberCount == 1 ? '' : 's'}'
-                          ' · ${g.roleIds.length} role${g.roleIds.length == 1 ? '' : 's'}'),
-                      trailing: PermButton(
+                      ],
+                    ),
+                  ),
+                  LumaColumn<GroupRecord>(
+                    label: 'Members',
+                    width: 120,
+                    cellBuilder: (g, _) => Text(
+                      '${g.memberCount} member${g.memberCount == 1 ? '' : 's'}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  LumaColumn<GroupRecord>(
+                    label: 'Roles',
+                    width: 100,
+                    cellBuilder: (g, _) => Text(
+                      '${g.roleIds.length} role${g.roleIds.length == 1 ? '' : 's'}',
+                      style: theme.textTheme.bodySmall,
+                    ),
+                  ),
+                  LumaColumn<GroupRecord>(
+                    label: '',
+                    width: 100,
+                    cellBuilder: (g, _) => Align(
+                      alignment: Alignment.centerRight,
+                      child: PermButton(
                         label: 'Manage',
                         enabled: widget.userService.canEditGroup,
                         requiredPermission: 'group:rename',
                         onPressed: () => _showGroupSlideout(g),
                       ),
-                    );
-                  },
-                ),
+                    ),
+                  ),
+                ],
+                rows: _groups!,
               ),
-          ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+// ── Bulk action bar ───────────────────────────────────────────────────────────
+
+class _BulkActionBar extends StatelessWidget {
+  final int count;
+  final VoidCallback onClear;
+  final List<Widget> actions;
+
+  const _BulkActionBar({
+    required this.count,
+    required this.onClear,
+    required this.actions,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+      decoration: BoxDecoration(
+        color: cs.primaryContainer.withAlpha(60),
+        border: Border(
+          bottom: BorderSide(color: cs.outlineVariant.withAlpha(128)),
         ),
+      ),
+      child: Row(
+        children: [
+          Text('$count selected',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  fontWeight: FontWeight.w600)),
+          const SizedBox(width: 12),
+          ...actions,
+          const Spacer(),
+          TextButton(
+            onPressed: onClear,
+            child: const Text('Clear'),
+          ),
+        ],
       ),
     );
   }
@@ -392,9 +516,9 @@ class _GroupDetailContentState extends State<_GroupDetailContent> {
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           if (isSystem)
-            Padding(
-              padding: const EdgeInsets.only(bottom: 12),
-              child: const _SystemBadge(),
+            const Padding(
+              padding: EdgeInsets.only(bottom: 12),
+              child: _SystemBadge(),
             ),
 
           // ── Name + Description ───────────────────────
