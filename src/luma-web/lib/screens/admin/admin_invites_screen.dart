@@ -5,6 +5,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../models/user.dart';
 import '../../services/user_service.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/slideout_panel.dart';
 
 class AdminInvitesScreen extends StatefulWidget {
   final UserService userService;
@@ -32,10 +33,11 @@ class _AdminInvitesScreenState extends State<AdminInvitesScreen> {
     });
   }
 
-  void _showInvitePanel([String? initialEmail, String? revokeId]) {
-    showDialog<void>(
+  void _showInviteSlideout([String? initialEmail, String? revokeId]) {
+    showSlideoutPanel(
       context: context,
-      builder: (_) => _InvitePanel(
+      title: revokeId != null ? 'Resend Invite' : 'Create Invite',
+      bodyBuilder: (_) => _InviteContent(
         userService: widget.userService,
         initialEmail: initialEmail,
         revokeId: revokeId,
@@ -87,8 +89,8 @@ class _AdminInvitesScreenState extends State<AdminInvitesScreen> {
       future: _invFuture,
       loading: _loading,
       onRevoke: _revokeWithConfirm,
-      onReinvite: (inv) => _showInvitePanel(inv.email, inv.id),
-      onCreateInvite: () => _showInvitePanel(),
+      onReinvite: (inv) => _showInviteSlideout(inv.email, inv.id),
+      onCreateInvite: () => _showInviteSlideout(),
       onReload: _reload,
     );
   }
@@ -164,13 +166,28 @@ class _InvitationsContentState extends State<_InvitationsContent> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Chip(
-                    label: Text('Invitations (${visible.length})'),
-                    backgroundColor:
-                        Theme.of(context).colorScheme.secondaryContainer,
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('Invitations',
+                            style: Theme.of(context)
+                                .textTheme
+                                .titleMedium
+                                ?.copyWith(fontWeight: FontWeight.w600)),
+                        const SizedBox(height: 2),
+                        Text(
+                          '${visible.length} shown \u00b7 Send and manage user invitations.',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: Theme.of(context)
+                                    .colorScheme
+                                    .onSurfaceVariant),
+                        ),
+                      ],
+                    ),
                   ),
-                  const Spacer(),
                   FilledButton.icon(
                     icon: const Icon(Icons.person_add_outlined),
                     label: const Text('Create invite'),
@@ -373,21 +390,24 @@ class _InvitationRow extends StatelessWidget {
   }
 }
 
-// ── Invite panel dialog ───────────────────────────────────────────────────────
+// ── Invite content (slideout body) ───────────────────────────────────────────
 
-class _InvitePanel extends StatefulWidget {
+class _InviteContent extends StatefulWidget {
   final UserService userService;
   final String? initialEmail;
   final String? revokeId;
 
-  const _InvitePanel(
-      {required this.userService, this.initialEmail, this.revokeId});
+  const _InviteContent({
+    required this.userService,
+    this.initialEmail,
+    this.revokeId,
+  });
 
   @override
-  State<_InvitePanel> createState() => _InvitePanelState();
+  State<_InviteContent> createState() => _InviteContentState();
 }
 
-class _InvitePanelState extends State<_InvitePanel> {
+class _InviteContentState extends State<_InviteContent> {
   late final TextEditingController _emailController;
   bool _creating = false;
   String? _joinUrl;
@@ -417,10 +437,7 @@ class _InvitePanelState extends State<_InvitePanel> {
   Future<void> _create() async {
     final email = _emailController.text.trim();
     if (email.isEmpty) return;
-    setState(() {
-      _creating = true;
-      _error = null;
-    });
+    setState(() { _creating = true; _error = null; });
     try {
       final idToRevoke = _createdInvId ?? widget.revokeId;
       if (idToRevoke != null) {
@@ -452,124 +469,101 @@ class _InvitePanelState extends State<_InvitePanel> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
-    return Dialog(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 480),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
-              Row(
-                children: [
-                  Text(
-                    _isResend ? 'Resend Invite' : 'Create Invite',
-                    style: theme.textTheme.titleLarge,
-                  ),
-                  const Spacer(),
-                  IconButton(
-                    icon: const Icon(Icons.close),
-                    tooltip: 'Close',
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                ],
+
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(24),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          TextField(
+            controller: _emailController,
+            enabled: !_hasInitialEmail && _joinUrl == null && !_creating,
+            decoration: const InputDecoration(
+              labelText: 'Email address',
+              hintText: 'user@example.com',
+              border: OutlineInputBorder(),
+            ),
+            keyboardType: TextInputType.emailAddress,
+            autofocus: !_hasInitialEmail,
+            onSubmitted: (_) => _isResend ? null : _create(),
+          ),
+          if (_error != null) ...[
+            const SizedBox(height: 8),
+            Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
+          ],
+          if (_joinUrl == null) ...[
+            if (_isResend) ...[
+              const SizedBox(height: 12),
+              Text(
+                'The original invite link cannot be retrieved. '
+                'Generating a new link will revoke the current one.',
+                style: theme.textTheme.bodySmall
+                    ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
               ),
-              const SizedBox(height: 20),
-              TextField(
-                controller: _emailController,
-                enabled: !_hasInitialEmail && _joinUrl == null && !_creating,
-                decoration: const InputDecoration(
-                  labelText: 'Email address',
-                  hintText: 'user@example.com',
-                  border: OutlineInputBorder(),
+            ],
+            const SizedBox(height: 16),
+            FilledButton(
+              onPressed: _creating ? null : _create,
+              child: _creating
+                  ? const SizedBox(
+                      height: 20, width: 20,
+                      child: CircularProgressIndicator(strokeWidth: 2),
+                    )
+                  : Text(_isResend ? 'Generate new link' : 'Create invite'),
+            ),
+          ] else ...[
+            const SizedBox(height: 24),
+            Text(
+              'Invite URL',
+              style: theme.textTheme.labelMedium
+                  ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    decoration: BoxDecoration(
+                      color: theme.colorScheme.surfaceContainerHighest,
+                      borderRadius: LumaRadius.radiusMd,
+                    ),
+                    child: SelectableText(
+                      _joinUrl!,
+                      style: theme.textTheme.bodySmall
+                          ?.copyWith(fontFamily: 'monospace'),
+                    ),
+                  ),
                 ),
-                keyboardType: TextInputType.emailAddress,
-                autofocus: !_hasInitialEmail,
-                onSubmitted: (_) => _isResend ? null : _create(),
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 8),
-                Text(_error!, style: TextStyle(color: theme.colorScheme.error)),
-              ],
-              if (_joinUrl == null) ...[
-                if (_isResend) ...[
-                  const SizedBox(height: 12),
-                  Text(
-                    'The original invite link cannot be retrieved. '
-                    'Generating a new link will revoke the current one.',
-                    style: theme.textTheme.bodySmall
-                        ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                  ),
-                ],
-                const SizedBox(height: 16),
-                FilledButton(
-                  onPressed: _creating ? null : _create,
-                  child: _creating
+                const SizedBox(width: 4),
+                IconButton(
+                  icon: Icon(_copied ? Icons.check : Icons.copy_outlined),
+                  tooltip: _copied ? 'Copied!' : 'Copy',
+                  onPressed: _copyUrl,
+                ),
+                IconButton(
+                  icon: _creating
                       ? const SizedBox(
-                          height: 20,
-                          width: 20,
+                          height: 20, width: 20,
                           child: CircularProgressIndicator(strokeWidth: 2),
                         )
-                      : Text(_isResend ? 'Generate new link' : 'Create invite'),
-                ),
-              ] else ...[
-                const SizedBox(height: 24),
-                Text(
-                  'Invite URL',
-                  style: theme.textTheme.labelMedium
-                      ?.copyWith(color: theme.colorScheme.onSurfaceVariant),
-                ),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                            horizontal: 12, vertical: 10),
-                        decoration: BoxDecoration(
-                          color: theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: LumaRadius.radiusMd,
-                        ),
-                        child: SelectableText(
-                          _joinUrl!,
-                          style: theme.textTheme.bodySmall
-                              ?.copyWith(fontFamily: 'monospace'),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 4),
-                    IconButton(
-                      icon:
-                          Icon(_copied ? Icons.check : Icons.copy_outlined),
-                      tooltip: _copied ? 'Copied!' : 'Copy',
-                      onPressed: _copyUrl,
-                    ),
-                    IconButton(
-                      icon: _creating
-                          ? const SizedBox(
-                              height: 20,
-                              width: 20,
-                              child: CircularProgressIndicator(strokeWidth: 2),
-                            )
-                          : const Icon(Icons.refresh_outlined),
-                      tooltip: 'Regenerate link',
-                      onPressed: _creating ? null : _create,
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 24),
-                Center(
-                  child: QrImageView(
-                    data: _joinUrl!,
-                    size: 200,
-                    backgroundColor: Colors.white,
-                  ),
+                      : const Icon(Icons.refresh_outlined),
+                  tooltip: 'Regenerate link',
+                  onPressed: _creating ? null : _create,
                 ),
               ],
-            ],
-          ),
-        ),
+            ),
+            const SizedBox(height: 24),
+            Center(
+              child: QrImageView(
+                data: _joinUrl!,
+                size: 200,
+                backgroundColor: Colors.white,
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }

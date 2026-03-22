@@ -89,16 +89,16 @@ const _lightOnSurfaceVariant   = Color(0xFF475467); // Gray 600
 const _lightOutline            = Color(0xFF98A2B3); // Gray 400
 const _lightOutlineVariant     = Color(0xFFEAECF0); // Gray 200
 
-// Dark palette — Neutral Slate (no blue/warm tint)
-const _darkPrimary             = Color(0xFF84CAFF); // Blue 300 (muted for dark)
+// Dark palette — Pure neutral gray (no blue/warm tint)
+const _darkPrimary             = Color(0xFF84CAFF); // Blue 300 — accent only
 const _darkOnPrimary           = Color(0xFF194185); // Blue 900
 const _darkPrimaryContainer    = Color(0xFF1849A9); // Blue 800
 const _darkOnPrimaryContainer  = Color(0xFFB2DDFF); // Blue 200
-const _darkSecondary           = Color(0xFF8B8D98); // Neutral gray
-const _darkOnSecondary         = Color(0xFF0F1116);
-const _darkSecondaryContainer  = Color(0xFF252830); // Dark slate
-const _darkOnSecondaryContainer = Color(0xFFE0E1E6);
-const _darkTertiary            = Color(0xFF53B1FD); // Blue 400
+const _darkSecondary           = Color(0xFF909090); // Pure neutral gray
+const _darkOnSecondary         = Color(0xFF111111);
+const _darkSecondaryContainer  = Color(0xFF272727); // Pure gray
+const _darkOnSecondaryContainer = Color(0xFFE0E0E0);
+const _darkTertiary            = Color(0xFF53B1FD); // Blue 400 — accent only
 const _darkOnTertiary          = Color(0xFF194185);
 const _darkTertiaryContainer   = Color(0xFF1849A9);
 const _darkOnTertiaryContainer = Color(0xFFB2DDFF);
@@ -106,16 +106,16 @@ const _darkError               = Color(0xFFF97066); // Error 400
 const _darkOnError             = Color(0xFF3B1210);
 const _darkErrorContainer      = Color(0xFF3B1210);
 const _darkOnErrorContainer    = Color(0xFFFECDCA);
-const _darkSurface             = Color(0xFF181B22); // Very dark slate
-const _darkOnSurface           = Color(0xFFE0E1E6); // Light neutral gray
-const _darkCHigh               = Color(0xFF252830);
-const _darkC                   = Color(0xFF1E2128);
-const _darkCLow                = Color(0xFF181B22);
-const _darkCLowest             = Color(0xFF0F1116); // Near-black slate
-const _darkCHighest            = Color(0xFF2C3038);
-const _darkOnSurfaceVariant    = Color(0xFF8B8D98); // Muted neutral
-const _darkOutline             = Color(0xFF3E4249);
-const _darkOutlineVariant      = Color(0xFF2C3038);
+const _darkSurface             = Color(0xFF1A1A1A); // Pure dark gray
+const _darkOnSurface           = Color(0xFFE0E0E0); // Pure light gray
+const _darkCHigh               = Color(0xFF272727);
+const _darkC                   = Color(0xFF202020);
+const _darkCLow                = Color(0xFF1A1A1A);
+const _darkCLowest             = Color(0xFF121212); // Near-black
+const _darkCHighest            = Color(0xFF2E2E2E);
+const _darkOnSurfaceVariant    = Color(0xFF909090); // Pure neutral gray
+const _darkOutline             = Color(0xFF404040);
+const _darkOutlineVariant      = Color(0xFF2E2E2E);
 
 ThemeData _buildTheme(Brightness brightness) {
   final isLight = brightness == Brightness.light;
@@ -150,13 +150,13 @@ ThemeData _buildTheme(Brightness brightness) {
     outlineVariant:         isLight ? _lightOutlineVariant         : _darkOutlineVariant,
     shadow:                 isLight ? const Color(0xFF101828)      : Colors.black,
     scrim:                  Colors.black,
-    inverseSurface:         isLight ? const Color(0xFF101828)      : const Color(0xFFE0E1E6),
-    onInverseSurface:       isLight ? Colors.white                 : const Color(0xFF181B22),
+    inverseSurface:         isLight ? const Color(0xFF101828)      : const Color(0xFFE0E0E0),
+    onInverseSurface:       isLight ? Colors.white                 : const Color(0xFF1A1A1A),
     inversePrimary:         isLight ? _darkPrimary                 : _lightPrimary,
     surfaceTint:            Colors.transparent,
   );
 
-  final scaffoldBg = isLight ? const Color(0xFFF9FAFB) : const Color(0xFF0F1116);
+  final scaffoldBg = isLight ? const Color(0xFFF9FAFB) : const Color(0xFF121212);
   final borderColor = isLight ? const Color(0xFFD0D5DD) : _darkOutlineVariant; // Gray 300 / dark border
   final onSurface = isLight ? _lightOnSurface : _darkOnSurface;
   final onSurfaceVariant = isLight ? _lightOnSurfaceVariant : _darkOnSurfaceVariant;
@@ -195,7 +195,7 @@ ThemeData _buildTheme(Brightness brightness) {
     appBarTheme: AppBarTheme(
       elevation: 0,
       scrolledUnderElevation: 0,
-      backgroundColor: isLight ? Colors.white : const Color(0xFF181B22),
+      backgroundColor: isLight ? Colors.white : const Color(0xFF1A1A1A),
       foregroundColor: onSurface,
       surfaceTintColor: Colors.transparent,
       shadowColor: Colors.transparent,
@@ -208,7 +208,7 @@ ThemeData _buildTheme(Brightness brightness) {
 
     // ── Cards ─────────────────────────────────────────────────────────────────
     cardTheme: CardThemeData(
-      color: isLight ? Colors.white : const Color(0xFF181B22),
+      color: isLight ? Colors.white : const Color(0xFF1A1A1A),
       elevation: 0,
       surfaceTintColor: Colors.transparent,
       shape: RoundedRectangleBorder(
@@ -347,7 +347,7 @@ ThemeData _buildTheme(Brightness brightness) {
       shape: const RoundedRectangleBorder(borderRadius: LumaRadius.radiusLg),
       elevation: 6,
       surfaceTintColor: Colors.transparent,
-      backgroundColor: isLight ? Colors.white : const Color(0xFF1E2128),
+      backgroundColor: isLight ? Colors.white : const Color(0xFF202020),
     ),
 
     // ── Tooltips ──────────────────────────────────────────────────────────────
@@ -355,7 +355,7 @@ ThemeData _buildTheme(Brightness brightness) {
       decoration: BoxDecoration(
         color: isLight
             ? const Color(0xFF101828)
-            : const Color(0xFF2C3038),
+            : const Color(0xFF2E2E2E),
         borderRadius: LumaRadius.radiusMd,
         border: isLight
             ? null
@@ -376,7 +376,7 @@ ThemeData _buildTheme(Brightness brightness) {
       ),
       elevation: 4,
       surfaceTintColor: Colors.transparent,
-      color: isLight ? Colors.white : const Color(0xFF1E2128),
+      color: isLight ? Colors.white : const Color(0xFF202020),
     ),
     menuTheme: MenuThemeData(
       style: MenuStyle(
@@ -389,7 +389,7 @@ ThemeData _buildTheme(Brightness brightness) {
         elevation: const WidgetStatePropertyAll(4),
         surfaceTintColor: const WidgetStatePropertyAll(Colors.transparent),
         backgroundColor: WidgetStatePropertyAll(
-          isLight ? Colors.white : const Color(0xFF1E2128),
+          isLight ? Colors.white : const Color(0xFF202020),
         ),
       ),
     ),

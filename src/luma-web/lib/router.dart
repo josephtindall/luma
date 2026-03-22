@@ -15,18 +15,12 @@ import 'screens/settings/settings_screen.dart';
 import 'screens/settings/settings_layout.dart';
 import 'screens/admin/admin_layout.dart';
 import 'screens/admin/admin_users_screen.dart';
-import 'screens/admin/admin_user_detail_screen.dart';
 import 'screens/admin/admin_invites_screen.dart';
 import 'screens/admin/admin_settings_screen.dart';
 import 'screens/admin/admin_groups_screen.dart';
-import 'screens/admin/admin_group_detail_screen.dart';
 import 'screens/admin/admin_roles_screen.dart';
-import 'screens/admin/admin_role_detail_screen.dart';
 import 'screens/admin/admin_events_screen.dart';
 import 'screens/admin/admin_vaults_screen.dart';
-import 'models/user.dart';
-import 'models/group.dart';
-import 'models/custom_role.dart';
 import 'screens/pages/vault_settings_screen.dart';
 import 'screens/register/register_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
@@ -193,18 +187,6 @@ GoRouter buildRouter(
                 builder: (_, __) => AdminUsersScreen(userService: userService),
               ),
               GoRoute(
-                path: '/admin/users/:id',
-                builder: (_, state) {
-                  final user = state.extra as AdminUserRecord?;
-                  return AdminUserDetailScreen(
-                    userService: userService,
-                    user: user,
-                    isSelf: user != null &&
-                        userService.profile?.id == user.id,
-                  );
-                },
-              ),
-              GoRoute(
                 path: '/admin/invites',
                 builder: (_, __) =>
                     AdminInvitesScreen(userService: userService),
@@ -214,23 +196,8 @@ GoRouter buildRouter(
                 builder: (_, __) => AdminGroupsScreen(userService: userService),
               ),
               GoRoute(
-                path: '/admin/groups/:id',
-                builder: (_, state) => AdminGroupDetailScreen(
-                  userService: userService,
-                  group: state.extra as GroupRecord?,
-                ),
-              ),
-              GoRoute(
                 path: '/admin/roles',
                 builder: (_, __) => AdminRolesScreen(userService: userService),
-              ),
-              GoRoute(
-                path: '/admin/roles/:id',
-                builder: (_, state) => AdminRoleDetailScreen(
-                  userService: userService,
-                  roleId: state.pathParameters['id']!,
-                  role: state.extra as CustomRoleRecord?,
-                ),
               ),
               GoRoute(
                 path: '/admin/settings',

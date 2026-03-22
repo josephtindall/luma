@@ -6,6 +6,7 @@ import 'package:web/web.dart' as web;
 import '../../models/user.dart';
 import '../../theme/tokens.dart';
 import '../../services/user_service.dart';
+import '../../widgets/pagination.dart';
 import '../settings/settings_screen.dart' show auditEventMeta, auditFormatTime;
 
 class AdminEventsScreen extends StatefulWidget {
@@ -215,9 +216,28 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // ── Section header ──────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Events',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(
+                'View audit log and system events.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+
         // ── Filter bar ──────────────────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
           child: Wrap(
             spacing: 12,
             runSpacing: 8,
@@ -303,51 +323,34 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
           ),
         ),
 
-        // ── Pagination bar (sticky, between filter and list) ────────────
-        if (page != null && page.total > 0)
+        // ── Pagination bar ────────────────────────────────────────────
+        if (page != null)
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   page.events.isEmpty
                       ? 'No results'
-                      : 'Showing ${page.offset + 1}–'
+                      : 'Showing ${page.offset + 1}\u2013'
                           '${page.offset + page.events.length}'
                           ' of ${page.total}',
                   style: theme.textTheme.bodySmall,
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_loading)
-                      const Padding(
-                        padding: EdgeInsets.only(right: 8),
-                        child: SizedBox(
-                          width: 14,
-                          height: 14,
-                          child:
-                              CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    TextButton(
-                      onPressed: page.offset > 0
-                          ? () => _load(offset: page.offset - _limit)
-                          : null,
-                      child: const Text('← Prev'),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
-                    Text(
-                      'Page ${page.currentPage + 1} of ${page.totalPages}',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    TextButton(
-                      onPressed: page.hasMore
-                          ? () => _load(offset: page.offset + _limit)
-                          : null,
-                      child: const Text('Next →'),
-                    ),
-                  ],
+                  ),
+                const Spacer(),
+                LumaPagination(
+                  currentPage: page.currentPage,
+                  totalPages: page.totalPages,
+                  onPageChanged: (p) => _load(offset: p * _limit),
                 ),
               ],
             ),
