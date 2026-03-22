@@ -403,6 +403,40 @@ class _AdminUserDetailScreenState extends State<AdminUserDetailScreen> {
 
                 const SizedBox(height: 24),
 
+                // ── Directory visibility ──────────────────────────────────
+                _SectionHeader(label: 'Directory visibility'),
+                const SizedBox(height: 8),
+                SwitchListTile(
+                  contentPadding: EdgeInsets.zero,
+                  title: const Text('Hide from directory search'),
+                  subtitle: const Text(
+                    'When enabled, this user will not appear in search results for non-admin users.',
+                  ),
+                  value: u.hideFromSearch,
+                  onChanged: widget.isSelf || _loading
+                      ? null
+                      : (hide) async {
+                          setState(() => _loading = true);
+                          try {
+                            await widget.userService
+                                .setUserHideFromSearch(u.id, hide: hide);
+                            if (mounted) context.go('/admin/users');
+                          } catch (e) {
+                            if (mounted) {
+                              setState(() => _loading = false);
+                              ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+                                content: const Text(
+                                    'Something went wrong. Please try again.'),
+                                backgroundColor:
+                                    Theme.of(context).colorScheme.error,
+                              ));
+                            }
+                          }
+                        },
+                ),
+
+                const SizedBox(height: 24),
+
                 // ── Custom Roles ──────────────────────────────────────────
                 _SectionHeader(label: 'Custom Roles'),
                 const SizedBox(height: 8),

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/user.dart';
 import '../../services/user_service.dart';
+import '../../widgets/perm_button.dart';
 import '../../widgets/user_avatar.dart';
 
 class AdminUsersScreen extends StatefulWidget {
@@ -80,9 +81,11 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                         Theme.of(context).colorScheme.secondaryContainer,
                   ),
                   const Spacer(),
-                  FilledButton.icon(
-                    icon: const Icon(Icons.person_add_outlined),
-                    label: const Text('Create user'),
+                  PermButton(
+                    label: 'Create user',
+                    filled: true,
+                    enabled: widget.userService.canCreateUser,
+                    requiredPermission: 'user:invite',
                     onPressed: _showCreateUserDialog,
                   ),
                 ],
@@ -99,6 +102,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                           user: users[i],
                           isSelf: widget.userService.profile?.id ==
                               users[i].id,
+                          canManage: widget.userService.canEditUser,
                           onManage: () => _showManageDialog(users[i]),
                         ),
                       ),
@@ -116,11 +120,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 class _UserRow extends StatelessWidget {
   final AdminUserRecord user;
   final bool isSelf;
+  final bool canManage;
   final VoidCallback onManage;
 
   const _UserRow({
     required this.user,
     required this.isSelf,
+    required this.canManage,
     required this.onManage,
   });
 
@@ -197,9 +203,11 @@ class _UserRow extends StatelessWidget {
             ],
           ),
           const SizedBox(width: 8),
-          OutlinedButton(
+          PermButton(
+            label: 'Manage',
+            enabled: canManage,
+            requiredPermission: 'user:edit',
             onPressed: onManage,
-            child: const Text('Manage'),
           ),
         ],
       ),

@@ -23,6 +23,7 @@ class GroupRecord {
   final String? description;
   final bool isSystem;
   final bool noMemberControl;
+  final bool hideFromSearch;
   final int memberCount;
   final List<String> roleIds;
   final List<GroupMemberRecord> members;
@@ -34,6 +35,7 @@ class GroupRecord {
     this.description,
     required this.isSystem,
     this.noMemberControl = false,
+    this.hideFromSearch = false,
     required this.memberCount,
     required this.roleIds,
     required this.members,
@@ -46,6 +48,7 @@ class GroupRecord {
         description: j['description'] as String?,
         isSystem: j['is_system'] as bool? ?? false,
         noMemberControl: j['no_member_control'] as bool? ?? false,
+        hideFromSearch: j['hide_from_search'] as bool? ?? false,
         memberCount: j['member_count'] as int? ?? 0,
         roleIds: (j['role_ids'] as List<dynamic>?)
                 ?.map((e) => e as String)

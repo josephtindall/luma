@@ -274,7 +274,7 @@ func (r *Repository) ListWithCounts(ctx context.Context, limit, offset int) ([]*
 	const q = `
 		SELECT u.id, u.email, u.display_name, u.instance_role_id,
 		       COALESCE(u.avatar_seed, ''), u.mfa_enabled, u.force_password_change,
-		       u.locked_at IS NOT NULL AS is_locked, u.created_at,
+		       u.locked_at IS NOT NULL AS is_locked, u.hide_from_search, u.created_at,
 		       COUNT(DISTINCT ts.id) FILTER (WHERE ts.verified = true) AS totp_count,
 		       COUNT(DISTINCT p.id)  FILTER (WHERE p.revoked_at IS NULL) AS passkey_count
 		FROM auth.users u
@@ -282,7 +282,7 @@ func (r *Repository) ListWithCounts(ctx context.Context, limit, offset int) ([]*
 		LEFT JOIN auth.passkeys     p  ON p.user_id  = u.id
 		GROUP BY u.id, u.email, u.display_name, u.instance_role_id,
 		         u.avatar_seed, u.mfa_enabled, u.force_password_change,
-		         u.locked_at, u.created_at
+		         u.locked_at, u.hide_from_search, u.created_at
 		ORDER BY u.created_at DESC
 		LIMIT $1 OFFSET $2`
 
@@ -304,6 +304,7 @@ func (r *Repository) ListWithCounts(ctx context.Context, limit, offset int) ([]*
 			&au.MFAEnabled,
 			&au.ForcePasswordChange,
 			&au.IsLocked,
+			&au.HideFromSearch,
 			&au.CreatedAt,
 			&au.TOTPCount,
 			&au.PasskeyCount,
@@ -317,6 +318,48 @@ func (r *Repository) ListWithCounts(ctx context.Context, limit, offset int) ([]*
 		return nil, fmt.Errorf("user.postgres.ListWithCounts rows: %w", err)
 	}
 	return out, nil
+}
+
+// SearchDirectory returns non-hidden, non-locked users whose display_name or
+// email contains the query string (case-insensitive).
+func (r *Repository) SearchDirectory(ctx context.Context, query string, limit int) ([]*user.DirectoryUser, error) {
+	const q = `
+		SELECT id, email, display_name, COALESCE(avatar_seed, '')
+		FROM auth.users
+		WHERE hide_from_search = false
+		  AND locked_at IS NULL
+		  AND (display_name ILIKE '%' || $1 || '%' OR email ILIKE '%' || $1 || '%')
+		ORDER BY display_name
+		LIMIT $2`
+
+	rows, err := r.db.Query(ctx, q, query, limit)
+	if err != nil {
+		return nil, fmt.Errorf("user.postgres.SearchDirectory: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*user.DirectoryUser
+	for rows.Next() {
+		du := &user.DirectoryUser{}
+		if err := rows.Scan(&du.ID, &du.Email, &du.DisplayName, &du.AvatarSeed); err != nil {
+			return nil, fmt.Errorf("user.postgres.SearchDirectory scan: %w", err)
+		}
+		out = append(out, du)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("user.postgres.SearchDirectory rows: %w", err)
+	}
+	return out, nil
+}
+
+// SetHideFromSearch sets or clears the hide_from_search flag for a user.
+func (r *Repository) SetHideFromSearch(ctx context.Context, id string, hide bool) error {
+	const q = `UPDATE auth.users SET hide_from_search = $2, updated_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, id, hide)
+	if err != nil {
+		return fmt.Errorf("user.postgres.SetHideFromSearch: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) AddPasswordHistory(ctx context.Context, userID, hash string) error {

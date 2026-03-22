@@ -126,7 +126,7 @@ func run() error {
 		r.Mount("/user", authHandler.UserRoutes())
 		r.Get("/users", func(w http.ResponseWriter, r *http.Request) {
 			q := r.URL.Query().Get("search")
-			users, _ := authClient.ListUsers(r.Context(), q)
+			users, _ := authClient.SearchDirectoryUsers(r.Context(), q)
 			if users == nil {
 				users = []*auth.User{}
 			}
@@ -135,7 +135,7 @@ func run() error {
 		})
 		r.Get("/groups", func(w http.ResponseWriter, r *http.Request) {
 			q := r.URL.Query().Get("search")
-			groups, _ := authClient.ListGroups(r.Context(), q)
+			groups, _ := authClient.SearchDirectoryGroups(r.Context(), q)
 			if groups == nil {
 				groups = []*auth.Group{}
 			}

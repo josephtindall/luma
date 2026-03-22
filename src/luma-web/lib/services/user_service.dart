@@ -64,7 +64,17 @@ class UserService extends ChangeNotifier {
   bool get canExportAuditLog => _adminCaps['audit:export-all'] == true;
   bool get canViewAuditPII => _adminCaps['audit:read-pii'] == true;
   bool get canManageVaults => _adminCaps['instance:read'] == true;
-  bool get hasAnyAdminAccess => _adminCaps.isNotEmpty;
+  bool get hasAnyAdminAccess => _adminCaps['admin:access'] == true;
+
+  // Fine-grained action capabilities for disabling individual buttons.
+  bool get canCreateUser => _adminCaps['user:invite'] == true;
+  bool get canEditUser => _adminCaps['user:edit'] == true;
+  bool get canCreateGroup => _adminCaps['group:create'] == true;
+  bool get canEditGroup => _adminCaps['group:rename'] == true;
+  bool get canCreateRole => _adminCaps['role:create'] == true;
+  bool get canEditRole => _adminCaps['role:update'] == true;
+  bool get canCreateInvitation => _adminCaps['invitation:create'] == true;
+  bool get canRevokeInvitation => _adminCaps['invitation:revoke'] == true;
 
   Future<void> loadProfile() async {
     final resp = await _api.get('/api/luma/user/me');
@@ -80,12 +90,12 @@ class UserService extends ChangeNotifier {
       final resp = await _api.get('/api/luma/instance/ui');
       if (resp.statusCode == 200) {
         final data = json.decode(resp.body) as Map<String, dynamic>;
-        _contentWidth = data['content_width'] as String? ?? 'wide';
+        _contentWidth = data['content_width'] as String? ?? 'max';
         _showGithubButton = data['show_github_button'] as bool? ?? true;
         _showDonateButton = data['show_donate_button'] as bool? ?? true;
       }
     } catch (_) {
-      _contentWidth = 'wide';
+      _contentWidth = 'max';
       _showGithubButton = true;
       _showDonateButton = true;
     }
@@ -102,7 +112,7 @@ class UserService extends ChangeNotifier {
       if (resp.statusCode == 200) {
         final data = json.decode(resp.body) as Map<String, dynamic>;
         _adminCaps = data.map((k, v) => MapEntry(k, v == true));
-        _hasAdminAccess = _adminCaps.values.any((v) => v);
+        _hasAdminAccess = _adminCaps['admin:access'] == true;
       } else {
         _adminCaps = {};
         _hasAdminAccess = false;
@@ -458,6 +468,17 @@ class UserService extends ChangeNotifier {
     }
   }
 
+  Future<void> setUserHideFromSearch(String userId, {required bool hide}) async {
+    final resp = await _api.patch(
+      '/api/luma/admin/users/$userId/hide-from-search',
+      {'hide': hide},
+    );
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to update visibility');
+    }
+  }
+
   /// Creates a new user directly (without invitation).
   Future<AdminUserRecord> adminCreateUser({
     required String email,
@@ -627,6 +648,17 @@ class UserService extends ChangeNotifier {
     if (resp.statusCode != 204 && resp.statusCode != 200) {
       final body = json.decode(resp.body) as Map<String, dynamic>;
       throw Exception(body['message'] ?? 'Failed to delete group');
+    }
+  }
+
+  Future<void> setGroupHideFromSearch(String groupId, {required bool hide}) async {
+    final resp = await _api.patch(
+      '/api/luma/admin/groups/$groupId/hide-from-search',
+      {'hide': hide},
+    );
+    if (resp.statusCode != 204 && resp.statusCode != 200) {
+      final body = json.decode(resp.body) as Map<String, dynamic>;
+      throw Exception(body['error'] ?? 'Failed to update visibility');
     }
   }
 

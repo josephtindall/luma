@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/group.dart';
 import '../../services/user_service.dart';
+import '../../widgets/perm_button.dart';
 
 class AdminGroupsScreen extends StatefulWidget {
   final UserService userService;
@@ -64,10 +65,12 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
                   backgroundColor: colorScheme.secondaryContainer,
                 ),
                 const Spacer(),
-                FilledButton.icon(
+                PermButton(
+                  label: 'Create group',
+                  filled: true,
+                  enabled: widget.userService.canCreateGroup,
+                  requiredPermission: 'group:create',
                   onPressed: _showCreateDialog,
-                  icon: const Icon(Icons.add, size: 18),
-                  label: const Text('Create group'),
                 ),
               ],
             ),
@@ -97,9 +100,11 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
                       ),
                       subtitle: Text('${g.memberCount} member${g.memberCount == 1 ? '' : 's'}'
                           ' · ${g.roleIds.length} role${g.roleIds.length == 1 ? '' : 's'}'),
-                      trailing: OutlinedButton(
+                      trailing: PermButton(
+                        label: 'Manage',
+                        enabled: widget.userService.canEditGroup,
+                        requiredPermission: 'group:rename',
                         onPressed: () => _showManageDialog(g),
-                        child: const Text('Manage'),
                       ),
                     );
                   },

@@ -12,6 +12,7 @@ type Group struct {
 	Description     *string   `json:"description"`
 	IsSystem        bool      `json:"is_system"`
 	NoMemberControl bool      `json:"no_member_control"`
+	HideFromSearch  bool      `json:"hide_from_search"`
 	CreatedAt       time.Time `json:"created_at"`
 	UpdatedAt       time.Time `json:"updated_at"`
 }
@@ -46,4 +47,11 @@ type Repository interface {
 	// GetUserGroupIDs returns all group IDs the user belongs to, including
 	// groups inherited through nested group membership at any depth.
 	GetUserGroupIDs(ctx context.Context, userID string) ([]string, error)
+
+	// SearchDirectory returns non-hidden groups whose name contains the query
+	// (case-insensitive). Used by the non-admin directory search endpoint.
+	SearchDirectory(ctx context.Context, query string) ([]*Group, error)
+
+	// SetHideFromSearch sets or clears the hide_from_search flag for a group.
+	SetHideFromSearch(ctx context.Context, id string, hide bool) error
 }

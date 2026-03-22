@@ -126,3 +126,17 @@ func (s *Service) RemoveRole(ctx context.Context, groupID, roleID string) error 
 func (s *Service) GetUserGroupIDs(ctx context.Context, userID string) ([]string, error) {
 	return s.repo.GetUserGroupIDs(ctx, userID)
 }
+
+// SearchDirectory returns non-hidden groups whose name matches the query.
+func (s *Service) SearchDirectory(ctx context.Context, query string) ([]*Group, error) {
+	groups, err := s.repo.SearchDirectory(ctx, query)
+	if err != nil {
+		return nil, fmt.Errorf("group.Service.SearchDirectory: %w", err)
+	}
+	return groups, nil
+}
+
+// SetHideFromSearch sets or clears the hide_from_search flag for a group.
+func (s *Service) SetHideFromSearch(ctx context.Context, id string, hide bool) error {
+	return s.repo.SetHideFromSearch(ctx, id, hide)
+}

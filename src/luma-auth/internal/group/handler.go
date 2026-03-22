@@ -325,3 +325,44 @@ func (h *Handler) RemoveRole(w http.ResponseWriter, r *http.Request) {
 	}
 	w.WriteHeader(http.StatusNoContent)
 }
+
+// SearchDirectory handles GET /api/auth/directory/groups?search=.
+// Any authenticated user may call this. Returns non-hidden groups.
+func (h *Handler) SearchDirectory(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+	q := r.URL.Query().Get("search")
+	groups, err := h.svc.SearchDirectory(r.Context(), q)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "search failed")
+		return
+	}
+	if groups == nil {
+		groups = []*Group{}
+	}
+	httputil.WriteJSON(w, http.StatusOK, groups)
+}
+
+// SetHideFromSearch handles PATCH /api/auth/admin/groups/{id}/hide-from-search.
+// Requires group:rename permission. Body: {"hide": true|false}.
+func (h *Handler) SetHideFromSearch(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePerm(w, r, "group:rename") {
+		return
+	}
+	id := chi.URLParam(r, "id")
+	var req struct {
+		Hide bool `json:"hide"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid body")
+		return
+	}
+	if err := h.svc.SetHideFromSearch(r.Context(), id, req.Hide); err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}

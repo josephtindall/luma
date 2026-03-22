@@ -22,7 +22,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final _minLengthController = TextEditingController();
   final _historyCountController = TextEditingController();
 
-  String _contentWidth = 'wide';
+  String _contentWidth = 'max';
   bool _requireUppercase = false;
   bool _requireLowercase = false;
   bool _requireNumbers = false;

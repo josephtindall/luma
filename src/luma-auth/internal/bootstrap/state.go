@@ -38,7 +38,7 @@ type InstanceState struct {
 	PasswordRequireSymbols   bool
 	PasswordHistoryCount     int
 	// ContentWidth controls the width of the main content area site-wide.
-	// Valid values: "narrow" | "wide" | "max". Defaults to "wide".
+	// Valid values: "narrow" | "wide" | "max". Defaults to "max".
 	ContentWidth string
 	// UI button visibility
 	ShowGithubButton bool

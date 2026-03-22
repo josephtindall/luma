@@ -330,6 +330,27 @@ class _AdminGroupDetailScreenState extends State<AdminGroupDetailScreen> {
                             ),
                           ),
 
+                          const SizedBox(height: 8),
+                          SwitchListTile(
+                            contentPadding: EdgeInsets.zero,
+                            title: const Text('Hide from directory search'),
+                            subtitle: const Text(
+                              'When enabled, this group will not appear in search results for non-admin users.',
+                            ),
+                            value: detail?.hideFromSearch ?? false,
+                            onChanged: isSystem
+                                ? null
+                                : (hide) async {
+                                    try {
+                                      await widget.userService
+                                          .setGroupHideFromSearch(widget.group!.id, hide: hide);
+                                      await _loadDetail();
+                                    } catch (e) {
+                                      if (mounted) _showError(e.toString());
+                                    }
+                                  },
+                          ),
+
                           const Divider(height: 40),
 
                           // ── Members ──────────────────────────────────

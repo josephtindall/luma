@@ -322,6 +322,10 @@ func run() error {
 		r.Get("/api/auth/recovery/status", recoveryTokenHandler.GetStatus)
 		r.Post("/api/auth/recovery/generate", recoveryTokenHandler.Generate)
 
+		// Directory search — any authenticated user
+		r.Get("/api/auth/directory/users", userHandler.SearchDirectory)
+		r.Get("/api/auth/directory/groups", groupHandler.SearchDirectory)
+
 		r.Get("/api/auth/admin/access", userHandler.AdminAccess)
 		r.Get("/api/auth/admin/capabilities", userHandler.AdminCapabilities)
 
@@ -334,6 +338,7 @@ func run() error {
 		r.Delete("/api/auth/admin/users/{id}/lock", userHandler.UnlockUser)
 		r.Delete("/api/auth/admin/users/{id}/sessions", sessionHandler.RevokeUserSessions)
 		r.Post("/api/auth/admin/users/{id}/force-password-change", userHandler.ForcePasswordChange)
+		r.Patch("/api/auth/admin/users/{id}/hide-from-search", userHandler.SetHideFromSearch)
 		r.Post("/api/auth/admin/users/{id}/password-reset", passwordResetHandler.AdminCreateResetToken)
 		r.Delete("/api/auth/admin/users/{id}/mfa/totp", mfaHandler.AdminDeleteAllTOTP)
 		r.Delete("/api/auth/admin/users/{id}/passkeys", mfaHandler.AdminRevokeAllPasskeys)
@@ -353,6 +358,7 @@ func run() error {
 		r.Delete("/api/auth/admin/groups/{id}/members/{type}/{memberID}", groupHandler.RemoveMember)
 		r.Post("/api/auth/admin/groups/{id}/roles/{roleID}", groupHandler.AssignRole)
 		r.Delete("/api/auth/admin/groups/{id}/roles/{roleID}", groupHandler.RemoveRole)
+		r.Patch("/api/auth/admin/groups/{id}/hide-from-search", groupHandler.SetHideFromSearch)
 
 		// Custom roles (owner-only — enforced inside handler)
 		r.Get("/api/auth/admin/custom-roles", roleHandler.ListRoles)

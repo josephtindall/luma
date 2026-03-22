@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/custom_role.dart';
 import '../../services/user_service.dart';
+import '../../widgets/perm_button.dart';
 
 class AdminRolesScreen extends StatefulWidget {
   final UserService userService;
@@ -79,9 +80,11 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
                 backgroundColor: colorScheme.surfaceContainerHighest,
               ),
               const Spacer(),
-              FilledButton.icon(
-                icon: const Icon(Icons.add, size: 18),
-                label: const Text('Create role'),
+              PermButton(
+                label: 'Create role',
+                filled: true,
+                enabled: widget.userService.canCreateRole,
+                requiredPermission: 'role:create',
                 onPressed: _showCreateDialog,
               ),
             ],
@@ -105,6 +108,7 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
                   final role = _roles![i];
                   return _RoleRow(
                     role: role,
+                    canManage: widget.userService.canEditRole,
                     onManage: () => _showManageDialog(role),
                   );
                 },
@@ -118,9 +122,10 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
 
 class _RoleRow extends StatelessWidget {
   final CustomRoleRecord role;
+  final bool canManage;
   final VoidCallback onManage;
 
-  const _RoleRow({required this.role, required this.onManage});
+  const _RoleRow({required this.role, required this.canManage, required this.onManage});
 
   @override
   Widget build(BuildContext context) {
@@ -175,13 +180,22 @@ class _RoleRow extends StatelessWidget {
               ],
             ),
           ),
-          Tooltip(
-            message: role.isSystem ? 'System roles cannot be modified' : '',
-            child: OutlinedButton(
-              onPressed: role.isSystem ? null : onManage,
-              child: const Text('Manage'),
+          if (role.isSystem)
+            Tooltip(
+              message: 'System roles cannot be modified',
+              child: OutlinedButton.icon(
+                icon: const Icon(Icons.lock_outline, size: 14),
+                label: const Text('Manage'),
+                onPressed: null,
+              ),
+            )
+          else
+            PermButton(
+              label: 'Manage',
+              enabled: canManage,
+              requiredPermission: 'role:update',
+              onPressed: onManage,
             ),
-          ),
         ],
       ),
     );

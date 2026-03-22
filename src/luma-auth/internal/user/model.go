@@ -71,9 +71,19 @@ type AdminUser struct {
 	MFAEnabled          bool      `json:"mfa_enabled"`
 	IsLocked            bool      `json:"is_locked"`
 	ForcePasswordChange bool      `json:"force_password_change"`
+	HideFromSearch      bool      `json:"hide_from_search"`
 	TOTPCount           int       `json:"totp_count"`
 	PasskeyCount        int       `json:"passkey_count"`
 	CreatedAt           time.Time `json:"created_at"`
+}
+
+// DirectoryUser is the minimal user info returned by the non-admin directory
+// search endpoint. Does not expose lock status or admin fields.
+type DirectoryUser struct {
+	ID          string `json:"id"`
+	Email       string `json:"email"`
+	DisplayName string `json:"display_name"`
+	AvatarSeed  string `json:"avatar_seed,omitempty"`
 }
 
 // ToAdmin converts a User to its admin-facing form.

@@ -6,6 +6,7 @@ import '../../services/user_service.dart';
 
 // Canonical action groups for permissions UI
 const _actionGroups = <String, List<String>>{
+  'Administration': ['admin:access'],
   'Pages': [
     'page:read',
     'page:create',
@@ -15,7 +16,7 @@ const _actionGroups = <String, List<String>>{
     'page:version',
     'page:restore-version',
     'page:share',
-    'page:transclude'
+    'page:transclude',
   ],
   'Tasks': [
     'task:read',
@@ -24,7 +25,7 @@ const _actionGroups = <String, List<String>>{
     'task:delete',
     'task:assign',
     'task:close',
-    'task:comment'
+    'task:comment',
   ],
   'Flows': [
     'flow:read',
@@ -33,7 +34,7 @@ const _actionGroups = <String, List<String>>{
     'flow:delete',
     'flow:publish',
     'flow:execute',
-    'flow:comment'
+    'flow:comment',
   ],
   'Vaults': [
     'vault:read',
@@ -42,7 +43,7 @@ const _actionGroups = <String, List<String>>{
     'vault:delete',
     'vault:archive',
     'vault:manage-members',
-    'vault:manage-roles'
+    'vault:manage-roles',
   ],
   'Users': [
     'user:read',
@@ -51,24 +52,24 @@ const _actionGroups = <String, List<String>>{
     'user:delete',
     'user:lock',
     'user:unlock',
-    'user:revoke-sessions'
+    'user:revoke-sessions',
   ],
   'Audit': [
     'audit:read-own',
     'audit:read-all',
     'audit:export-all',
-    'audit:read-pii'
+    'audit:read-pii',
   ],
   'Instance': [
     'instance:read',
     'instance:configure',
     'instance:backup',
-    'instance:restore'
+    'instance:restore',
   ],
   'Notifications': [
     'notification:read',
     'notification:configure-own',
-    'notification:configure-all'
+    'notification:configure-all',
   ],
   'Invitations': ['invitation:create', 'invitation:revoke', 'invitation:list'],
   'Groups': [
@@ -79,7 +80,7 @@ const _actionGroups = <String, List<String>>{
     'group:add-member',
     'group:remove-member',
     'group:assign-role',
-    'group:unassign-role'
+    'group:unassign-role',
   ],
   'Roles': [
     'role:read',
@@ -89,7 +90,7 @@ const _actionGroups = <String, List<String>>{
     'role:set-permission',
     'role:remove-permission',
     'role:assign-user',
-    'role:unassign-user'
+    'role:unassign-user',
   ],
 };
 
@@ -380,7 +381,8 @@ class _AdminRoleDetailScreenState extends State<AdminRoleDetailScreen> {
                             ? const SizedBox(
                                 width: 16,
                                 height: 16,
-                                child: CircularProgressIndicator(strokeWidth: 2))
+                                child: CircularProgressIndicator(
+                                    strokeWidth: 2))
                             : const Text('Save'),
                       ),
                     ],
@@ -416,11 +418,19 @@ class _AdminRoleDetailScreenState extends State<AdminRoleDetailScreen> {
                 // ── Permissions ───────────────────────────────────────────
                 _SectionHeader(label: 'Permissions'),
                 const SizedBox(height: 4),
-                Text(
-                  'Allow ↓ = allow_cascade (inherited through group nesting)',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: colorScheme.onSurfaceVariant,
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        'Cascade = allow_cascade, inherited through group nesting',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: colorScheme.onSurfaceVariant,
+                            ),
                       ),
+                    ),
+                    // Legend
+                    _EffectLegend(),
+                  ],
                 ),
                 const SizedBox(height: 12),
                 ..._actionGroups.entries.map((entry) {
@@ -463,56 +473,132 @@ class _PermissionGroup extends StatefulWidget {
 }
 
 class _PermissionGroupState extends State<_PermissionGroup> {
-  bool _expanded = false;
+  late bool _expanded;
 
   int get _setCount =>
       widget.actions.where((a) => widget.permMap.containsKey(a)).length;
 
   @override
+  void initState() {
+    super.initState();
+    // Auto-expand groups that already have permissions set.
+    _expanded = widget.actions.any((a) => widget.permMap.containsKey(a));
+  }
+
+  Future<void> _grantAll() async {
+    await Future.wait(
+      widget.actions
+          .where((a) => widget.permMap[a] != 'allow')
+          .map((a) => widget.onSet(a, 'allow')),
+    );
+  }
+
+  Future<void> _clearAll() async {
+    await Future.wait(
+      widget.actions
+          .where((a) => widget.permMap.containsKey(a))
+          .map((a) => widget.onSet(a, '')),
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final setCount = _setCount;
 
     return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        InkWell(
-          onTap: () => setState(() => _expanded = !_expanded),
-          borderRadius: BorderRadius.circular(8),
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                Icon(
-                  _expanded ? Icons.expand_less : Icons.expand_more,
-                  size: 18,
+        // ── Group header ───────────────────────────────────────────────
+        Container(
+          margin: const EdgeInsets.only(bottom: 2),
+          decoration: BoxDecoration(
+            color: colorScheme.surfaceContainerLow,
+            borderRadius: BorderRadius.circular(8),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: InkWell(
+                  onTap: () => setState(() => _expanded = !_expanded),
+                  borderRadius: BorderRadius.circular(8),
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(
+                        horizontal: 12, vertical: 10),
+                    child: Row(
+                      children: [
+                        Icon(
+                          _expanded
+                              ? Icons.keyboard_arrow_down
+                              : Icons.keyboard_arrow_right,
+                          size: 16,
+                          color: colorScheme.onSurfaceVariant,
+                        ),
+                        const SizedBox(width: 8),
+                        Text(
+                          widget.groupName,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodyMedium
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                        ),
+                        if (!_expanded && setCount > 0) ...[
+                          const SizedBox(width: 8),
+                          _InfoChip(
+                            label: '$setCount of ${widget.actions.length}',
+                            color: colorScheme.primaryContainer,
+                            textColor: colorScheme.onPrimaryContainer,
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              if (!widget.readOnly) ...[
+                _GroupAction(
+                  label: 'All',
+                  tooltip: 'Grant all permissions in this group',
+                  onTap: _grantAll,
+                  color: colorScheme.primary,
+                ),
+                const SizedBox(width: 2),
+                _GroupAction(
+                  label: 'Clear',
+                  tooltip: 'Remove all permissions in this group',
+                  onTap: _clearAll,
                   color: colorScheme.onSurfaceVariant,
                 ),
                 const SizedBox(width: 8),
-                Text(
-                  widget.groupName,
-                  style: Theme.of(context)
-                      .textTheme
-                      .bodyMedium
-                      ?.copyWith(fontWeight: FontWeight.w600),
-                ),
-                const SizedBox(width: 8),
-                if (_setCount > 0)
-                  _InfoChip(
-                    label: '$_setCount set',
-                    color: colorScheme.primaryContainer,
-                    textColor: colorScheme.onPrimaryContainer,
-                  ),
               ],
-            ),
+            ],
           ),
         ),
-        if (_expanded)
-          ...widget.actions.map((action) => _PermissionRow(
-                action: action,
-                effect: widget.permMap[action] ?? '',
-                readOnly: widget.readOnly,
-                onSet: widget.onSet,
-              )),
-        const SizedBox(height: 4),
+        // ── Rows ──────────────────────────────────────────────────────
+        if (_expanded) ...[
+          Container(
+            margin: const EdgeInsets.only(bottom: 4),
+            decoration: BoxDecoration(
+              border: Border(
+                left: BorderSide(
+                  color: colorScheme.outlineVariant,
+                  width: 2,
+                ),
+              ),
+            ),
+            child: Column(
+              children: widget.actions
+                  .map((action) => _PermissionRow(
+                        action: action,
+                        effect: widget.permMap[action] ?? '',
+                        readOnly: widget.readOnly,
+                        onSet: widget.onSet,
+                      ))
+                  .toList(),
+            ),
+          ),
+        ] else
+          const SizedBox(height: 4),
       ],
     );
   }
@@ -533,23 +619,36 @@ class _PermissionRow extends StatelessWidget {
 
   String get _label {
     final idx = action.indexOf(':');
-    return idx >= 0 ? action.substring(idx + 1) : action;
+    final suffix = idx >= 0 ? action.substring(idx + 1) : action;
+    // Title-case each hyphen-separated word.
+    return suffix
+        .split('-')
+        .map((w) => w.isEmpty ? '' : '${w[0].toUpperCase()}${w.substring(1)}')
+        .join(' ');
   }
 
   @override
   Widget build(BuildContext context) {
     final colorScheme = Theme.of(context).colorScheme;
+    final hasEffect = effect.isNotEmpty;
 
     return Padding(
-      padding: const EdgeInsets.only(left: 26, bottom: 4),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 3),
       child: Row(
         children: [
           Expanded(
             child: Text(
               _label,
-              style: Theme.of(context).textTheme.bodySmall,
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: hasEffect
+                        ? colorScheme.onSurface
+                        : colorScheme.onSurfaceVariant,
+                    fontWeight:
+                        hasEffect ? FontWeight.w500 : FontWeight.normal,
+                  ),
             ),
           ),
+          const SizedBox(width: 8),
           _EffectToggle(
             effect: effect,
             readOnly: readOnly,
@@ -575,30 +674,127 @@ class _EffectToggle extends StatelessWidget {
     required this.colorScheme,
   });
 
-  static const _effects = ['', 'allow', 'allow_cascade', 'deny'];
-  static const _labels = ['—', 'Allow', 'Allow ↓', 'Deny'];
+  // (value, display, tooltip, active foreground color)
+  static const _options = [
+    ('', '—', 'Not set'),
+    ('allow', '✓', 'Allow'),
+    ('allow_cascade', '↓', 'Cascade'),
+    ('deny', '✕', 'Deny'),
+  ];
+
+  Color _activeColor(String val) {
+    switch (val) {
+      case 'allow':
+        return const Color(0xFF2E7D32); // green[800]
+      case 'allow_cascade':
+        return const Color(0xFF1565C0); // blue[800]
+      case 'deny':
+        return colorScheme.error;
+      default:
+        return colorScheme.onSurfaceVariant;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return SegmentedButton<String>(
-      segments: List.generate(_effects.length, (i) {
-        return ButtonSegment<String>(
-          value: _effects[i],
-          label: Text(
-            _labels[i],
-            style: const TextStyle(fontSize: 11),
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: _options.map((opt) {
+        final (val, label, tooltip) = opt;
+        final isSelected = effect == val;
+        final fgColor = isSelected
+            ? _activeColor(val)
+            : colorScheme.onSurfaceVariant.withAlpha(80);
+        final bgColor =
+            isSelected ? _activeColor(val).withAlpha(30) : Colors.transparent;
+        final borderColor = isSelected
+            ? _activeColor(val).withAlpha(160)
+            : colorScheme.outline.withAlpha(60);
+
+        return Tooltip(
+          message: tooltip,
+          waitDuration: const Duration(milliseconds: 600),
+          child: GestureDetector(
+            onTap: readOnly ? null : () => onChanged(val),
+            child: Container(
+              width: 30,
+              height: 26,
+              margin: const EdgeInsets.only(left: 3),
+              decoration: BoxDecoration(
+                color: bgColor,
+                border: Border.all(color: borderColor, width: 1),
+                borderRadius: BorderRadius.circular(5),
+              ),
+              child: Center(
+                child: Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: fgColor,
+                    fontWeight:
+                        isSelected ? FontWeight.bold : FontWeight.normal,
+                  ),
+                ),
+              ),
+            ),
           ),
         );
-      }),
-      selected: {effect},
-      onSelectionChanged: readOnly ? null : (s) => onChanged(s.first),
-      style: ButtonStyle(
-        tapTargetSize: MaterialTapTargetSize.shrinkWrap,
-        visualDensity: VisualDensity.compact,
-        padding:
-            const WidgetStatePropertyAll(EdgeInsets.symmetric(horizontal: 6)),
+      }).toList(),
+    );
+  }
+}
+
+class _EffectLegend extends StatelessWidget {
+  @override
+  Widget build(BuildContext context) {
+    final cs = Theme.of(context).colorScheme;
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Text('—', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
+        const SizedBox(width: 4),
+        Text('✓ Allow', style: TextStyle(fontSize: 11, color: const Color(0xFF2E7D32))),
+        const SizedBox(width: 4),
+        Text('↓ Cascade', style: TextStyle(fontSize: 11, color: const Color(0xFF1565C0))),
+        const SizedBox(width: 4),
+        Text('✕ Deny', style: TextStyle(fontSize: 11, color: cs.error)),
+      ],
+    );
+  }
+}
+
+class _GroupAction extends StatelessWidget {
+  final String label;
+  final String tooltip;
+  final Future<void> Function() onTap;
+  final Color color;
+
+  const _GroupAction({
+    required this.label,
+    required this.tooltip,
+    required this.onTap,
+    required this.color,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Tooltip(
+      message: tooltip,
+      child: InkWell(
+        onTap: onTap,
+        borderRadius: BorderRadius.circular(4),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 11,
+              color: color,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+        ),
       ),
-      showSelectedIcon: false,
     );
   }
 }

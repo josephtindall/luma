@@ -26,9 +26,9 @@ func (r *Repository) Create(ctx context.Context, name string, description *strin
 	const q = `
 		INSERT INTO auth.groups (name, description)
 		VALUES ($1, $2)
-		RETURNING id, name, description, is_system, no_member_control, created_at, updated_at`
+		RETURNING id, name, description, is_system, no_member_control, hide_from_search, created_at, updated_at`
 	var g group.Group
-	err := r.db.QueryRow(ctx, q, name, description).Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.CreatedAt, &g.UpdatedAt)
+	err := r.db.QueryRow(ctx, q, name, description).Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.HideFromSearch, &g.CreatedAt, &g.UpdatedAt)
 	if err != nil {
 		return nil, fmt.Errorf("group.postgres.Create: %w", err)
 	}
@@ -40,9 +40,9 @@ func (r *Repository) Rename(ctx context.Context, id, name string, description *s
 	const q = `
 		UPDATE auth.groups SET name = $2, description = $3, updated_at = NOW()
 		WHERE id = $1
-		RETURNING id, name, description, is_system, no_member_control, created_at, updated_at`
+		RETURNING id, name, description, is_system, no_member_control, hide_from_search, created_at, updated_at`
 	var g group.Group
-	err := r.db.QueryRow(ctx, q, id, name, description).Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.CreatedAt, &g.UpdatedAt)
+	err := r.db.QueryRow(ctx, q, id, name, description).Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.HideFromSearch, &g.CreatedAt, &g.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("group not found")
 	}
@@ -65,10 +65,10 @@ func (r *Repository) Delete(ctx context.Context, id string) error {
 // Get returns full group details including members and role IDs.
 func (r *Repository) Get(ctx context.Context, id string) (*group.GroupWithDetails, error) {
 	const q = `
-		SELECT id, name, description, is_system, no_member_control, created_at, updated_at
+		SELECT id, name, description, is_system, no_member_control, hide_from_search, created_at, updated_at
 		FROM auth.groups WHERE id = $1`
 	var g group.GroupWithDetails
-	err := r.db.QueryRow(ctx, q, id).Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.CreatedAt, &g.UpdatedAt)
+	err := r.db.QueryRow(ctx, q, id).Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.HideFromSearch, &g.CreatedAt, &g.UpdatedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, fmt.Errorf("group not found")
 	}
@@ -93,7 +93,7 @@ func (r *Repository) Get(ctx context.Context, id string) (*group.GroupWithDetail
 
 // List returns all groups with details.
 func (r *Repository) List(ctx context.Context) ([]*group.GroupWithDetails, error) {
-	const q = `SELECT id, name, description, is_system, no_member_control, created_at, updated_at FROM auth.groups ORDER BY name`
+	const q = `SELECT id, name, description, is_system, no_member_control, hide_from_search, created_at, updated_at FROM auth.groups ORDER BY name`
 	rows, err := r.db.Query(ctx, q)
 	if err != nil {
 		return nil, fmt.Errorf("group.postgres.List: %w", err)
@@ -103,7 +103,7 @@ func (r *Repository) List(ctx context.Context) ([]*group.GroupWithDetails, error
 	var groups []*group.GroupWithDetails
 	for rows.Next() {
 		var g group.GroupWithDetails
-		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.CreatedAt, &g.UpdatedAt); err != nil {
+		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.HideFromSearch, &g.CreatedAt, &g.UpdatedAt); err != nil {
 			return nil, fmt.Errorf("group.postgres.List scan: %w", err)
 		}
 		groups = append(groups, &g)
@@ -127,6 +127,46 @@ func (r *Repository) List(ctx context.Context) ([]*group.GroupWithDetails, error
 		g.RoleIDs = roleIDs
 	}
 	return groups, nil
+}
+
+// SearchDirectory returns non-hidden groups whose name contains the query (case-insensitive).
+func (r *Repository) SearchDirectory(ctx context.Context, query string) ([]*group.Group, error) {
+	const q = `
+		SELECT id, name, description, is_system, no_member_control, hide_from_search, created_at, updated_at
+		FROM auth.groups
+		WHERE hide_from_search = false
+		  AND name ILIKE '%' || $1 || '%'
+		ORDER BY name
+		LIMIT 50`
+
+	rows, err := r.db.Query(ctx, q, query)
+	if err != nil {
+		return nil, fmt.Errorf("group.postgres.SearchDirectory: %w", err)
+	}
+	defer rows.Close()
+
+	var out []*group.Group
+	for rows.Next() {
+		g := &group.Group{}
+		if err := rows.Scan(&g.ID, &g.Name, &g.Description, &g.IsSystem, &g.NoMemberControl, &g.HideFromSearch, &g.CreatedAt, &g.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("group.postgres.SearchDirectory scan: %w", err)
+		}
+		out = append(out, g)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("group.postgres.SearchDirectory rows: %w", err)
+	}
+	return out, nil
+}
+
+// SetHideFromSearch sets or clears the hide_from_search flag for a group.
+func (r *Repository) SetHideFromSearch(ctx context.Context, id string, hide bool) error {
+	const q = `UPDATE auth.groups SET hide_from_search = $2, updated_at = NOW() WHERE id = $1`
+	_, err := r.db.Exec(ctx, q, id, hide)
+	if err != nil {
+		return fmt.Errorf("group.postgres.SetHideFromSearch: %w", err)
+	}
+	return nil
 }
 
 func (r *Repository) listMembers(ctx context.Context, groupID string) ([]group.GroupMember, error) {

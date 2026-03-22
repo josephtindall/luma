@@ -110,6 +110,64 @@ func (c *Client) CheckPermission(ctx context.Context, check authz.CheckRequest) 
 	return result.Allowed, nil
 }
 
+// SearchDirectoryUsers calls GET /api/auth/directory/users?search= — available
+// to all authenticated users, returns non-hidden/non-locked users only.
+func (c *Client) SearchDirectoryUsers(ctx context.Context, search string) ([]*User, error) {
+	u := c.baseURL + "/api/auth/directory/users"
+	if search != "" {
+		u += "?search=" + url.QueryEscape(search)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("auth: creating search directory users request: %w", err)
+	}
+	if token := tokenFromContext(ctx); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("auth: search directory users request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return []*User{}, nil
+	}
+	var users []*User
+	if err := json.NewDecoder(resp.Body).Decode(&users); err != nil {
+		return []*User{}, nil
+	}
+	return users, nil
+}
+
+// SearchDirectoryGroups calls GET /api/auth/directory/groups?search= — available
+// to all authenticated users, returns non-hidden groups only.
+func (c *Client) SearchDirectoryGroups(ctx context.Context, search string) ([]*Group, error) {
+	u := c.baseURL + "/api/auth/directory/groups"
+	if search != "" {
+		u += "?search=" + url.QueryEscape(search)
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	if err != nil {
+		return nil, fmt.Errorf("auth: creating search directory groups request: %w", err)
+	}
+	if token := tokenFromContext(ctx); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("auth: search directory groups request: %w", err)
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return []*Group{}, nil
+	}
+	var groups []*Group
+	if err := json.NewDecoder(resp.Body).Decode(&groups); err != nil {
+		return []*Group{}, nil
+	}
+	return groups, nil
+}
+
 // ListUsers calls GET /api/auth/admin/users with an optional search query.
 // Returns an empty slice (no error) when the response is non-200 so callers
 // can degrade gracefully without surfacing auth errors to end-users.
