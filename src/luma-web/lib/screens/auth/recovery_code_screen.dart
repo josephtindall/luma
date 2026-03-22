@@ -8,6 +8,7 @@ import 'package:pdf/widgets.dart' as pw;
 import 'package:web/web.dart' as web;
 
 import '../../services/auth_service.dart';
+import '../../theme/tokens.dart';
 
 class RecoveryCodeScreen extends StatefulWidget {
   final AuthService auth;
@@ -184,7 +185,7 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
                   padding: const EdgeInsets.all(14),
                   decoration: BoxDecoration(
                     color: colorScheme.errorContainer,
-                    borderRadius: BorderRadius.circular(8),
+                    borderRadius: LumaRadius.radiusMd,
                   ),
                   child: Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -246,7 +247,7 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
                                                       color:
                                                           colorScheme.outline),
                                                   borderRadius:
-                                                      BorderRadius.circular(6),
+                                                      LumaRadius.radiusSm,
                                                   color: colorScheme
                                                       .surfaceContainerHighest,
                                                 ),
@@ -319,7 +320,7 @@ class _RecoveryCodeScreenState extends State<RecoveryCodeScreen> {
                 // Mandatory acknowledgement checkbox
                 InkWell(
                   onTap: () => setState(() => _acknowledged = !_acknowledged),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: LumaRadius.radiusMd,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(vertical: 4),
                     child: Row(

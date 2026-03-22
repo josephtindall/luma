@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
+import '../../theme/tokens.dart';
 
 const _baseUrl = String.fromEnvironment(
   'API_URL',
@@ -329,7 +330,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
                 // Main card
                 Card(
                   shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
+                    borderRadius: LumaRadius.radiusXl,
                   ),
                   clipBehavior: Clip.antiAlias,
                   child: Padding(
@@ -970,7 +971,7 @@ class _WizardButton extends StatelessWidget {
       style: FilledButton.styleFrom(
         padding: const EdgeInsets.symmetric(vertical: 16),
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: LumaRadius.radiusLg,
         ),
       ),
       child: loading
@@ -1040,7 +1041,7 @@ class _ErrorBanner extends StatelessWidget {
       padding: const EdgeInsets.only(left: 12, top: 4, bottom: 4, right: 4),
       decoration: BoxDecoration(
         color: colors.errorContainer,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: LumaRadius.radiusMd,
       ),
       child: Row(
         children: [

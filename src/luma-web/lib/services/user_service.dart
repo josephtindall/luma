@@ -468,7 +468,8 @@ class UserService extends ChangeNotifier {
     }
   }
 
-  Future<void> setUserHideFromSearch(String userId, {required bool hide}) async {
+  Future<void> setUserHideFromSearch(String userId,
+      {required bool hide}) async {
     final resp = await _api.patch(
       '/api/luma/admin/users/$userId/hide-from-search',
       {'hide': hide},
@@ -617,8 +618,9 @@ class UserService extends ChangeNotifier {
 
   Future<GroupRecord> createGroup(String name, {String? description}) async {
     final body = <String, dynamic>{'name': name};
-    if (description != null && description.isNotEmpty)
+    if (description != null && description.isNotEmpty) {
       body['description'] = description;
+    }
     final resp = await _api.post('/api/luma/admin/groups', body);
     if (resp.statusCode != 201) {
       final b = json.decode(resp.body) as Map<String, dynamic>;
@@ -651,7 +653,8 @@ class UserService extends ChangeNotifier {
     }
   }
 
-  Future<void> setGroupHideFromSearch(String groupId, {required bool hide}) async {
+  Future<void> setGroupHideFromSearch(String groupId,
+      {required bool hide}) async {
     final resp = await _api.patch(
       '/api/luma/admin/groups/$groupId/hide-from-search',
       {'hide': hide},
@@ -726,8 +729,9 @@ class UserService extends ChangeNotifier {
       {int? priority, String? description}) async {
     final body = <String, dynamic>{'name': name};
     if (priority != null) body['priority'] = priority;
-    if (description != null && description.isNotEmpty)
+    if (description != null && description.isNotEmpty) {
       body['description'] = description;
+    }
     final resp = await _api.post('/api/luma/admin/custom-roles', body);
     if (resp.statusCode != 201) {
       final b = json.decode(resp.body) as Map<String, dynamic>;
@@ -835,7 +839,7 @@ class UserService extends ChangeNotifier {
     }
     final data = json.decode(resp.body);
     final items = data is List ? data : [];
-    return (items as List<dynamic>)
+    return (items)
         .map((e) => AdminVaultRecord.fromJson(e as Map<String, dynamic>))
         .toList();
   }
@@ -861,7 +865,7 @@ class UserService extends ChangeNotifier {
     }
     final data = json.decode(resp.body);
     final items = data is List ? data : [];
-    return (items as List<dynamic>)
+    return (items)
         .map((e) => VaultMemberDetail.fromJson(e as Map<String, dynamic>))
         .toList();
   }
@@ -911,12 +915,11 @@ class UserService extends ChangeNotifier {
 
   Future<List<VaultGroupMemberDetail>> adminListVaultGroupMembers(
       String vaultId) async {
-    final resp =
-        await _api.get('/api/luma/admin/vaults/$vaultId/groups');
+    final resp = await _api.get('/api/luma/admin/vaults/$vaultId/groups');
     if (resp.statusCode != 200) return [];
     final data = json.decode(resp.body);
     if (data is! List) return [];
-    return (data as List<dynamic>)
+    return (data)
         .whereType<Map<String, dynamic>>()
         .map(VaultGroupMemberDetail.fromJson)
         .toList();
@@ -924,8 +927,7 @@ class UserService extends ChangeNotifier {
 
   Future<void> adminAddVaultGroupMember(
       String vaultId, String groupId, String roleId) async {
-    final resp = await _api
-        .post('/api/luma/admin/vaults/$vaultId/groups', {
+    final resp = await _api.post('/api/luma/admin/vaults/$vaultId/groups', {
       'group_id': groupId,
       'role_id': roleId,
     });
@@ -947,8 +949,8 @@ class UserService extends ChangeNotifier {
 
   Future<void> adminRemoveVaultGroupMember(
       String vaultId, String groupId) async {
-    final resp = await _api
-        .delete('/api/luma/admin/vaults/$vaultId/groups/$groupId');
+    final resp =
+        await _api.delete('/api/luma/admin/vaults/$vaultId/groups/$groupId');
     if (resp.statusCode != 204) {
       throw Exception('Failed to remove group member: ${resp.statusCode}');
     }
@@ -996,8 +998,9 @@ class UserService extends ChangeNotifier {
   /// Returns whether the current user has a recovery token stored.
   Future<bool> getRecoveryTokenStatus() async {
     final resp = await _api.get('/api/luma/auth/recovery/status');
-    if (resp.statusCode != 200)
+    if (resp.statusCode != 200) {
       throw Exception('Failed to get recovery token status');
+    }
     final data = json.decode(resp.body) as Map<String, dynamic>;
     return data['has_token'] as bool? ?? false;
   }

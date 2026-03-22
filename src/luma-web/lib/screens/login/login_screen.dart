@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../../services/auth_service.dart';
+import '../../theme/tokens.dart';
 import '../../services/user_service.dart';
 import 'login_email_store.dart';
 
@@ -780,7 +781,7 @@ class _LoginScreenState extends State<LoginScreen> {
           padding: const EdgeInsets.all(16),
           decoration: BoxDecoration(
             color: Colors.orange.withValues(alpha: 0.1),
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: LumaRadius.radiusMd,
             border: Border.all(color: Colors.orange.withValues(alpha: 0.3)),
           ),
           child: const Text(
@@ -821,7 +822,7 @@ class _LoginScreenState extends State<LoginScreen> {
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
           color: Theme.of(context).colorScheme.errorContainer,
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: LumaRadius.radiusMd,
         ),
         child: Text(
           _error!,
@@ -851,10 +852,10 @@ class _EmailTile extends StatelessWidget {
   Widget build(BuildContext context) {
     return Material(
       color: Theme.of(context).colorScheme.surfaceContainerHighest,
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: LumaRadius.radiusLg,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: LumaRadius.radiusLg,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
           child: Row(

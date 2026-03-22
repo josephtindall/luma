@@ -13,6 +13,7 @@ import '../services/auth_service.dart';
 import '../services/page_service.dart';
 import '../services/theme_notifier.dart';
 import '../services/user_service.dart';
+import '../theme/tokens.dart';
 import '../widgets/user_avatar.dart';
 
 // ── Sidebar localStorage helpers ──────────────────────────────────────────────
@@ -210,8 +211,8 @@ class _MainLayoutState extends State<MainLayout> {
                                 '_blank',
                               ),
                               style: IconButton.styleFrom(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: LumaRadius.radiusMd,
                                 ),
                               ),
                             ),
@@ -223,8 +224,8 @@ class _MainLayoutState extends State<MainLayout> {
                               icon: const Icon(Icons.favorite_border, size: 20),
                               onPressed: () => _showDonateDialog(context),
                               style: IconButton.styleFrom(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(8),
+                                shape: const RoundedRectangleBorder(
+                                  borderRadius: LumaRadius.radiusMd,
                                 ),
                               ),
                             ),
@@ -249,8 +250,8 @@ class _MainLayoutState extends State<MainLayout> {
                       icon: const Icon(Icons.settings_outlined, size: 20),
                       onPressed: () => context.go('/settings'),
                       style: IconButton.styleFrom(
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
+                        shape: const RoundedRectangleBorder(
+                          borderRadius: LumaRadius.radiusMd,
                         ),
                       ),
                     ),
@@ -506,9 +507,9 @@ class _MainLayoutState extends State<MainLayout> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 2),
       child: Material(
         color: Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: LumaRadius.radiusMd,
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: LumaRadius.radiusMd,
           hoverColor: colorScheme.surfaceContainerHighest,
           onTap: () {
             setState(() => _expandedVaults.add(vault.id));
@@ -583,9 +584,9 @@ class _MainLayoutState extends State<MainLayout> {
       padding: const EdgeInsets.only(left: 20, right: 12, top: 2, bottom: 2),
       child: Material(
         color: isSelected ? colorScheme.secondaryContainer : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: LumaRadius.radiusMd,
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: LumaRadius.radiusMd,
           hoverColor: colorScheme.surfaceContainerHighest,
           onTap: () => context.go('/pages/${page.shortId}'),
           child: Container(
@@ -655,7 +656,7 @@ class _MainLayoutState extends State<MainLayout> {
             height: 40,
             alignment: Alignment.center,
             decoration: BoxDecoration(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: LumaRadius.radiusMd,
               color: _isHoveringLogo
                   ? Theme.of(context).colorScheme.surfaceContainerHighest
                   : Colors.transparent,
@@ -686,7 +687,7 @@ class _MainLayoutState extends State<MainLayout> {
             backgroundColor: WidgetStatePropertyAll(colorScheme.surface),
             elevation: const WidgetStatePropertyAll(4),
             shape: WidgetStatePropertyAll(RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(12),
+              borderRadius: LumaRadius.radiusLg,
               side: BorderSide(color: borderColor),
             )),
           ),
@@ -703,9 +704,9 @@ class _MainLayoutState extends State<MainLayout> {
           builder: (context, controller, _) {
             return Material(
               color: Colors.transparent,
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: LumaRadius.radiusMd,
               child: InkWell(
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: LumaRadius.radiusMd,
                 onTap: () {
                   if (controller.isOpen) {
                     controller.close();
@@ -753,9 +754,9 @@ class _MainLayoutState extends State<MainLayout> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
       child: Material(
         color: isSelected ? colorScheme.secondaryContainer : Colors.transparent,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: LumaRadius.radiusMd,
         child: InkWell(
-          borderRadius: BorderRadius.circular(8),
+          borderRadius: LumaRadius.radiusMd,
           onTap: onTap,
           hoverColor: colorScheme.surfaceContainerHighest,
           child: Tooltip(
@@ -845,7 +846,7 @@ class _ThemeToggleButton extends StatelessWidget {
           key: buttonKey,
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerHighest,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: LumaRadius.radiusMd,
           ),
           padding: const EdgeInsets.all(3),
           child: Row(
@@ -919,7 +920,7 @@ class _SegmentState extends State<_Segment> {
                   : _hovering
                       ? colorScheme.surfaceContainerHighest
                       : Colors.transparent,
-              borderRadius: BorderRadius.circular(6),
+              borderRadius: LumaRadius.radiusSm,
               boxShadow: widget.selected
                   ? [
                       BoxShadow(

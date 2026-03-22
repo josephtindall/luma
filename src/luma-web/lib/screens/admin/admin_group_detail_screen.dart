@@ -5,6 +5,7 @@ import '../../models/group.dart';
 import '../../models/custom_role.dart';
 import '../../models/user.dart';
 import '../../services/user_service.dart';
+import '../../theme/tokens.dart';
 
 class AdminGroupDetailScreen extends StatefulWidget {
   final UserService userService;
@@ -589,7 +590,7 @@ class _SystemBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
       decoration: BoxDecoration(
         color: colorScheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: LumaRadius.radiusLg,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

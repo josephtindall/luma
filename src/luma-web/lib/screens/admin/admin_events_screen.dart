@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
 import '../../models/user.dart';
+import '../../theme/tokens.dart';
 import '../../services/user_service.dart';
 import '../settings/settings_screen.dart' show auditEventMeta, auditFormatTime;
 
@@ -456,7 +457,7 @@ class _EventRowState extends State<_EventRow> {
                                   horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
                                 color: cs.secondaryContainer,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: LumaRadius.radiusLg,
                               ),
                               child: Text(
                                 actor,
@@ -540,7 +541,7 @@ class _DetailsPanel extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: LumaRadius.radiusMd,
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Column(

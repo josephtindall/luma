@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/group.dart';
 import '../../services/user_service.dart';
+import '../../theme/tokens.dart';
 import '../../widgets/perm_button.dart';
 
 class AdminGroupsScreen extends StatefulWidget {
@@ -198,7 +199,7 @@ class _SystemBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: colorScheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: LumaRadius.radiusLg,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,

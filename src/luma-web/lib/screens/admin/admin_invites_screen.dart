@@ -4,6 +4,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 
 import '../../models/user.dart';
 import '../../services/user_service.dart';
+import '../../theme/tokens.dart';
 
 class AdminInvitesScreen extends StatefulWidget {
   final UserService userService;
@@ -528,7 +529,7 @@ class _InvitePanelState extends State<_InvitePanel> {
                             horizontal: 12, vertical: 10),
                         decoration: BoxDecoration(
                           color: theme.colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: LumaRadius.radiusMd,
                         ),
                         child: SelectableText(
                           _joinUrl!,
@@ -593,7 +594,7 @@ class _Badge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: LumaRadius.radiusLg,
       ),
       child: Text(
         label,

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../services/user_service.dart';
+import '../../theme/tokens.dart';
 
 class AdminLayout extends StatelessWidget {
   final Widget child;
@@ -93,7 +94,7 @@ class _AdminTabButton extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: LumaRadius.radiusXs,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(

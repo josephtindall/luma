@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 const _palette = [
   Color(0xFF1A73E8), // blue
@@ -37,7 +38,7 @@ class UserAvatar extends StatelessWidget {
       backgroundColor: color,
       child: Text(
         initials,
-        style: TextStyle(
+        style: GoogleFonts.inter(
           color: Colors.white,
           fontSize: size * 0.4,
           fontWeight: FontWeight.w600,

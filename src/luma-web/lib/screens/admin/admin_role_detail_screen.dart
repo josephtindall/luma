@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../models/custom_role.dart';
 import '../../services/user_service.dart';
+import '../../theme/tokens.dart';
 
 // Canonical action groups for permissions UI
 const _actionGroups = <String, List<String>>{
@@ -316,7 +317,7 @@ class _AdminRoleDetailScreenState extends State<AdminRoleDetailScreen> {
                     padding: const EdgeInsets.all(12),
                     decoration: BoxDecoration(
                       color: colorScheme.errorContainer,
-                      borderRadius: BorderRadius.circular(8),
+                      borderRadius: LumaRadius.radiusMd,
                     ),
                     child: Text(_error!,
                         style:
@@ -514,14 +515,14 @@ class _PermissionGroupState extends State<_PermissionGroup> {
           margin: const EdgeInsets.only(bottom: 2),
           decoration: BoxDecoration(
             color: colorScheme.surfaceContainerLow,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: LumaRadius.radiusMd,
           ),
           child: Row(
             children: [
               Expanded(
                 child: InkWell(
                   onTap: () => setState(() => _expanded = !_expanded),
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: LumaRadius.radiusMd,
                   child: Padding(
                     padding: const EdgeInsets.symmetric(
                         horizontal: 12, vertical: 10),
@@ -685,9 +686,9 @@ class _EffectToggle extends StatelessWidget {
   Color _activeColor(String val) {
     switch (val) {
       case 'allow':
-        return const Color(0xFF2E7D32); // green[800]
+        return const Color(0xFF039855); // green[800]
       case 'allow_cascade':
-        return const Color(0xFF1565C0); // blue[800]
+        return const Color(0xFF1570EF); // blue[800]
       case 'deny':
         return colorScheme.error;
       default:
@@ -723,7 +724,7 @@ class _EffectToggle extends StatelessWidget {
               decoration: BoxDecoration(
                 color: bgColor,
                 border: Border.all(color: borderColor, width: 1),
-                borderRadius: BorderRadius.circular(5),
+                borderRadius: LumaRadius.radiusSm,
               ),
               child: Center(
                 child: Text(
@@ -753,9 +754,9 @@ class _EffectLegend extends StatelessWidget {
       children: [
         Text('—', style: TextStyle(fontSize: 11, color: cs.onSurfaceVariant)),
         const SizedBox(width: 4),
-        Text('✓ Allow', style: TextStyle(fontSize: 11, color: const Color(0xFF2E7D32))),
+        Text('✓ Allow', style: TextStyle(fontSize: 11, color: const Color(0xFF039855))),
         const SizedBox(width: 4),
-        Text('↓ Cascade', style: TextStyle(fontSize: 11, color: const Color(0xFF1565C0))),
+        Text('↓ Cascade', style: TextStyle(fontSize: 11, color: const Color(0xFF1570EF))),
         const SizedBox(width: 4),
         Text('✕ Deny', style: TextStyle(fontSize: 11, color: cs.error)),
       ],
@@ -782,7 +783,7 @@ class _GroupAction extends StatelessWidget {
       message: tooltip,
       child: InkWell(
         onTap: onTap,
-        borderRadius: BorderRadius.circular(4),
+        borderRadius: LumaRadius.radiusXs,
         child: Padding(
           padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 6),
           child: Text(
@@ -809,7 +810,7 @@ class _SystemRoleBadge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
       decoration: BoxDecoration(
         color: colorScheme.tertiaryContainer,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: LumaRadius.radiusLg,
       ),
       child: Row(
         mainAxisSize: MainAxisSize.min,
@@ -859,7 +860,7 @@ class _InfoChip extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: LumaRadius.radiusLg,
       ),
       child: Text(
         label,

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
+import 'package:google_fonts/google_fonts.dart';
+
 import '../../services/page_service.dart';
 
 enum _SaveStatus { saved, saving, unsaved }
@@ -196,8 +198,9 @@ class _PageEditorScreenState extends State<PageEditorScreen> {
                                   editorStyle: EditorStyle.desktop(
                                     textStyleConfiguration:
                                         TextStyleConfiguration(
-                                      text: TextStyle(
+                                      text: GoogleFonts.inter(
                                         fontSize: 16,
+                                        height: 24 / 16,
                                         color: Theme.of(context)
                                             .colorScheme
                                             .onSurface,

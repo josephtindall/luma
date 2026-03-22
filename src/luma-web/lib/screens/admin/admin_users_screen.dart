@@ -4,6 +4,7 @@ import 'package:go_router/go_router.dart';
 import '../../models/user.dart';
 import '../../services/user_service.dart';
 import '../../widgets/perm_button.dart';
+import '../../theme/tokens.dart';
 import '../../widgets/user_avatar.dart';
 
 class AdminUsersScreen extends StatefulWidget {
@@ -390,7 +391,7 @@ class _Badge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: LumaRadius.radiusLg,
       ),
       child: Text(
         label,

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../theme/tokens.dart';
+
 class SettingsLayout extends StatelessWidget {
   final Widget child;
 
@@ -74,7 +76,7 @@ class _SettingsTabButton extends StatelessWidget {
 
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(4),
+      borderRadius: LumaRadius.radiusXs,
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 16),
         decoration: BoxDecoration(

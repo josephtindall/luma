@@ -6,6 +6,7 @@ import 'package:qr_flutter/qr_flutter.dart';
 import '../../models/custom_role.dart';
 import '../../models/user.dart';
 import '../../services/user_service.dart';
+import '../../theme/tokens.dart';
 import '../../widgets/user_avatar.dart';
 
 class AdminUserDetailScreen extends StatefulWidget {
@@ -552,7 +553,7 @@ class _PasswordResetPanelState extends State<_PasswordResetPanel> {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: cs.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: LumaRadius.radiusMd,
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -636,7 +637,7 @@ class _Badge extends StatelessWidget {
       padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
       decoration: BoxDecoration(
         color: color,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: LumaRadius.radiusLg,
       ),
       child: Text(
         label,

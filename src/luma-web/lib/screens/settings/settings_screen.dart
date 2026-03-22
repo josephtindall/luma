@@ -9,6 +9,7 @@ import 'package:web/web.dart' as web;
 import '../../models/user.dart';
 import '../../services/user_service.dart';
 import '../../services/webauthn_interop.dart' as webauthn;
+import '../../theme/tokens.dart';
 import '../../widgets/user_avatar.dart';
 import '../login/login_email_store.dart';
 
@@ -493,7 +494,7 @@ class _TOTPSectionState extends State<_TOTPSection> {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           color: Theme.of(ctx).colorScheme.errorContainer,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: LumaRadius.radiusMd,
                         ),
                         child: Row(
                           children: [
@@ -521,7 +522,7 @@ class _TOTPSectionState extends State<_TOTPSection> {
                         decoration: BoxDecoration(
                           color:
                               Theme.of(ctx).colorScheme.surfaceContainerHighest,
-                          borderRadius: BorderRadius.circular(8),
+                          borderRadius: LumaRadius.radiusMd,
                           border: Border.all(
                               color: Theme.of(ctx).colorScheme.outline),
                         ),
@@ -956,7 +957,7 @@ class _PasskeysSectionState extends State<_PasskeysSection> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: LumaRadius.radiusMd,
                 ),
                 child: Row(
                   children: [
@@ -1129,7 +1130,7 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: LumaRadius.radiusMd,
                 ),
                 child: SelectableText(
                   codes
@@ -1225,7 +1226,7 @@ class _RecoveryCodesSectionState extends State<_RecoveryCodesSection> {
                 padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
                   color: Theme.of(context).colorScheme.surfaceContainerHighest,
-                  borderRadius: BorderRadius.circular(8),
+                  borderRadius: LumaRadius.radiusMd,
                 ),
                 child: Row(
                   children: [
@@ -1590,7 +1591,7 @@ class _NewTokenPanel extends StatelessWidget {
           padding: const EdgeInsets.all(12),
           decoration: BoxDecoration(
             color: colorScheme.errorContainer,
-            borderRadius: BorderRadius.circular(8),
+            borderRadius: LumaRadius.radiusMd,
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1637,7 +1638,7 @@ class _NewTokenPanel extends StatelessWidget {
                                   decoration: BoxDecoration(
                                     border:
                                         Border.all(color: colorScheme.outline),
-                                    borderRadius: BorderRadius.circular(6),
+                                    borderRadius: LumaRadius.radiusSm,
                                     color: colorScheme.surfaceContainerHighest,
                                   ),
                                   child: Text(

@@ -3,6 +3,7 @@ import 'package:go_router/go_router.dart';
 
 import '../../services/page_service.dart';
 import '../../services/user_service.dart';
+import '../../theme/tokens.dart';
 
 const _kRoles = [
   (label: 'Viewer', id: 'builtin:vault-viewer'),
@@ -615,7 +616,7 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
                                 child: Material(
                                   elevation: 4,
                                   borderRadius:
-                                      BorderRadius.circular(8),
+                                      LumaRadius.radiusMd,
                                   child: ConstrainedBox(
                                     constraints: const BoxConstraints(
                                         maxHeight: 200),
@@ -758,7 +759,7 @@ class _VaultSettingsScreenState extends State<VaultSettingsScreen> {
                                 child: Material(
                                   elevation: 4,
                                   borderRadius:
-                                      BorderRadius.circular(8),
+                                      LumaRadius.radiusMd,
                                   child: ConstrainedBox(
                                     constraints: const BoxConstraints(
                                         maxHeight: 200),
