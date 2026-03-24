@@ -100,11 +100,15 @@ class _AdminVaultsScreenState extends State<AdminVaultsScreen> {
         final pageVaults = vaults.sublist(
           pageStart, (pageStart + _pageSize).clamp(0, vaults.length));
 
-        return Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.stretch,
-            children: [
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
               Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -135,11 +139,8 @@ class _AdminVaultsScreenState extends State<AdminVaultsScreen> {
               ),
               const SizedBox(height: 16),
               Expanded(
-                child: Column(
-                  children: [
-                    Expanded(
-                      child: vaults.isEmpty
-                          ? const Center(child: Text('No vaults found.'))
+                child: vaults.isEmpty
+                    ? const Center(child: Text('No vaults found.'))
                           : LumaDataTable<AdminVaultRecord>(
                               onRowTap: _showVaultSlideout,
                               columns: [
@@ -192,18 +193,18 @@ class _AdminVaultsScreenState extends State<AdminVaultsScreen> {
                               ],
                               rows: pageVaults,
                             ),
-                    ),
-                    LumaPagination(
-                      currentPage: _currentPage,
-                      totalPages: totalPages,
-                      onPageChanged: (p) =>
-                          setState(() => _currentPage = p),
-                    ),
-                  ],
-                ),
               ),
             ],
           ),
+        ),
+            ),
+            LumaPagination(
+              currentPage: _currentPage,
+              totalPages: totalPages,
+              onPageChanged: (p) =>
+                  setState(() => _currentPage = p),
+            ),
+          ],
         );
       },
     );

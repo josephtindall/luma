@@ -4,9 +4,10 @@ import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
 import '../../models/user.dart';
-import '../../theme/tokens.dart';
 import '../../services/user_service.dart';
+import '../../widgets/data_table.dart';
 import '../../widgets/pagination.dart';
+import '../../widgets/slideout_panel.dart';
 import '../settings/settings_screen.dart' show auditEventMeta, auditFormatTime;
 
 class AdminEventsScreen extends StatefulWidget {
@@ -207,9 +208,19 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
     _load(offset: 0);
   }
 
+  void _showEventSlideout(AuditEvent event) {
+    final (_, label) = auditEventMeta(event.event);
+    showSlideoutPanel(
+      context: context,
+      title: label,
+      bodyBuilder: (_) => _EventDetailsContent(event: event),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final cs = theme.colorScheme;
     final page = _page;
     final hasFilters = _searchController.text.isNotEmpty ||
         _selectedEventType != null ||
@@ -218,164 +229,197 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        // ── Section header ──────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text('Events',
-                  style: theme.textTheme.titleMedium
-                      ?.copyWith(fontWeight: FontWeight.w600)),
-              const SizedBox(height: 2),
-              Text(
-                'View audit log and system events.',
-                style: theme.textTheme.bodySmall?.copyWith(
-                      color: theme.colorScheme.onSurfaceVariant),
-              ),
-            ],
-          ),
-        ),
-
-        // ── Filter bar ──────────────────────────────────────────────────
-        Padding(
-          padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
-          child: Wrap(
-            spacing: 12,
-            runSpacing: 8,
-            crossAxisAlignment: WrapCrossAlignment.center,
-            children: [
-              SizedBox(
-                width: 260,
-                child: TextField(
-                  controller: _searchController,
-                  decoration: InputDecoration(
-                    hintText: 'Search events…',
-                    prefixIcon: const Icon(Icons.search, size: 18),
-                    isDense: true,
-                    border: const OutlineInputBorder(),
-                    contentPadding: const EdgeInsets.symmetric(
-                        horizontal: 12, vertical: 10),
-                    // Show a clear-and-reload button when there's text
-                    suffixIcon: _searchController.text.isNotEmpty
-                        ? IconButton(
-                            icon: const Icon(Icons.close, size: 16),
-                            onPressed: () {
-                              _searchController.clear();
-                              setState(() {});
-                              _load(offset: 0);
-                            },
-                          )
-                        : null,
-                  ),
-                  onChanged: (_) => setState(() {}), // refresh suffixIcon
-                  onSubmitted: (_) => _load(offset: 0),
-                ),
-              ),
-              SizedBox(
-                width: 220,
-                child: DropdownButtonFormField<String?>(
-                  key: ValueKey(_dropdownKey),
-                  initialValue: _selectedEventType,
-                  decoration: const InputDecoration(
-                    isDense: true,
-                    border: OutlineInputBorder(),
-                    contentPadding:
-                        EdgeInsets.symmetric(horizontal: 12, vertical: 10),
-                  ),
-                  items: _eventOptions
-                      .map((opt) => DropdownMenuItem(
-                            value: opt.$1,
-                            child: Text(opt.$2,
-                                overflow: TextOverflow.ellipsis),
-                          ))
-                      .toList(),
-                  onChanged: (v) {
-                    setState(() => _selectedEventType = v);
-                    _load(offset: 0);
-                  },
-                ),
-              ),
-              OutlinedButton.icon(
-                onPressed: _pickDateRange,
-                icon: const Icon(Icons.date_range, size: 16),
-                label: Text(_dateRange == null
-                    ? 'Date range'
-                    : '${_fmtDate(_dateRange!.start)} – ${_fmtDate(_dateRange!.end)}'),
-              ),
-              if (hasFilters)
-                TextButton.icon(
-                  onPressed: _clearFilters,
-                  icon: const Icon(Icons.clear, size: 16),
-                  label: const Text('Clear filters'),
-                ),
-              if (widget.userService.canExportAuditLog)
-                OutlinedButton.icon(
-                  onPressed: _exportLoading ? null : _exportCSV,
-                  icon: _exportLoading
-                      ? const SizedBox(
-                          width: 14,
-                          height: 14,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : const Icon(Icons.download, size: 16),
-                  label: const Text('Export CSV'),
-                ),
-            ],
-          ),
-        ),
-
-        // ── Stats + Pagination ────────────────────────────────────────
-        if (page != null && page.totalPages > 1)
-          Padding(
-            padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
-            child: Row(
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                // ── Section header ───────────────────────────────────────
+                Text('Events',
+                    style: theme.textTheme.titleMedium
+                        ?.copyWith(fontWeight: FontWeight.w600)),
+                const SizedBox(height: 2),
                 Text(
-                  page.events.isEmpty
-                      ? 'No results'
-                      : 'Showing ${page.offset + 1}\u2013'
-                          '${page.offset + page.events.length}'
-                          ' of ${page.total}',
-                  style: theme.textTheme.bodySmall,
+                  'View audit log and system events.',
+                  style: theme.textTheme.bodySmall
+                      ?.copyWith(color: cs.onSurfaceVariant),
                 ),
-                if (_loading)
-                  const Padding(
-                    padding: EdgeInsets.only(left: 8),
-                    child: SizedBox(
-                      width: 14,
-                      height: 14,
-                      child: CircularProgressIndicator(strokeWidth: 2),
+                const SizedBox(height: 12),
+
+                // ── Filter bar ───────────────────────────────────────────
+                Wrap(
+                  spacing: 12,
+                  runSpacing: 8,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    SizedBox(
+                      width: 260,
+                      child: TextField(
+                        controller: _searchController,
+                        decoration: InputDecoration(
+                          hintText: 'Search events…',
+                          prefixIcon: const Icon(Icons.search, size: 18),
+                          isDense: true,
+                          border: const OutlineInputBorder(),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                          suffixIcon: _searchController.text.isNotEmpty
+                              ? IconButton(
+                                  icon: const Icon(Icons.close, size: 16),
+                                  onPressed: () {
+                                    _searchController.clear();
+                                    setState(() {});
+                                    _load(offset: 0);
+                                  },
+                                )
+                              : null,
+                        ),
+                        onChanged: (_) => setState(() {}),
+                        onSubmitted: (_) => _load(offset: 0),
+                      ),
                     ),
+                    SizedBox(
+                      width: 220,
+                      child: DropdownButtonFormField<String?>(
+                        key: ValueKey(_dropdownKey),
+                        initialValue: _selectedEventType,
+                        decoration: const InputDecoration(
+                          isDense: true,
+                          border: OutlineInputBorder(),
+                          contentPadding: EdgeInsets.symmetric(
+                              horizontal: 12, vertical: 10),
+                        ),
+                        items: _eventOptions
+                            .map((opt) => DropdownMenuItem(
+                                  value: opt.$1,
+                                  child: Text(opt.$2,
+                                      overflow: TextOverflow.ellipsis),
+                                ))
+                            .toList(),
+                        onChanged: (v) {
+                          setState(() => _selectedEventType = v);
+                          _load(offset: 0);
+                        },
+                      ),
+                    ),
+                    OutlinedButton.icon(
+                      onPressed: _pickDateRange,
+                      icon: const Icon(Icons.date_range, size: 16),
+                      label: Text(_dateRange == null
+                          ? 'Date range'
+                          : '${_fmtDate(_dateRange!.start)} – ${_fmtDate(_dateRange!.end)}'),
+                    ),
+                    if (hasFilters)
+                      TextButton.icon(
+                        onPressed: _clearFilters,
+                        icon: const Icon(Icons.clear, size: 16),
+                        label: const Text('Clear filters'),
+                      ),
+                    if (widget.userService.canExportAuditLog)
+                      OutlinedButton.icon(
+                        onPressed: _exportLoading ? null : _exportCSV,
+                        icon: _exportLoading
+                            ? const SizedBox(
+                                width: 14,
+                                height: 14,
+                                child:
+                                    CircularProgressIndicator(strokeWidth: 2),
+                              )
+                            : const Icon(Icons.download, size: 16),
+                        label: const Text('Export CSV'),
+                      ),
+                  ],
+                ),
+                const SizedBox(height: 12),
+
+                // ── Table ────────────────────────────────────────────────
+                if (_loading && page == null)
+                  const Expanded(
+                      child: Center(child: CircularProgressIndicator()))
+                else
+                  Expanded(
+                    child: page == null || page.events.isEmpty
+                        ? Center(
+                            child: Text(
+                              hasFilters
+                                  ? 'No events match your filters.'
+                                  : 'No events yet.',
+                              style: theme.textTheme.bodyMedium?.copyWith(
+                                  color: cs.onSurfaceVariant),
+                            ),
+                          )
+                        : LumaDataTable<AuditEvent>(
+                            rows: page.events,
+                            onRowTap: _showEventSlideout,
+                            columns: [
+                              LumaColumn<AuditEvent>(
+                                label: 'Event',
+                                cellBuilder: (e, _) {
+                                  final (icon, label) =
+                                      auditEventMeta(e.event);
+                                  return Row(
+                                    children: [
+                                      Icon(icon,
+                                          size: 16,
+                                          color: cs.onSurfaceVariant),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          label,
+                                          maxLines: 1,
+                                          overflow: TextOverflow.ellipsis,
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                  fontWeight: FontWeight.w500),
+                                        ),
+                                      ),
+                                    ],
+                                  );
+                                },
+                              ),
+                              LumaColumn<AuditEvent>(
+                                label: 'Actor',
+                                width: 180,
+                                cellBuilder: (e, _) => Text(
+                                  e.actorLabel,
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ),
+                              LumaColumn<AuditEvent>(
+                                label: 'IP / Client',
+                                width: 200,
+                                cellBuilder: (e, _) {
+                                  final uaParsed = _parseUA(e.userAgent);
+                                  final parts = [
+                                    if (e.ipAddress.isNotEmpty) e.ipAddress,
+                                    if (uaParsed.isNotEmpty) uaParsed,
+                                  ];
+                                  return Text(
+                                    parts.isEmpty ? '—' : parts.join(' · '),
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: theme.textTheme.bodySmall?.copyWith(
+                                        color: cs.onSurfaceVariant),
+                                  );
+                                },
+                              ),
+                              LumaColumn<AuditEvent>(
+                                label: 'Time',
+                                width: 140,
+                                cellBuilder: (e, _) => Text(
+                                  auditFormatTime(e.occurredAt),
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ),
+                            ],
+                          ),
                   ),
               ],
             ),
           ),
-        // Thin separator between controls and list
-        const Divider(height: 1),
-
-        // ── Event list ──────────────────────────────────────────────────
-        Expanded(
-          child: _loading && page == null
-              ? const Center(child: CircularProgressIndicator())
-              : page == null || page.events.isEmpty
-                  ? Center(
-                      child: Text(
-                        hasFilters
-                            ? 'No events match your filters.'
-                            : 'No events yet.',
-                        style: theme.textTheme.bodyMedium?.copyWith(
-                            color: theme.colorScheme.onSurfaceVariant),
-                      ),
-                    )
-                  : ListView.separated(
-                      padding: const EdgeInsets.only(bottom: 16),
-                      itemCount: page.events.length,
-                      separatorBuilder: (_, __) =>
-                          const Divider(height: 1, indent: 56),
-                      itemBuilder: (context, i) =>
-                          _EventRow(event: page.events[i]),
-                    ),
         ),
 
         if (page != null)
@@ -394,146 +438,28 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
 }
 
 // ---------------------------------------------------------------------------
-// Event row with expandable metadata details
+// Slideout body: full event details
 // ---------------------------------------------------------------------------
 
-class _EventRow extends StatefulWidget {
+class _EventDetailsContent extends StatelessWidget {
   final AuditEvent event;
 
-  const _EventRow({required this.event});
-
-  @override
-  State<_EventRow> createState() => _EventRowState();
-}
-
-class _EventRowState extends State<_EventRow> {
-  bool _expanded = false;
+  const _EventDetailsContent({required this.event});
 
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
-    final e = widget.event;
-    final (icon, label) = auditEventMeta(e.event);
-    final actor = e.actorLabel;
-
-    // Build a concise subtitle: IP · parsed-UA
-    final uaParsed = _parseUA(e.userAgent);
-    final subtitleParts = [
-      if (e.ipAddress.isNotEmpty) e.ipAddress,
-      if (uaParsed.isNotEmpty) uaParsed,
-    ];
-
-    final hasDetails = e.metadata.isNotEmpty ||
-        (e.userEmail != null) ||
-        (e.userDisplayName != null) ||
-        e.userAgent.isNotEmpty;
-
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        InkWell(
-          onTap: hasDetails ? () => setState(() => _expanded = !_expanded) : null,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-            child: Row(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                // Leading icon
-                Padding(
-                  padding: const EdgeInsets.only(top: 2, right: 12),
-                  child: Icon(icon, size: 20, color: cs.onSurfaceVariant),
-                ),
-                // Main content
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      // Title row: label + actor chip
-                      Row(
-                        children: [
-                          Text(label,
-                              style: theme.textTheme.bodyMedium?.copyWith(
-                                  fontWeight: FontWeight.w500)),
-                          if (actor != '—') ...[
-                            const SizedBox(width: 8),
-                            Container(
-                              padding: const EdgeInsets.symmetric(
-                                  horizontal: 8, vertical: 2),
-                              decoration: BoxDecoration(
-                                color: cs.secondaryContainer,
-                                borderRadius: LumaRadius.radiusLg,
-                              ),
-                              child: Text(
-                                actor,
-                                style: theme.textTheme.labelSmall?.copyWith(
-                                    color: cs.onSecondaryContainer),
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ),
-                          ],
-                        ],
-                      ),
-                      if (subtitleParts.isNotEmpty)
-                        Padding(
-                          padding: const EdgeInsets.only(top: 2),
-                          child: Text(
-                            subtitleParts.join(' · '),
-                            maxLines: 1,
-                            overflow: TextOverflow.ellipsis,
-                            style: theme.textTheme.bodySmall?.copyWith(
-                                color: cs.onSurfaceVariant),
-                          ),
-                        ),
-                    ],
-                  ),
-                ),
-                // Trailing: timestamp + expand chevron
-                const SizedBox(width: 8),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(auditFormatTime(e.occurredAt),
-                        style: theme.textTheme.bodySmall),
-                    if (hasDetails)
-                      Icon(
-                        _expanded
-                            ? Icons.expand_less
-                            : Icons.expand_more,
-                        size: 16,
-                        color: cs.onSurfaceVariant,
-                      ),
-                  ],
-                ),
-              ],
-            ),
-          ),
-        ),
-        // Expanded details panel
-        if (_expanded)
-          _DetailsPanel(event: e, theme: theme),
-      ],
-    );
-  }
-}
-
-// ---------------------------------------------------------------------------
-// Details panel shown when a row is expanded
-// ---------------------------------------------------------------------------
-
-class _DetailsPanel extends StatelessWidget {
-  final AuditEvent event;
-  final ThemeData theme;
-
-  const _DetailsPanel({required this.event, required this.theme});
-
-  @override
-  Widget build(BuildContext context) {
-    final cs = theme.colorScheme;
     final e = event;
 
     final rows = <(String, String)>[
-      ('Occurred at', e.occurredAt.toLocal().toIso8601String().replaceFirst('T', ' ').split('.').first),
+      ('Occurred at',
+          e.occurredAt
+              .toLocal()
+              .toIso8601String()
+              .replaceFirst('T', ' ')
+              .split('.')
+              .first),
       if (e.userEmail != null) ('User email', e.userEmail!),
       if (e.userDisplayName != null) ('Display name', e.userDisplayName!),
       if (e.userId != null) ('User ID', e.userId!),
@@ -541,28 +467,22 @@ class _DetailsPanel extends StatelessWidget {
       if (e.userAgent.isNotEmpty) ('User agent', e.userAgent),
     ];
 
-    return Container(
-      margin: const EdgeInsets.fromLTRB(48, 0, 16, 8),
-      padding: const EdgeInsets.all(12),
-      decoration: BoxDecoration(
-        color: cs.surfaceContainerLowest,
-        borderRadius: LumaRadius.radiusMd,
-        border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
-      ),
+    return SingleChildScrollView(
+      padding: const EdgeInsets.all(20),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           for (final (label, value) in rows)
             Padding(
-              padding: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.only(bottom: 8),
               child: Row(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   SizedBox(
                     width: 120,
                     child: Text(label,
-                        style: theme.textTheme.labelSmall?.copyWith(
-                            color: cs.onSurfaceVariant)),
+                        style: theme.textTheme.labelSmall
+                            ?.copyWith(color: cs.onSurfaceVariant)),
                   ),
                   Expanded(
                     child: SelectableText(value,
@@ -574,15 +494,14 @@ class _DetailsPanel extends StatelessWidget {
           if (e.metadata.isNotEmpty) ...[
             if (rows.isNotEmpty)
               Divider(
-                  height: 12,
+                  height: 16,
                   color: cs.outlineVariant.withValues(alpha: 0.5)),
             Text('Details',
                 style: theme.textTheme.labelSmall
                     ?.copyWith(color: cs.onSurfaceVariant)),
-            const SizedBox(height: 4),
+            const SizedBox(height: 8),
             SelectableText(
-              const JsonEncoder.withIndent('  ')
-                  .convert(e.metadata),
+              const JsonEncoder.withIndent('  ').convert(e.metadata),
               style: theme.textTheme.bodySmall?.copyWith(
                 fontFamily: 'monospace',
               ),

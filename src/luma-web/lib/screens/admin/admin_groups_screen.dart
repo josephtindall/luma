@@ -121,11 +121,15 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
     final pageGroups = groups.sublist(
       pageStart, (pageStart + _pageSize).clamp(0, groups.length));
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -164,12 +168,9 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
                         style: TextStyle(color: cs.error))))
           else
             Expanded(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: groups.isEmpty
-                        ? const Center(child: Text('No groups yet'))
-                        : LumaDataTable<GroupRecord>(
+              child: groups.isEmpty
+                  ? const Center(child: Text('No groups yet'))
+                  : LumaDataTable<GroupRecord>(
                             showCheckboxes: widget.userService.canEditGroup,
                             selected: _selected,
                             onSelectionChanged: (s) => setState(() => _selected = s),
@@ -254,18 +255,19 @@ class _AdminGroupsScreenState extends State<AdminGroupsScreen> {
                             ],
                             rows: pageGroups,
                           ),
-                  ),
-                  LumaPagination(
-                    currentPage: _currentPage,
-                    totalPages: totalPages,
-                    onPageChanged: (p) =>
-                        setState(() { _currentPage = p; _selected = {}; }),
-                  ),
-                ],
-              ),
             ),
         ],
       ),
+    ),
+        ),
+        if (_groups != null && _error == null)
+          LumaPagination(
+            currentPage: _currentPage,
+            totalPages: totalPages,
+            onPageChanged: (p) =>
+                setState(() { _currentPage = p; _selected = {}; }),
+          ),
+      ],
     );
   }
 }

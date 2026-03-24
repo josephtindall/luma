@@ -44,6 +44,21 @@ class UserService extends ChangeNotifier {
   bool _showGithubButton = true;
   bool _showDonateButton = true;
 
+  // Stale-while-revalidate caches — populated on first load, cleared on logout.
+  List<AdminUserRecord>? _cachedAdminUsers;
+  List<InvitationRecord>? _cachedInvitations;
+  List<GroupRecord>? _cachedGroups;
+  List<CustomRoleRecord>? _cachedCustomRoles;
+  List<AdminVaultRecord>? _cachedVaults;
+  AuditPage? _cachedAdminAudit;
+
+  List<AdminUserRecord>? get cachedAdminUsers => _cachedAdminUsers;
+  List<InvitationRecord>? get cachedInvitations => _cachedInvitations;
+  List<GroupRecord>? get cachedGroups => _cachedGroups;
+  List<CustomRoleRecord>? get cachedCustomRoles => _cachedCustomRoles;
+  List<AdminVaultRecord>? get cachedVaults => _cachedVaults;
+  AuditPage? get cachedAdminAudit => _cachedAdminAudit;
+
   UserService(this._api);
 
   UserProfile? get profile => _profile;
@@ -261,7 +276,9 @@ class UserService extends ChangeNotifier {
       throw Exception('Failed to load audit log');
     }
     final data = json.decode(resp.body) as Map<String, dynamic>;
-    return AuditPage.fromJson(data);
+    final result = AuditPage.fromJson(data);
+    _cachedAdminAudit = result;
+    return result;
   }
 
   // ── TOTP management ─────────────────────────────────────────────────────
@@ -439,9 +456,11 @@ class UserService extends ChangeNotifier {
     }
     final data = json.decode(resp.body) as Map<String, dynamic>;
     final items = (data['users'] as List<dynamic>? ?? []);
-    return items
+    final result = items
         .map((e) => AdminUserRecord.fromJson(e as Map<String, dynamic>))
         .toList();
+    _cachedAdminUsers = result;
+    return result;
   }
 
   Future<void> lockUser(String userId) async {
@@ -558,9 +577,11 @@ class UserService extends ChangeNotifier {
     } else {
       items = [];
     }
-    return items
+    final result = items
         .map((e) => InvitationRecord.fromJson(e as Map<String, dynamic>))
         .toList();
+    _cachedInvitations = result;
+    return result;
   }
 
   /// Revokes a pending invitation by ID.
@@ -605,9 +626,11 @@ class UserService extends ChangeNotifier {
     final data = json.decode(resp.body);
     final items =
         data is List ? data : (data as Map<String, dynamic>)['groups'] ?? data;
-    return (items as List<dynamic>)
+    final result = (items as List<dynamic>)
         .map((e) => GroupRecord.fromJson(e as Map<String, dynamic>))
         .toList();
+    _cachedGroups = result;
+    return result;
   }
 
   Future<GroupRecord> getGroup(String id) async {
@@ -713,9 +736,11 @@ class UserService extends ChangeNotifier {
     final data = json.decode(resp.body);
     final items =
         data is List ? data : (data as Map<String, dynamic>)['roles'] ?? data;
-    return (items as List<dynamic>)
+    final result = (items as List<dynamic>)
         .map((e) => CustomRoleRecord.fromJson(e as Map<String, dynamic>))
         .toList();
+    _cachedCustomRoles = result;
+    return result;
   }
 
   Future<CustomRoleRecord> getCustomRole(String id) async {
@@ -839,9 +864,11 @@ class UserService extends ChangeNotifier {
     }
     final data = json.decode(resp.body);
     final items = data is List ? data : [];
-    return (items)
+    final result = (items)
         .map((e) => AdminVaultRecord.fromJson(e as Map<String, dynamic>))
         .toList();
+    _cachedVaults = result;
+    return result;
   }
 
   Future<void> adminUpdateVault(
@@ -976,6 +1003,12 @@ class UserService extends ChangeNotifier {
     _contentWidth = 'wide';
     _showGithubButton = true;
     _showDonateButton = true;
+    _cachedAdminUsers = null;
+    _cachedInvitations = null;
+    _cachedGroups = null;
+    _cachedCustomRoles = null;
+    _cachedVaults = null;
+    _cachedAdminAudit = null;
     notifyListeners();
   }
 

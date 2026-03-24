@@ -12,6 +12,7 @@ import '../../widgets/perm_button.dart';
 import '../../widgets/permission_matrix.dart';
 import '../../widgets/slideout_panel.dart';
 import '../../widgets/pagination.dart';
+import '../../widgets/skeleton/admin_skeletons.dart';
 import '../../widgets/user_avatar.dart';
 
 class AdminUsersScreen extends StatefulWidget {
@@ -37,6 +38,13 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   @override
   void initState() {
     super.initState();
+    final cachedUsers = widget.userService.cachedAdminUsers;
+    final cachedInvites = widget.userService.cachedInvitations;
+    if (cachedUsers != null) {
+      _users = cachedUsers;
+      _invites = cachedInvites;
+      _loading = false;
+    }
     _load();
   }
 
@@ -242,8 +250,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     final theme = Theme.of(context);
     final cs = theme.colorScheme;
 
-    if (_loading) {
-      return const Center(child: CircularProgressIndicator());
+    if (_loading && _users == null) {
+      return const UsersScreenSkeleton();
     }
     if (_error != null) {
       return Center(
@@ -266,7 +274,12 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     final pageUsers = users.sublist(
       pageStart, (pageStart + _pageSize).clamp(0, users.length));
 
-    return Padding(
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_loading) const LinearProgressIndicator(minHeight: 2),
+        Expanded(
+          child: Padding(
       padding: const EdgeInsets.all(24),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -319,12 +332,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
           // Users table + pagination
           Expanded(
-            child: Column(
-              children: [
-                Expanded(
-                  child: users.isEmpty
-                      ? const Center(child: Text('No users yet'))
-                      : LumaDataTable<AdminUserRecord>(
+            child: users.isEmpty
+                ? const Center(child: Text('No users yet'))
+                : LumaDataTable<AdminUserRecord>(
                           showCheckboxes: widget.userService.canManageUsers,
                           selected: _selected,
                           onSelectionChanged: (s) =>
@@ -480,15 +490,6 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
                           ],
                           rows: pageUsers,
                         ),
-                ),
-                LumaPagination(
-                  currentPage: _currentPage,
-                  totalPages: totalPages,
-                  onPageChanged: (p) =>
-                      setState(() { _currentPage = p; _selected = {}; }),
-                ),
-              ],
-            ),
           ),
 
           // Invitations section (collapsible)
@@ -513,6 +514,15 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           ],
         ],
       ),
+    ),
+        ),
+        LumaPagination(
+          currentPage: _currentPage,
+          totalPages: totalPages,
+          onPageChanged: (p) =>
+              setState(() { _currentPage = p; _selected = {}; }),
+        ),
+      ],
     );
   }
 

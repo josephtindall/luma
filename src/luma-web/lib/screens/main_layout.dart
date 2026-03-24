@@ -649,8 +649,13 @@ class _MainLayoutState extends State<MainLayout> {
     if (_isSidebarExpanded) {
       return Row(
         children: [
-          const LumaLogo(size: 28),
-          const SizedBox(width: 10),
+          Container(
+            width: 40,
+            height: 40,
+            alignment: Alignment.center,
+            child: const LumaLogo(size: 28),
+          ),
+          const SizedBox(width: 4),
           Text(
             instanceName,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
@@ -683,7 +688,7 @@ class _MainLayoutState extends State<MainLayout> {
             ),
             child: _isHoveringLogo
                 ? const Icon(Icons.menu, size: 24)
-                : const LumaLogo(size: 24),
+                : const LumaLogo(size: 28),
           ),
         ),
       );

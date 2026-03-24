@@ -89,33 +89,33 @@ const _lightOnSurfaceVariant   = Color(0xFF475467); // Gray 600
 const _lightOutline            = Color(0xFF98A2B3); // Gray 400
 const _lightOutlineVariant     = Color(0xFFEAECF0); // Gray 200
 
-// Dark palette — Monochrome primary (white buttons, black text)
-const _darkPrimary             = Color(0xFFE0E0E0); // Near-white
-const _darkOnPrimary           = Color(0xFF111111); // Near-black
-const _darkPrimaryContainer    = Color(0xFF2E2E2E); // Dark gray
-const _darkOnPrimaryContainer  = Color(0xFFE0E0E0); // Light gray
-const _darkSecondary           = Color(0xFF909090); // Pure neutral gray
-const _darkOnSecondary         = Color(0xFF111111);
-const _darkSecondaryContainer  = Color(0xFF272727); // Pure gray
-const _darkOnSecondaryContainer = Color(0xFFE0E0E0);
-const _darkTertiary            = Color(0xFF53B1FD); // Blue 400 — accent only
+// Dark palette — MacOS Slate inspired
+const _darkPrimary             = Color(0xFFF2F2F7); // Near-white text/buttons
+const _darkOnPrimary           = Color(0xFF1C1C1E); // Slate black
+const _darkPrimaryContainer    = Color(0xFF2C2C2E); // System Gray 5
+const _darkOnPrimaryContainer  = Color(0xFFF2F2F7); 
+const _darkSecondary           = Color(0xFFAEAEB2); // System Gray 2
+const _darkOnSecondary         = Color(0xFF1C1C1E);
+const _darkSecondaryContainer  = Color(0xFF242426); // Surface variant
+const _darkOnSecondaryContainer= Color(0xFFF2F2F7);
+const _darkTertiary            = Color(0xFF53B1FD); // Blue accent
 const _darkOnTertiary          = Color(0xFF194185);
 const _darkTertiaryContainer   = Color(0xFF1849A9);
 const _darkOnTertiaryContainer = Color(0xFFB2DDFF);
-const _darkError               = Color(0xFFF97066); // Error 400
-const _darkOnError             = Color(0xFF3B1210);
+const _darkError               = Color(0xFFFF453A); // Apple Red
+const _darkOnError             = Color(0xFF4A0F0D);
 const _darkErrorContainer      = Color(0xFF3B1210);
-const _darkOnErrorContainer    = Color(0xFFFECDCA);
-const _darkSurface             = Color(0xFF1A1A1A); // Pure dark gray
-const _darkOnSurface           = Color(0xFFE0E0E0); // Pure light gray
-const _darkCHigh               = Color(0xFF272727);
-const _darkC                   = Color(0xFF202020);
-const _darkCLow                = Color(0xFF1A1A1A);
-const _darkCLowest             = Color(0xFF121212); // Near-black
-const _darkCHighest            = Color(0xFF2E2E2E);
-const _darkOnSurfaceVariant    = Color(0xFF909090); // Pure neutral gray
-const _darkOutline             = Color(0xFF404040);
-const _darkOutlineVariant      = Color(0xFF2E2E2E);
+const _darkOnErrorContainer    = Color(0xFFFFD4D1);
+const _darkSurface             = Color(0xFF1C1C1E); // System Gray 6 (Main background)
+const _darkOnSurface           = Color(0xFFF2F2F7); 
+const _darkCHigh               = Color(0xFF242426);
+const _darkC                   = Color(0xFF1C1C1E);
+const _darkCLow                = Color(0xFF161618);
+const _darkCLowest             = Color(0xFF121214); // Near-black slate
+const _darkCHighest            = Color(0xFF2C2C2E);
+const _darkOnSurfaceVariant    = Color(0xFFAEAEB2); // System Gray 2
+const _darkOutline             = Color(0xFF48484A); // System Gray 3
+const _darkOutlineVariant      = Color(0xFF3A3A3C); // System Gray 4
 
 ThemeData _buildTheme(Brightness brightness) {
   final isLight = brightness == Brightness.light;

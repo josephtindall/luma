@@ -123,11 +123,15 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
     final pageRoles = roles.sublist(
       pageStart, (pageStart + _pageSize).clamp(0, roles.length));
 
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        Expanded(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
           Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -166,12 +170,9 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
             const Expanded(child: Center(child: CircularProgressIndicator()))
           else
             Expanded(
-              child: Column(
-                children: [
-                  Expanded(
-                    child: roles.isEmpty
-                        ? const Center(child: Text('No custom roles yet.'))
-                        : LumaDataTable<CustomRoleRecord>(
+              child: roles.isEmpty
+                  ? const Center(child: Text('No custom roles yet.'))
+                  : LumaDataTable<CustomRoleRecord>(
                             showCheckboxes: widget.userService.canEditRole,
                             selected: _selected,
                             onSelectionChanged: (s) => setState(() => _selected = s),
@@ -280,18 +281,19 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
                             ],
                             rows: pageRoles,
                           ),
-                  ),
-                  LumaPagination(
-                    currentPage: _currentPage,
-                    totalPages: totalPages,
-                    onPageChanged: (p) =>
-                        setState(() { _currentPage = p; _selected = {}; }),
-                  ),
-                ],
-              ),
             ),
         ],
       ),
+    ),
+        ),
+        if (_roles != null)
+          LumaPagination(
+            currentPage: _currentPage,
+            totalPages: totalPages,
+            onPageChanged: (p) =>
+                setState(() { _currentPage = p; _selected = {}; }),
+          ),
+      ],
     );
   }
 }
