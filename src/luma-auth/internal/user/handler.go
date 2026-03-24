@@ -82,7 +82,10 @@ func (h *Handler) AdminCapabilities(w http.ResponseWriter, r *http.Request) {
 
 	isOwner := claims.Role == "builtin:instance-owner"
 	actions := []string{
-		"user:read", "invitation:list", "instance:read",
+		"admin:access",
+		"user:read", "user:invite", "user:edit", "user:delete", "user:lock", "user:unlock", "user:revoke-sessions",
+		"invitation:list", "invitation:create", "invitation:revoke",
+		"instance:read",
 		"group:read", "group:create", "group:rename", "group:delete",
 		"group:add-member", "group:remove-member", "group:assign-role", "group:unassign-role",
 		"role:read", "role:create", "role:update", "role:delete",
@@ -267,6 +270,48 @@ func (h *Handler) UnlockUser(w http.ResponseWriter, r *http.Request) {
 	claims := middleware.ClaimsFromContext(r.Context())
 	id := chi.URLParam(r, "id")
 	if err := h.svc.UnlockAccount(r.Context(), id, claims.Subject); err != nil {
+		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// SearchDirectory handles GET /api/auth/directory/users?search=.
+// Any authenticated user may call this. Returns non-hidden, non-locked users.
+func (h *Handler) SearchDirectory(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+	q := r.URL.Query().Get("search")
+	users, err := h.svc.SearchDirectory(r.Context(), q)
+	if err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "search failed")
+		return
+	}
+	if users == nil {
+		users = []*DirectoryUser{}
+	}
+	httputil.WriteJSON(w, http.StatusOK, users)
+}
+
+// SetHideFromSearch handles PATCH /api/auth/admin/users/{id}/hide-from-search.
+// Requires user:edit permission. Body: {"hide": true|false}.
+func (h *Handler) SetHideFromSearch(w http.ResponseWriter, r *http.Request) {
+	if !h.requirePerm(w, r, "user:edit") {
+		return
+	}
+	claims := middleware.ClaimsFromContext(r.Context())
+	id := chi.URLParam(r, "id")
+	var req struct {
+		Hide bool `json:"hide"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid body")
+		return
+	}
+	if err := h.svc.SetHideFromSearch(r.Context(), id, req.Hide, claims.Subject); err != nil {
 		httputil.WriteError(w, pkgerrors.HTTPStatus(err), pkgerrors.ErrorCode(err), err.Error())
 		return
 	}

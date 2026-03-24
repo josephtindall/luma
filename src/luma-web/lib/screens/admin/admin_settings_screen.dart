@@ -22,7 +22,7 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
   final _minLengthController = TextEditingController();
   final _historyCountController = TextEditingController();
 
-  String _contentWidth = 'wide';
+  String _contentWidth = 'max';
   bool _requireUppercase = false;
   bool _requireLowercase = false;
   bool _requireNumbers = false;
@@ -149,8 +149,17 @@ class _AdminSettingsScreenState extends State<AdminSettingsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text('Instance Settings',
-                style: Theme.of(context).textTheme.headlineSmall),
+            Text('Settings',
+                style: Theme.of(context)
+                    .textTheme
+                    .titleMedium
+                    ?.copyWith(fontWeight: FontWeight.w600)),
+            const SizedBox(height: 2),
+            Text(
+              'Configure instance settings.',
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant),
+            ),
             const SizedBox(height: 24),
 
             // ── Instance section ──────────────────────────────────────────

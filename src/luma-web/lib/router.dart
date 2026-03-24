@@ -3,20 +3,25 @@ import 'package:go_router/go_router.dart';
 
 import 'services/auth_service.dart';
 import 'services/api_client.dart';
+import 'services/page_service.dart';
 import 'services/theme_notifier.dart';
 import 'services/user_service.dart';
 import 'screens/setup/setup_wizard_screen.dart';
 import 'screens/login/login_screen.dart';
 import 'screens/home/home_screen.dart';
+import 'screens/pages/vault_pages_screen.dart';
+import 'screens/pages/page_editor_screen.dart';
 import 'screens/settings/settings_screen.dart';
 import 'screens/settings/settings_layout.dart';
 import 'screens/admin/admin_layout.dart';
 import 'screens/admin/admin_users_screen.dart';
-import 'screens/admin/admin_invites_screen.dart';
+
 import 'screens/admin/admin_settings_screen.dart';
 import 'screens/admin/admin_groups_screen.dart';
 import 'screens/admin/admin_roles_screen.dart';
 import 'screens/admin/admin_events_screen.dart';
+import 'screens/admin/admin_vaults_screen.dart';
+import 'screens/pages/vault_settings_screen.dart';
 import 'screens/register/register_screen.dart';
 import 'screens/auth/reset_password_screen.dart';
 import 'screens/auth/recovery_code_screen.dart';
@@ -27,6 +32,7 @@ GoRouter buildRouter(
   ApiClient apiClient,
   UserService userService,
   ThemeNotifier themeNotifier,
+  PageService pageService,
 ) {
   return GoRouter(
     refreshListenable: authService,
@@ -117,6 +123,7 @@ GoRouter buildRouter(
           auth: authService,
           userService: userService,
           themeNotifier: themeNotifier,
+          pageService: pageService,
           child: child,
         ),
         routes: [
@@ -124,6 +131,27 @@ GoRouter buildRouter(
             path: '/home',
             builder: (_, __) => HomeScreen(
               api: apiClient,
+            ),
+          ),
+          GoRoute(
+            path: '/vaults/:slug',
+            builder: (_, state) => VaultPagesScreen(
+              slug: state.pathParameters['slug']!,
+              pageService: pageService,
+            ),
+          ),
+          GoRoute(
+            path: '/vaults/:slug/settings',
+            builder: (_, state) => VaultSettingsScreen(
+              slug: state.pathParameters['slug']!,
+              pageService: pageService,
+            ),
+          ),
+          GoRoute(
+            path: '/pages/:shortId',
+            builder: (_, state) => PageEditorScreen(
+              shortId: state.pathParameters['shortId']!,
+              pageService: pageService,
             ),
           ),
           GoRoute(
@@ -156,30 +184,43 @@ GoRouter buildRouter(
             routes: [
               GoRoute(
                 path: '/admin/users',
-                builder: (_, __) => AdminUsersScreen(userService: userService),
+                pageBuilder: (_, __) => NoTransitionPage(
+                  child: AdminUsersScreen(userService: userService),
+                ),
               ),
               GoRoute(
                 path: '/admin/invites',
-                builder: (_, __) =>
-                    AdminInvitesScreen(userService: userService),
+                redirect: (_, __) => '/admin/users',
               ),
               GoRoute(
                 path: '/admin/groups',
-                builder: (_, __) => AdminGroupsScreen(userService: userService),
+                pageBuilder: (_, __) => NoTransitionPage(
+                  child: AdminGroupsScreen(userService: userService),
+                ),
               ),
               GoRoute(
                 path: '/admin/roles',
-                builder: (_, __) => AdminRolesScreen(userService: userService),
+                pageBuilder: (_, __) => NoTransitionPage(
+                  child: AdminRolesScreen(userService: userService),
+                ),
               ),
               GoRoute(
                 path: '/admin/settings',
-                builder: (_, __) =>
-                    AdminSettingsScreen(userService: userService),
+                pageBuilder: (_, __) => NoTransitionPage(
+                  child: AdminSettingsScreen(userService: userService),
+                ),
               ),
               GoRoute(
                 path: '/admin/events',
-                builder: (_, __) =>
-                    AdminEventsScreen(userService: userService),
+                pageBuilder: (_, __) => NoTransitionPage(
+                  child: AdminEventsScreen(userService: userService),
+                ),
+              ),
+              GoRoute(
+                path: '/admin/vaults',
+                pageBuilder: (_, __) => NoTransitionPage(
+                  child: AdminVaultsScreen(userService: userService),
+                ),
               ),
             ],
           ),

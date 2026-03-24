@@ -337,6 +337,33 @@ func (s *Service) AdminCreate(ctx context.Context, params AdminCreateParams, req
 	return u.ToAdmin(), nil
 }
 
+// SearchDirectory returns non-hidden, non-locked users matching the query.
+// Any authenticated user may call this; results never include hidden or locked accounts.
+func (s *Service) SearchDirectory(ctx context.Context, query string) ([]*DirectoryUser, error) {
+	users, err := s.repo.SearchDirectory(ctx, query, 50)
+	if err != nil {
+		return nil, fmt.Errorf("user.Service.SearchDirectory: %w", err)
+	}
+	return users, nil
+}
+
+// SetHideFromSearch sets or clears the hide_from_search flag for a user.
+// Admin-only operation.
+func (s *Service) SetHideFromSearch(ctx context.Context, id string, hide bool, requesterID string) error {
+	if err := s.repo.SetHideFromSearch(ctx, id, hide); err != nil {
+		return fmt.Errorf("user.Service.SetHideFromSearch: %w", err)
+	}
+	s.audit.WriteAsync(ctx, audit.Event{
+		UserID: id,
+		Event:  audit.EventProfileUpdated,
+		Metadata: map[string]any{
+			"hide_from_search": hide,
+			"set_by":           requesterID,
+		},
+	})
+	return nil
+}
+
 // SetForcePasswordChange sets or clears the force_password_change flag for a user.
 // When setting (force=true), all existing sessions are revoked immediately.
 func (s *Service) SetForcePasswordChange(ctx context.Context, targetID, requesterID string, force bool) error {

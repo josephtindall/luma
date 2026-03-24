@@ -8,16 +8,12 @@ import (
 // mockAuthzRepo is a configurable test double for authz.Repository.
 type mockAuthzRepo struct {
 	instancePolicies []PolicyStatement
-	vaultPolicies    []PolicyStatement
 	resourcePerm     *ResourcePermission
 	featureEnabled   bool
 }
 
 func (m *mockAuthzRepo) GetInstanceRole(_ context.Context, _ string) ([]PolicyStatement, error) {
 	return m.instancePolicies, nil
-}
-func (m *mockAuthzRepo) GetVaultRole(_ context.Context, _, _ string) ([]PolicyStatement, error) {
-	return m.vaultPolicies, nil
 }
 func (m *mockAuthzRepo) GetResourcePermission(_ context.Context, _, _, _ string) (*ResourcePermission, error) {
 	return m.resourcePerm, nil
@@ -28,7 +24,7 @@ func (m *mockAuthzRepo) IsFeatureEnabled(_ context.Context, _ string) (bool, err
 func (m *mockAuthzRepo) IsOwner(_ context.Context, _ string) (bool, error) {
 	return false, nil
 }
-func (m *mockAuthzRepo) GetCustomRolePermissionsForUser(_ context.Context, _, _ string) ([]CustomRolePerm, error) {
+func (m *mockAuthzRepo) GetCustomRolePermissionsForUser(_ context.Context, _, _, _, _ string) ([]CustomRolePerm, error) {
 	return nil, nil
 }
 func (m *mockAuthzRepo) InvalidateUserCache(_ context.Context, _ string) error {
@@ -144,13 +140,11 @@ func TestCheck_ResourceExplicitAllow(t *testing.T) {
 }
 
 func TestCheck_VaultRoleAllow_BeforeInstanceRole(t *testing.T) {
-	a := newTestAuthorizer(&mockAuthzRepo{
-		featureEnabled: true,
-		vaultPolicies: []PolicyStatement{
-			{Effect: "allow", Actions: []string{"page:edit"}},
-		},
-	})
-	result, err := a.Check(context.Background(), pageEditReq())
+	// vault-editor allows page:edit; no instance role needed.
+	a := newTestAuthorizer(&mockAuthzRepo{featureEnabled: true})
+	req := pageEditReq()
+	req.VaultRole = "builtin:vault-editor"
+	result, err := a.Check(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -159,22 +153,53 @@ func TestCheck_VaultRoleAllow_BeforeInstanceRole(t *testing.T) {
 	}
 }
 
-func TestCheck_VaultDeny_WinsOverInstanceAllow(t *testing.T) {
+func TestCheck_VaultViewer_CannotEdit_FallsThrough(t *testing.T) {
+	// vault-viewer does not include page:edit, so evaluation falls through to
+	// instance role (which allows). Confirms viewer doesn't block instance grants.
 	a := newTestAuthorizer(&mockAuthzRepo{
 		featureEnabled: true,
-		vaultPolicies: []PolicyStatement{
-			{Effect: "deny", Actions: []string{"page:edit"}},
-		},
 		instancePolicies: []PolicyStatement{
 			{Effect: "allow", Actions: []string{"page:edit"}},
 		},
 	})
-	result, err := a.Check(context.Background(), pageEditReq())
+	req := pageEditReq()
+	req.VaultRole = "builtin:vault-viewer"
+	result, err := a.Check(context.Background(), req)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if result.Allowed {
-		t.Error("expected vault deny to override instance allow")
+	if !result.Allowed {
+		t.Errorf("instance allow should win when vault-viewer has no matching policy, reason=%q", result.Reason)
+	}
+}
+
+func TestBuiltinVaultPolicies_Admin(t *testing.T) {
+	stmts := builtinVaultPolicies("builtin:vault-admin")
+	if len(stmts) == 0 {
+		t.Fatal("expected policies for vault-admin")
+	}
+	want := []string{"vault:manage-members", "vault:edit", "page:edit", "flow:execute"}
+	actions := stmts[0].Actions
+	for _, w := range want {
+		found := false
+		for _, a := range actions {
+			if a == w {
+				found = true
+				break
+			}
+		}
+		if !found {
+			t.Errorf("vault-admin missing action %q", w)
+		}
+	}
+}
+
+func TestBuiltinVaultPolicies_UnknownRole(t *testing.T) {
+	if stmts := builtinVaultPolicies("nonexistent:role"); stmts != nil {
+		t.Error("expected nil for unknown role")
+	}
+	if stmts := builtinVaultPolicies(""); stmts != nil {
+		t.Error("expected nil for empty role")
 	}
 }
 

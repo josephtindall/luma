@@ -60,4 +60,12 @@ type Repository interface {
 	// GetRecentPasswordHashes returns the most recent `count` password hashes for
 	// a user, ordered newest first. Used to enforce password reuse prevention.
 	GetRecentPasswordHashes(ctx context.Context, userID string, count int) ([]string, error)
+
+	// SearchDirectory returns non-hidden, non-locked users whose display_name
+	// or email contains the query string (case-insensitive). Used by the
+	// non-admin directory search endpoint.
+	SearchDirectory(ctx context.Context, query string, limit int) ([]*DirectoryUser, error)
+
+	// SetHideFromSearch sets or clears the hide_from_search flag for a user.
+	SetHideFromSearch(ctx context.Context, id string, hide bool) error
 }

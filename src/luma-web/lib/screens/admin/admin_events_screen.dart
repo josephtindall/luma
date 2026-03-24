@@ -4,7 +4,9 @@ import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
 import '../../models/user.dart';
+import '../../theme/tokens.dart';
 import '../../services/user_service.dart';
+import '../../widgets/pagination.dart';
 import '../settings/settings_screen.dart' show auditEventMeta, auditFormatTime;
 
 class AdminEventsScreen extends StatefulWidget {
@@ -83,6 +85,8 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
     ('role_unassigned_from_user', 'Role unassigned from user'),
     // Admin: instance
     ('instance_settings_updated', 'Instance settings updated'),
+    // Vaults
+    ('vault_archived', 'Vault archived'),
   ];
 
   @override
@@ -214,9 +218,28 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        // ── Section header ──────────────────────────────────────────────
+        Padding(
+          padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text('Events',
+                  style: theme.textTheme.titleMedium
+                      ?.copyWith(fontWeight: FontWeight.w600)),
+              const SizedBox(height: 2),
+              Text(
+                'View audit log and system events.',
+                style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant),
+              ),
+            ],
+          ),
+        ),
+
         // ── Filter bar ──────────────────────────────────────────────────
         Padding(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 0),
+          padding: const EdgeInsets.fromLTRB(24, 12, 24, 0),
           child: Wrap(
             spacing: 12,
             runSpacing: 8,
@@ -302,56 +325,32 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
           ),
         ),
 
-        // ── Pagination bar (sticky, between filter and list) ────────────
-        if (page != null && page.total > 0)
+        // ── Stats + Pagination ────────────────────────────────────────
+        if (page != null && page.totalPages > 1)
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
             child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
                 Text(
                   page.events.isEmpty
                       ? 'No results'
-                      : 'Showing ${page.offset + 1}–'
+                      : 'Showing ${page.offset + 1}\u2013'
                           '${page.offset + page.events.length}'
                           ' of ${page.total}',
                   style: theme.textTheme.bodySmall,
                 ),
-                Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    if (_loading)
-                      const Padding(
-                        padding: EdgeInsets.only(right: 8),
-                        child: SizedBox(
-                          width: 14,
-                          height: 14,
-                          child:
-                              CircularProgressIndicator(strokeWidth: 2),
-                        ),
-                      ),
-                    TextButton(
-                      onPressed: page.offset > 0
-                          ? () => _load(offset: page.offset - _limit)
-                          : null,
-                      child: const Text('← Prev'),
+                if (_loading)
+                  const Padding(
+                    padding: EdgeInsets.only(left: 8),
+                    child: SizedBox(
+                      width: 14,
+                      height: 14,
+                      child: CircularProgressIndicator(strokeWidth: 2),
                     ),
-                    Text(
-                      'Page ${page.currentPage + 1} of ${page.totalPages}',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                    TextButton(
-                      onPressed: page.hasMore
-                          ? () => _load(offset: page.offset + _limit)
-                          : null,
-                      child: const Text('Next →'),
-                    ),
-                  ],
-                ),
+                  ),
               ],
             ),
           ),
-
         // Thin separator between controls and list
         const Divider(height: 1),
 
@@ -378,6 +377,13 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
                           _EventRow(event: page.events[i]),
                     ),
         ),
+
+        if (page != null)
+          LumaPagination(
+            currentPage: page.currentPage,
+            totalPages: page.totalPages,
+            onPageChanged: (p) => _load(offset: p * _limit),
+          ),
       ],
     );
   }
@@ -456,7 +462,7 @@ class _EventRowState extends State<_EventRow> {
                                   horizontal: 8, vertical: 2),
                               decoration: BoxDecoration(
                                 color: cs.secondaryContainer,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: LumaRadius.radiusLg,
                               ),
                               child: Text(
                                 actor,
@@ -540,7 +546,7 @@ class _DetailsPanel extends StatelessWidget {
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
         color: cs.surfaceContainerLowest,
-        borderRadius: BorderRadius.circular(8),
+        borderRadius: LumaRadius.radiusMd,
         border: Border.all(color: cs.outlineVariant.withValues(alpha: 0.5)),
       ),
       child: Column(

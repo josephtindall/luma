@@ -2,6 +2,7 @@ package audit
 
 import (
 	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 	"time"
@@ -85,6 +86,51 @@ func (h *Handler) All(w http.ResponseWriter, r *http.Request) {
 	}
 
 	httputil.WriteJSON(w, http.StatusOK, pageResponse(page, q, canViewPII))
+}
+
+// Write handles POST /api/auth/audit/write — accepts an audit event from
+// trusted internal services (e.g. luma). The caller must be authenticated and
+// have audit:read-all permission (i.e. an admin).
+func (h *Handler) Write(w http.ResponseWriter, r *http.Request) {
+	claims := middleware.ClaimsFromContext(r.Context())
+	if claims == nil {
+		httputil.WriteError(w, http.StatusUnauthorized, "UNAUTHORIZED", "unauthorized")
+		return
+	}
+
+	var body struct {
+		Event     string         `json:"event"`
+		UserID    string         `json:"user_id"`
+		Metadata  map[string]any `json:"metadata"`
+		IPAddress string         `json:"ip_address"`
+		UserAgent string         `json:"user_agent"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "invalid request body")
+		return
+	}
+	if body.Event == "" {
+		httputil.WriteError(w, http.StatusBadRequest, "BAD_REQUEST", "event is required")
+		return
+	}
+
+	userID := body.UserID
+	if userID == "" {
+		userID = claims.Subject
+	}
+
+	if err := h.repo.Insert(r.Context(), Event{
+		UserID:    userID,
+		Event:     body.Event,
+		IPAddress: body.IPAddress,
+		UserAgent: body.UserAgent,
+		Metadata:  body.Metadata,
+	}); err != nil {
+		httputil.WriteError(w, http.StatusInternalServerError, "INTERNAL_ERROR", "failed to write audit event")
+		return
+	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // parseQuery reads filter + pagination params from the request.

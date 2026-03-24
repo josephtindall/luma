@@ -69,18 +69,6 @@ func TestAuthz_GetInstanceRole_NoUserID_ReturnsEmpty(t *testing.T) {
 	}
 }
 
-// TestAuthz_GetVaultRole_AlwaysNil verifies the stub returns nil without error.
-func TestAuthz_GetVaultRole_AlwaysNil(t *testing.T) {
-	repo := authzpg.New(testDB, nil)
-	stmts, err := repo.GetVaultRole(bg(), genUUID(t), genUUID(t))
-	if err != nil {
-		t.Fatalf("GetVaultRole: %v", err)
-	}
-	if stmts != nil {
-		t.Error("expected nil from stub GetVaultRole")
-	}
-}
-
 // TestAuthz_GetResourcePermission_NoRow_ReturnsNil verifies that when no
 // resource permission exists the method returns nil, nil.
 func TestAuthz_GetResourcePermission_NoRow_ReturnsNil(t *testing.T) {

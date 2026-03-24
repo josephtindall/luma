@@ -102,6 +102,11 @@ class AuthService extends ChangeNotifier {
   /// can drop cached state. Set from main.dart to avoid circular imports.
   VoidCallback? onSessionCleared;
 
+  /// Called immediately after a new session is established (login, MFA verify,
+  /// passkey sign-in, registration, setup activation). Triggers profile and
+  /// vault loading. Set from main.dart to avoid circular imports.
+  VoidCallback? onLogin;
+
   AuthService(this._baseUrl);
 
   String? get accessToken => _accessToken;
@@ -251,6 +256,7 @@ class AuthService extends ChangeNotifier {
     _accessToken = data['access_token'] as String?;
     _mfaToken = null;
     _mfaMethods = [];
+    onLogin?.call();
     notifyListeners();
   }
 
@@ -277,6 +283,7 @@ class AuthService extends ChangeNotifier {
     final data = json.decode(resp.body) as Map<String, dynamic>;
     _accessToken = data['access_token'] as String?;
     _forceChangeToken = null;
+    onLogin?.call();
     notifyListeners();
   }
 
@@ -306,6 +313,7 @@ class AuthService extends ChangeNotifier {
     _accessToken = data['access_token'] as String?;
     _mfaToken = null;
     _mfaMethods = [];
+    onLogin?.call();
     notifyListeners();
   }
 
@@ -334,6 +342,7 @@ class AuthService extends ChangeNotifier {
     _accessToken = data['access_token'] as String?;
     _mfaToken = null;
     _mfaMethods = [];
+    onLogin?.call();
     notifyListeners();
   }
 
@@ -378,6 +387,7 @@ class AuthService extends ChangeNotifier {
     _accessToken = data['access_token'] as String?;
     _mfaToken = null;
     _mfaMethods = [];
+    onLogin?.call();
     notifyListeners();
   }
 
@@ -421,6 +431,7 @@ class AuthService extends ChangeNotifier {
     _accessToken = data2['access_token'] as String?;
     _mfaToken = null;
     _mfaMethods = [];
+    onLogin?.call();
     notifyListeners();
   }
 
@@ -508,6 +519,7 @@ class AuthService extends ChangeNotifier {
     final data = json.decode(resp.body) as Map<String, dynamic>;
     _accessToken = data['access_token'] as String?;
     _pendingRecoveryToken = data['recovery_token'] as String?;
+    onLogin?.call();
     notifyListeners();
   }
 
@@ -518,6 +530,7 @@ class AuthService extends ChangeNotifier {
     _accessToken = accessToken;
     _setupState = 'active';
     _pendingRecoveryToken = recoveryToken;
+    onLogin?.call();
     notifyListeners();
   }
 

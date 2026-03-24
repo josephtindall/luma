@@ -99,6 +99,7 @@ func (h *Handler) AdminRoutes() chi.Router {
 	r.Delete("/users/{id}/lock", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/lock"))
 	r.Delete("/users/{id}/sessions", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/sessions"))
 	r.Post("/users/{id}/force-password-change", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/users/", "id", "/force-password-change"))
+	r.Patch("/users/{id}/hide-from-search", h.proxyAuthWithParamAndSuffix("PATCH", "/api/auth/admin/users/", "id", "/hide-from-search"))
 	r.Post("/users/{id}/password-reset", h.proxyAuthWithParamAndSuffix("POST", "/api/auth/admin/users/", "id", "/password-reset"))
 	r.Delete("/users/{id}/mfa/totp", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/mfa/totp"))
 	r.Delete("/users/{id}/passkeys", h.proxyAuthWithParamAndSuffix("DELETE", "/api/auth/admin/users/", "id", "/passkeys"))
@@ -123,6 +124,7 @@ func (h *Handler) AdminRoutes() chi.Router {
 	r.Delete("/groups/{id}/members/{type}/{memberID}", h.proxyAuthTemplate("DELETE", "/api/auth/admin/groups/{id}/members/{type}/{memberID}"))
 	r.Post("/groups/{id}/roles/{roleID}", h.proxyAuthTemplate("POST", "/api/auth/admin/groups/{id}/roles/{roleID}"))
 	r.Delete("/groups/{id}/roles/{roleID}", h.proxyAuthTemplate("DELETE", "/api/auth/admin/groups/{id}/roles/{roleID}"))
+	r.Patch("/groups/{id}/hide-from-search", h.proxyAuthWithParamAndSuffix("PATCH", "/api/auth/admin/groups/", "id", "/hide-from-search"))
 
 	// Audit events (admin view)
 	r.Get("/events", h.proxyAuth("GET", "/api/auth/audit"))

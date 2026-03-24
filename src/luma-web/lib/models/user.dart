@@ -41,6 +41,7 @@ class AdminUserRecord {
   final bool mfaEnabled;
   final bool isLocked;
   final bool forcePasswordChange;
+  final bool hideFromSearch;
   final int totpCount;
   final int passkeyCount;
   final DateTime createdAt;
@@ -54,6 +55,7 @@ class AdminUserRecord {
     required this.mfaEnabled,
     required this.isLocked,
     required this.forcePasswordChange,
+    this.hideFromSearch = false,
     required this.totpCount,
     required this.passkeyCount,
     required this.createdAt,
@@ -71,6 +73,7 @@ class AdminUserRecord {
       mfaEnabled: _bool(json['mfa_enabled']),
       isLocked: _bool(json['is_locked']),
       forcePasswordChange: _bool(json['force_password_change']),
+      hideFromSearch: _bool(json['hide_from_search']),
       totpCount: (json['totp_count'] as int?) ?? 0,
       passkeyCount: (json['passkey_count'] as int?) ?? 0,
       createdAt: _dt(json['created_at']),

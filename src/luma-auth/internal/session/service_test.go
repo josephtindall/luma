@@ -87,6 +87,10 @@ func (m *mockUserRepo) GetRecentPasswordHashes(_ context.Context, _ string, _ in
 func (m *mockUserRepo) SetForcePasswordChange(_ context.Context, _ string, _ bool) error {
 	return nil
 }
+func (m *mockUserRepo) SearchDirectory(_ context.Context, _ string, _ int) ([]*user.DirectoryUser, error) {
+	return nil, nil
+}
+func (m *mockUserRepo) SetHideFromSearch(_ context.Context, _ string, _ bool) error { return nil }
 
 // ── Mock: device.Repository ───────────────────────────────────────────────────
 
