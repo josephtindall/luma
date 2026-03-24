@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../services/user_service.dart';
@@ -37,6 +38,8 @@ class _AdminShellState extends State<_AdminShell> {
   final _searchFocus = FocusNode();
   final _overlayLink = LayerLink();
   OverlayEntry? _overlay;
+  int _highlightedIndex = -1;
+  List<_AdminSearchResult> _currentMatches = [];
 
   List<_AdminSearchResult> _buildSearchItems() {
     final us = widget.userService;
@@ -128,13 +131,19 @@ class _AdminShellState extends State<_AdminShell> {
   void _showOverlay() {
     _removeOverlay();
     final query = _searchCtrl.text.trim().toLowerCase();
-    if (query.isEmpty) return;
+    if (query.isEmpty) {
+      _currentMatches = [];
+      return;
+    }
 
     final allItems = _buildSearchItems();
     final matches = allItems.where((item) {
       return item.label.toLowerCase().contains(query) ||
           (item.subtitle?.toLowerCase().contains(query) ?? false);
     }).toList();
+
+    _currentMatches = matches;
+    _highlightedIndex = matches.isEmpty ? -1 : 0;
 
     if (matches.isEmpty) return;
 
@@ -143,6 +152,7 @@ class _AdminShellState extends State<_AdminShell> {
       builder: (_) => _SearchOverlay(
         link: _overlayLink,
         results: matches,
+        highlightedIndex: _highlightedIndex,
         onSelect: (result) {
           _removeOverlay();
           _searchCtrl.clear();
@@ -155,9 +165,61 @@ class _AdminShellState extends State<_AdminShell> {
     overlay.insert(_overlay!);
   }
 
+  void _rebuildOverlay() {
+    _overlay?.markNeedsBuild();
+  }
+
+  void _selectHighlighted() {
+    if (_highlightedIndex >= 0 &&
+        _highlightedIndex < _currentMatches.length) {
+      final result = _currentMatches[_highlightedIndex];
+      _removeOverlay();
+      _searchCtrl.clear();
+      _searchFocus.unfocus();
+      context.go(result.route);
+    }
+  }
+
+  KeyEventResult _handleSearchKey(FocusNode node, KeyEvent event) {
+    if (event is! KeyDownEvent) return KeyEventResult.ignored;
+    if (_currentMatches.isEmpty) return KeyEventResult.ignored;
+
+    if (event.logicalKey == LogicalKeyboardKey.arrowDown) {
+      _highlightedIndex =
+          (_highlightedIndex + 1).clamp(0, _currentMatches.length - 1);
+      _rebuildOverlay();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.arrowUp) {
+      _highlightedIndex =
+          (_highlightedIndex - 1).clamp(0, _currentMatches.length - 1);
+      _rebuildOverlay();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.enter) {
+      _selectHighlighted();
+      return KeyEventResult.handled;
+    }
+    if (event.logicalKey == LogicalKeyboardKey.escape) {
+      _removeOverlay();
+      _searchCtrl.clear();
+      _searchFocus.unfocus();
+      return KeyEventResult.handled;
+    }
+    return KeyEventResult.ignored;
+  }
+
   void _removeOverlay() {
     _overlay?.remove();
     _overlay = null;
+    _currentMatches = [];
+    _highlightedIndex = -1;
+  }
+
+  @override
+  void initState() {
+    super.initState();
+    _searchFocus.onKeyEvent = _handleSearchKey;
   }
 
   @override
@@ -184,10 +246,10 @@ class _AdminShellState extends State<_AdminShell> {
         _AdminTab(label: 'Roles', route: '/admin/roles'),
       if (widget.userService.canManageVaults)
         _AdminTab(label: 'Vaults', route: '/admin/vaults'),
-      if (widget.userService.canManageInstanceSettings)
-        _AdminTab(label: 'Settings', route: '/admin/settings'),
       if (widget.userService.canViewAuditLog)
         _AdminTab(label: 'Events', route: '/admin/events'),
+      if (widget.userService.canManageInstanceSettings)
+        _AdminTab(label: 'Settings', route: '/admin/settings'),
     ];
 
     return Column(
@@ -286,12 +348,14 @@ class _AdminShellState extends State<_AdminShell> {
 class _SearchOverlay extends StatelessWidget {
   final LayerLink link;
   final List<_AdminSearchResult> results;
+  final int highlightedIndex;
   final void Function(_AdminSearchResult) onSelect;
   final VoidCallback onDismiss;
 
   const _SearchOverlay({
     required this.link,
     required this.results,
+    this.highlightedIndex = -1,
     required this.onSelect,
     required this.onDismiss,
   });
@@ -333,10 +397,14 @@ class _SearchOverlay extends StatelessWidget {
                 separatorBuilder: (_, __) => const SizedBox.shrink(),
                 itemBuilder: (_, i) {
                   final r = results[i];
+                  final isHighlighted = i == highlightedIndex;
                   return InkWell(
                     onTap: () => onSelect(r),
                     borderRadius: LumaRadius.radiusSm,
-                    child: Padding(
+                    child: Container(
+                      color: isHighlighted
+                          ? cs.primaryContainer.withAlpha(60)
+                          : null,
                       padding: const EdgeInsets.symmetric(
                           horizontal: 12, vertical: 8),
                       child: Row(

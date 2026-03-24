@@ -6,6 +6,7 @@ import '../../theme/tokens.dart';
 import '../../widgets/data_table.dart';
 import '../../widgets/perm_button.dart';
 import '../../widgets/permission_matrix.dart';
+import '../../widgets/pagination.dart';
 import '../../widgets/slideout_panel.dart';
 
 class AdminRolesScreen extends StatefulWidget {
@@ -21,6 +22,8 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
   String? _error;
   bool _loading = false;
   Set<int> _selected = {};
+  int _currentPage = 0;
+  static const _pageSize = 25;
 
   @override
   void initState() {
@@ -29,7 +32,7 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; _selected = {}; });
+    setState(() { _loading = true; _error = null; _selected = {}; _currentPage = 0; });
     try {
       final roles = await widget.userService.listCustomRoles();
       if (mounted) setState(() { _roles = roles; _loading = false; });
@@ -74,8 +77,9 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
 
   Future<void> _bulkDelete() async {
     final roles = _roles!;
+    final pageStart = _currentPage * _pageSize;
     final targets = _selected
-        .map((i) => roles[i])
+        .map((i) => roles[pageStart + i])
         .where((r) => !r.isSystem)
         .toList();
     if (targets.isEmpty) return;
@@ -113,6 +117,11 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
   Widget build(BuildContext context) {
     final cs = Theme.of(context).colorScheme;
     final theme = Theme.of(context);
+    final roles = _roles ?? [];
+    final totalPages = (roles.length / _pageSize).ceil().clamp(1, 999);
+    final pageStart = _currentPage * _pageSize;
+    final pageRoles = roles.sublist(
+      pageStart, (pageStart + _pageSize).clamp(0, roles.length));
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -131,7 +140,7 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
                             ?.copyWith(fontWeight: FontWeight.w600)),
                     const SizedBox(height: 2),
                     Text(
-                      '${_roles?.length ?? 0} total \u00b7 Configure permission roles.',
+                      '${roles.length} total \u00b7 Configure permission roles.',
                       style: theme.textTheme.bodySmall
                           ?.copyWith(color: cs.onSurfaceVariant),
                     ),
@@ -155,101 +164,130 @@ class _AdminRolesScreenState extends State<AdminRolesScreen> {
             ),
           if (_loading)
             const Expanded(child: Center(child: CircularProgressIndicator()))
-          else if (_roles != null && _roles!.isEmpty)
-            const Expanded(child: Center(child: Text('No custom roles yet.')))
-          else if (_roles != null)
+          else
             Expanded(
-              child: LumaDataTable<CustomRoleRecord>(
-                showCheckboxes: widget.userService.canEditRole,
-                selected: _selected,
-                onSelectionChanged: (s) => setState(() => _selected = s),
-                canSelect: (r, _) => !r.isSystem,
-                onRowTap: _showRoleSlideout,
-                bulkActionBar: (sel) => _BulkActionBar(
-                  count: sel.length,
-                  onClear: () => setState(() => _selected = {}),
-                  actions: [
-                    OutlinedButton.icon(
-                      icon: Icon(Icons.delete_outlined,
-                          size: 16, color: cs.error),
-                      label: Text('Delete',
-                          style: TextStyle(color: cs.error)),
-                      onPressed: _bulkDelete,
-                    ),
-                  ],
-                ),
-                columns: [
-                  LumaColumn<CustomRoleRecord>(
-                    label: 'Name',
-                    cellBuilder: (role, _) => Row(
-                      children: [
-                        Flexible(
-                          child: Text(role.name,
-                              style: theme.textTheme.bodyMedium
-                                  ?.copyWith(fontWeight: FontWeight.w600),
-                              overflow: TextOverflow.ellipsis),
-                        ),
-                        if (role.isSystem) ...[
-                          const SizedBox(width: 8),
-                          _SystemRoleBadge(),
-                        ],
-                      ],
-                    ),
-                  ),
-                  LumaColumn<CustomRoleRecord>(
-                    label: 'Priority',
-                    width: 110,
-                    cellBuilder: (role, _) => role.priority != null
-                        ? _InfoChip(
-                            label: 'Priority ${role.priority}',
-                            color: cs.primaryContainer,
-                            textColor: cs.onPrimaryContainer,
-                          )
-                        : Text('\u2014',
-                            style: theme.textTheme.bodySmall
-                                ?.copyWith(color: cs.onSurfaceVariant)),
-                  ),
-                  LumaColumn<CustomRoleRecord>(
-                    label: 'Permissions',
-                    width: 120,
-                    cellBuilder: (role, _) => Text(
-                      '${role.permissions.length} permissions',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                  LumaColumn<CustomRoleRecord>(
-                    label: 'Assigned',
-                    width: 100,
-                    cellBuilder: (role, _) => Text(
-                      '${role.userCount + role.groupCount} assigned',
-                      style: theme.textTheme.bodySmall,
-                    ),
-                  ),
-                  LumaColumn<CustomRoleRecord>(
-                    label: '',
-                    width: 100,
-                    cellBuilder: (role, _) => Align(
-                      alignment: Alignment.centerRight,
-                      child: role.isSystem
-                          ? Tooltip(
-                              message: 'System roles cannot be modified',
-                              child: OutlinedButton.icon(
-                                icon: const Icon(Icons.lock_outline,
-                                    size: 14),
-                                label: const Text('Manage'),
-                                onPressed: null,
-                              ),
-                            )
-                          : PermButton(
-                              label: 'Manage',
-                              enabled: widget.userService.canEditRole,
-                              requiredPermission: 'role:update',
-                              onPressed: () => _showRoleSlideout(role),
+              child: Column(
+                children: [
+                  Expanded(
+                    child: roles.isEmpty
+                        ? const Center(child: Text('No custom roles yet.'))
+                        : LumaDataTable<CustomRoleRecord>(
+                            showCheckboxes: widget.userService.canEditRole,
+                            selected: _selected,
+                            onSelectionChanged: (s) => setState(() => _selected = s),
+                            canSelect: (r, _) => !r.isSystem,
+                            onRowTap: _showRoleSlideout,
+                            bulkActionBar: (sel) => _BulkActionBar(
+                              count: sel.length,
+                              onClear: () => setState(() => _selected = {}),
+                              actions: [
+                                OutlinedButton.icon(
+                                  icon: Icon(Icons.delete_outlined,
+                                      size: 16, color: cs.error),
+                                  label: Text('Delete',
+                                      style: TextStyle(color: cs.error)),
+                                  onPressed: _bulkDelete,
+                                ),
+                              ],
                             ),
-                    ),
+                            columns: [
+                              LumaColumn<CustomRoleRecord>(
+                                label: 'Name',
+                                cellBuilder: (role, _) => Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Flexible(
+                                          child: Text(role.name,
+                                              style: theme.textTheme.bodyMedium
+                                                  ?.copyWith(fontWeight: FontWeight.w600),
+                                              overflow: TextOverflow.ellipsis),
+                                        ),
+                                        if (role.isSystem) ...[
+                                          const SizedBox(width: 8),
+                                          _SystemRoleBadge(),
+                                        ],
+                                      ],
+                                    ),
+                                    if (role.description != null &&
+                                        role.description!.isNotEmpty)
+                                      Text(
+                                        role.description!,
+                                        style: theme.textTheme.bodySmall
+                                            ?.copyWith(color: cs.onSurfaceVariant),
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                  ],
+                                ),
+                              ),
+                              LumaColumn<CustomRoleRecord>(
+                                label: 'Priority',
+                                width: 110,
+                                cellBuilder: (role, _) => Align(
+                                  alignment: Alignment.centerLeft,
+                                  child: role.priority != null
+                                      ? _InfoChip(
+                                          label: 'Priority ${role.priority}',
+                                          color: cs.primaryContainer,
+                                          textColor: cs.onPrimaryContainer,
+                                        )
+                                      : Text('\u2014',
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(color: cs.onSurfaceVariant)),
+                                ),
+                              ),
+                              LumaColumn<CustomRoleRecord>(
+                                label: 'Permissions',
+                                width: 120,
+                                cellBuilder: (role, _) => Text(
+                                  '${role.permissions.length} permissions',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ),
+                              LumaColumn<CustomRoleRecord>(
+                                label: 'Assigned',
+                                width: 100,
+                                cellBuilder: (role, _) => Text(
+                                  '${role.userCount + role.groupCount} assigned',
+                                  style: theme.textTheme.bodySmall,
+                                ),
+                              ),
+                              LumaColumn<CustomRoleRecord>(
+                                label: '',
+                                width: 120,
+                                cellBuilder: (role, _) => Align(
+                                  alignment: Alignment.centerRight,
+                                  child: role.isSystem
+                                      ? Tooltip(
+                                          message: 'System roles cannot be modified',
+                                          child: PermButton(
+                                            label: 'Manage',
+                                            enabled: false,
+                                            requiredPermission: 'role:update',
+                                            onPressed: () {},
+                                          ),
+                                        )
+                                      : PermButton(
+                                          label: 'Manage',
+                                          enabled: widget.userService.canEditRole,
+                                          requiredPermission: 'role:update',
+                                          onPressed: () => _showRoleSlideout(role),
+                                        ),
+                                ),
+                              ),
+                            ],
+                            rows: pageRoles,
+                          ),
+                  ),
+                  LumaPagination(
+                    currentPage: _currentPage,
+                    totalPages: totalPages,
+                    onPageChanged: (p) =>
+                        setState(() { _currentPage = p; _selected = {}; }),
                   ),
                 ],
-                rows: _roles!,
               ),
             ),
         ],

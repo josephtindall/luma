@@ -7,6 +7,7 @@ import 'package:web/web.dart' as web;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/rendering.dart';
+import 'package:flutter/services.dart';
 import 'package:go_router/go_router.dart';
 
 import '../services/auth_service.dart';
@@ -14,6 +15,7 @@ import '../services/page_service.dart';
 import '../services/theme_notifier.dart';
 import '../services/user_service.dart';
 import '../theme/tokens.dart';
+import '../widgets/luma_logo.dart';
 import '../widgets/user_avatar.dart';
 
 // ── Sidebar localStorage helpers ──────────────────────────────────────────────
@@ -71,6 +73,7 @@ class _MainLayoutState extends State<MainLayout> {
   /// screen before switching themes.
   final _repaintKey = GlobalKey();
   final _themeButtonKey = GlobalKey();
+  final _userFooterKey = GlobalKey();
 
   @override
   void initState() {
@@ -178,7 +181,33 @@ class _MainLayoutState extends State<MainLayout> {
     final borderColor = colorScheme.outlineVariant.withAlpha(128);
 
     // RepaintBoundary lets us capture a pixel snapshot for the transition.
-    return RepaintBoundary(
+    return CallbackShortcuts(
+      bindings: {
+        // Meta+Shift+Q (Win) / Alt+Shift+Q → Sign out
+        const SingleActivator(
+          LogicalKeyboardKey.keyQ,
+          meta: true,
+          shift: true,
+        ): _signOut,
+        const SingleActivator(
+          LogicalKeyboardKey.keyQ,
+          alt: true,
+          shift: true,
+        ): _signOut,
+        // Alt+S → Account settings
+        const SingleActivator(
+          LogicalKeyboardKey.keyS,
+          alt: true,
+        ): _goToSettings,
+        // Meta+S → Account settings (macOS)
+        const SingleActivator(
+          LogicalKeyboardKey.keyS,
+          meta: true,
+        ): _goToSettings,
+      },
+      child: Focus(
+        autofocus: true,
+        child: RepaintBoundary(
       key: _repaintKey,
       child: Scaffold(
         body: Column(
@@ -238,23 +267,6 @@ class _MainLayoutState extends State<MainLayout> {
                     themeNotifier: widget.themeNotifier,
                     buttonKey: _themeButtonKey,
                     onSelected: _doThemeTransition,
-                  ),
-                  const SizedBox(width: 4),
-                  // User badge → sign-out flyout
-                  _buildTopRightUserMenu(),
-                  const SizedBox(width: 4),
-                  // Settings gear
-                  Tooltip(
-                    message: 'Settings',
-                    child: IconButton(
-                      icon: const Icon(Icons.settings_outlined, size: 20),
-                      onPressed: () => context.go('/settings'),
-                      style: IconButton.styleFrom(
-                        shape: const RoundedRectangleBorder(
-                          borderRadius: LumaRadius.radiusMd,
-                        ),
-                      ),
-                    ),
                   ),
                 ],
               ),
@@ -318,7 +330,10 @@ class _MainLayoutState extends State<MainLayout> {
                             );
                           },
                         ),
-                        const SizedBox(height: 16),
+                        const SizedBox(height: 8),
+                        // ── User footer ─────────────────────────────────
+                        const Divider(height: 1, indent: 12, endIndent: 12),
+                        _buildSidebarUserFooter(),
                       ],
                     ),
                   ),
@@ -346,6 +361,8 @@ class _MainLayoutState extends State<MainLayout> {
           ],
         ),
       ),
+    ),
+    ),
     );
   }
 
@@ -626,13 +643,16 @@ class _MainLayoutState extends State<MainLayout> {
   }
 
   Widget _buildTopLeftBranding() {
+    final instanceName = widget.auth.instanceName.isNotEmpty
+        ? widget.auth.instanceName
+        : 'Luma';
     if (_isSidebarExpanded) {
       return Row(
         children: [
-          const Icon(Icons.lens_blur, size: 24),
-          const SizedBox(width: 8),
+          const LumaLogo(size: 28),
+          const SizedBox(width: 10),
           Text(
-            'Luma',
+            instanceName,
             style: Theme.of(context).textTheme.titleMedium?.copyWith(
                   fontWeight: FontWeight.bold,
                 ),
@@ -663,78 +683,200 @@ class _MainLayoutState extends State<MainLayout> {
             ),
             child: _isHoveringLogo
                 ? const Icon(Icons.menu, size: 24)
-                : const Icon(Icons.lens_blur, size: 24),
+                : const LumaLogo(size: 24),
           ),
         ),
       );
     }
   }
 
-  Widget _buildTopRightUserMenu() {
+  void _signOut() {
+    widget.userService.clear();
+    widget.auth.logout();
+  }
+
+  void _goToSettings() {
+    context.go('/settings');
+  }
+
+  void _showUserFlyout() {
+    final renderBox =
+        _userFooterKey.currentContext?.findRenderObject() as RenderBox?;
+    if (renderBox == null) return;
+
+    final position = renderBox.localToGlobal(Offset.zero);
+    final size = renderBox.size;
+    final screenSize = MediaQuery.of(context).size;
     final colorScheme = Theme.of(context).colorScheme;
     final borderColor = colorScheme.outlineVariant.withAlpha(128);
+
+    // Position the menu to the right of the user footer, aligned to bottom.
+    final leftEdge = position.dx + size.width + 8;
+    final menuPosition = RelativeRect.fromLTRB(
+      leftEdge,
+      position.dy - 8,
+      screenSize.width - leftEdge - 220, // keep menu near the sidebar
+      0,
+    );
+
+    final isMac = Theme.of(context).platform == TargetPlatform.macOS;
+    final settingsHint = isMac ? '⌘S' : 'Alt+S';
+    final signOutHint = isMac ? '⌥⇧Q' : 'Win+⇧+Q';
+
+    showMenu<String>(
+      context: context,
+      position: menuPosition,
+      elevation: 4,
+      shape: RoundedRectangleBorder(
+        borderRadius: LumaRadius.radiusLg,
+        side: BorderSide(color: borderColor),
+      ),
+      surfaceTintColor: Colors.transparent,
+      color: colorScheme.surface,
+      constraints: const BoxConstraints(minWidth: 220),
+      items: [
+        PopupMenuItem<String>(
+          value: 'settings',
+          height: 44,
+          child: Row(
+            children: [
+              Icon(Icons.settings_outlined,
+                  size: 18, color: colorScheme.onSurface),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Account settings',
+                    style: Theme.of(context).textTheme.bodyMedium),
+              ),
+              Text(
+                settingsHint,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
+        ),
+        const PopupMenuDivider(height: 1),
+        PopupMenuItem<String>(
+          value: 'signout',
+          height: 44,
+          child: Row(
+            children: [
+              Icon(Icons.logout, size: 18, color: colorScheme.onSurface),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text('Sign out',
+                    style: Theme.of(context).textTheme.bodyMedium),
+              ),
+              Text(
+                signOutHint,
+                style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ).then((value) {
+      if (value == 'settings') {
+        _goToSettings();
+      } else if (value == 'signout') {
+        _signOut();
+      }
+    });
+  }
+
+  Widget _buildSidebarUserFooter() {
+    final colorScheme = Theme.of(context).colorScheme;
 
     return ListenableBuilder(
       listenable: widget.userService,
       builder: (context, _) {
         final profile = widget.userService.profile;
         final name = profile?.displayName ?? 'Account';
+        final email = profile?.email ?? '';
         final seed = profile?.avatarSeed ?? '';
 
-        return MenuAnchor(
-          alignmentOffset: const Offset(0, 8),
-          style: MenuStyle(
-            backgroundColor: WidgetStatePropertyAll(colorScheme.surface),
-            elevation: const WidgetStatePropertyAll(4),
-            shape: WidgetStatePropertyAll(RoundedRectangleBorder(
-              borderRadius: LumaRadius.radiusLg,
-              side: BorderSide(color: borderColor),
-            )),
-          ),
-          menuChildren: [
-            MenuItemButton(
-              leadingIcon: const Icon(Icons.logout),
-              child: const Text('Sign out'),
-              onPressed: () {
-                widget.userService.clear();
-                widget.auth.logout();
-              },
-            ),
-          ],
-          builder: (context, controller, _) {
-            return Material(
-              color: Colors.transparent,
-              borderRadius: LumaRadius.radiusMd,
-              child: InkWell(
-                borderRadius: LumaRadius.radiusMd,
-                onTap: () {
-                  if (controller.isOpen) {
-                    controller.close();
-                  } else {
-                    controller.open();
-                  }
-                },
-                child: Padding(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 8, vertical: 6),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      UserAvatar(avatarSeed: seed, displayName: name, size: 28),
-                      const SizedBox(width: 8),
-                      Text(
-                        name,
-                        style: Theme.of(context)
-                            .textTheme
-                            .bodyMedium
-                            ?.copyWith(fontWeight: FontWeight.w600),
-                      ),
-                    ],
+        if (!_isSidebarExpanded) {
+          // Collapsed: just an avatar button
+          return Padding(
+            key: _userFooterKey,
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Center(
+              child: Tooltip(
+                message: name,
+                child: InkWell(
+                  borderRadius: LumaRadius.radiusMd,
+                  onTap: _showUserFlyout,
+                  child: UserAvatar(
+                    avatarSeed: seed,
+                    displayName: name,
+                    size: 36,
                   ),
                 ),
               ),
-            );
-          },
+            ),
+          );
+        }
+
+        // Expanded: full user row
+        return Material(
+          key: _userFooterKey,
+          color: Colors.transparent,
+          child: InkWell(
+            onTap: _showUserFlyout,
+            child: Padding(
+              padding: const EdgeInsets.symmetric(
+                horizontal: 12,
+                vertical: 12,
+              ),
+              child: Row(
+                children: [
+                  UserAvatar(
+                    avatarSeed: seed,
+                    displayName: name,
+                    size: 36,
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          name,
+                          style: Theme.of(context)
+                              .textTheme
+                              .bodySmall
+                              ?.copyWith(fontWeight: FontWeight.w600),
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
+                        ),
+                        if (email.isNotEmpty)
+                          Text(
+                            email,
+                            style: Theme.of(context)
+                                .textTheme
+                                .labelSmall
+                                ?.copyWith(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
+                            overflow: TextOverflow.ellipsis,
+                            maxLines: 1,
+                          ),
+                      ],
+                    ),
+                  ),
+                  Icon(
+                    Icons.unfold_more,
+                    size: 16,
+                    color: colorScheme.onSurfaceVariant,
+                  ),
+                ],
+              ),
+            ),
+          ),
         );
       },
     );

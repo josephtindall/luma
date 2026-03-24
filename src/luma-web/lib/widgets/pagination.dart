@@ -2,10 +2,13 @@ import 'package:flutter/material.dart';
 
 import '../theme/tokens.dart';
 
-/// Untitled UI-style pagination with Previous, numbered pages, and Next.
+/// Untitled UI-style pagination bar.
 ///
-/// [currentPage] is 0-indexed. Always visible; buttons are disabled when
-/// there is only one page.
+/// Layout: `← Previous   [1] 2 3 4 5 … 10   Next →`
+///
+/// Previous is left-aligned, page numbers are centered, Next is right-aligned.
+/// The bar has a top border and generous padding to match the Untitled UI
+/// pattern. [currentPage] is 0-indexed.
 class LumaPagination extends StatelessWidget {
   final int currentPage;
   final int totalPages;
@@ -18,7 +21,7 @@ class LumaPagination extends StatelessWidget {
     required this.onPageChanged,
   });
 
-  /// Compute which page numbers to show (1-indexed for display).
+  /// Compute which page numbers to show (0-indexed).
   /// Returns a list of ints (page numbers) and nulls (ellipsis).
   List<int?> _visiblePages() {
     if (totalPages <= 7) {
@@ -61,85 +64,104 @@ class LumaPagination extends StatelessWidget {
     final canPrev = currentPage > 0;
     final canNext = currentPage < totalPages - 1;
 
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.center,
-      children: [
-        // Previous
-        OutlinedButton.icon(
-          onPressed: canPrev ? () => onPageChanged(currentPage - 1) : null,
-          icon: const Icon(Icons.arrow_back, size: 16),
-          label: const Text('Previous'),
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            shape:
-                const RoundedRectangleBorder(borderRadius: LumaRadius.radiusMd),
-          ),
+    return Container(
+      decoration: BoxDecoration(
+        border: Border(
+          top: BorderSide(color: cs.outlineVariant),
         ),
-
-        const SizedBox(width: 4),
-
-        // Page numbers
-        ..._visiblePages().map((page) {
-          if (page == null) {
-            return Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 2),
-              child: SizedBox(
-                width: 36,
-                height: 36,
-                child: Center(
-                  child: Text('…',
-                      style: TextStyle(color: cs.onSurfaceVariant)),
-                ),
-              ),
-            );
-          }
-
-          final isActive = page == currentPage;
-          return Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 2),
-            child: SizedBox(
-              width: 36,
-              height: 36,
-              child: isActive
-                  ? FilledButton(
-                      onPressed: null,
-                      style: FilledButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        shape: const RoundedRectangleBorder(
-                            borderRadius: LumaRadius.radiusMd),
-                      ),
-                      child: Text('${page + 1}'),
-                    )
-                  : TextButton(
-                      onPressed: totalPages > 1
-                          ? () => onPageChanged(page)
-                          : null,
-                      style: TextButton.styleFrom(
-                        padding: EdgeInsets.zero,
-                        shape: const RoundedRectangleBorder(
-                            borderRadius: LumaRadius.radiusMd),
-                      ),
-                      child: Text('${page + 1}'),
-                    ),
+      ),
+      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+      child: Row(
+        children: [
+          // ── Previous button (left-aligned) ──────────────────────────────
+          OutlinedButton.icon(
+            onPressed: canPrev ? () => onPageChanged(currentPage - 1) : null,
+            icon: const Icon(Icons.arrow_back, size: 16),
+            label: const Text('Previous'),
+            style: OutlinedButton.styleFrom(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              shape: const RoundedRectangleBorder(
+                  borderRadius: LumaRadius.radiusMd),
+              side: BorderSide(color: cs.outlineVariant),
             ),
-          );
-        }),
-
-        const SizedBox(width: 4),
-
-        // Next
-        OutlinedButton.icon(
-          onPressed: canNext ? () => onPageChanged(currentPage + 1) : null,
-          icon: const Icon(Icons.arrow_forward, size: 16),
-          label: const Text('Next'),
-          iconAlignment: IconAlignment.end,
-          style: OutlinedButton.styleFrom(
-            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
-            shape:
-                const RoundedRectangleBorder(borderRadius: LumaRadius.radiusMd),
           ),
-        ),
-      ],
+
+          // ── Centered page numbers ──────────────────────────────────────
+          Expanded(
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.center,
+              children: _visiblePages().map((page) {
+                if (page == null) {
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: SizedBox(
+                      width: 36,
+                      height: 36,
+                      child: Center(
+                        child: Text('…',
+                            style: TextStyle(color: cs.onSurfaceVariant)),
+                      ),
+                    ),
+                  );
+                }
+
+                final isActive = page == currentPage;
+                return Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 2),
+                  child: SizedBox(
+                    width: 36,
+                    height: 36,
+                    child: Material(
+                      color: isActive
+                          ? cs.surfaceContainerHighest
+                          : Colors.transparent,
+                      borderRadius: LumaRadius.radiusMd,
+                      child: InkWell(
+                        borderRadius: LumaRadius.radiusMd,
+                        onTap: isActive || totalPages <= 1
+                            ? null
+                            : () => onPageChanged(page),
+                        child: Center(
+                          child: Text(
+                            '${page + 1}',
+                            style: Theme.of(context)
+                                .textTheme
+                                .bodySmall
+                                ?.copyWith(
+                                  fontWeight: isActive
+                                      ? FontWeight.w600
+                                      : FontWeight.w400,
+                                  color: isActive
+                                      ? cs.onSurface
+                                      : cs.onSurfaceVariant,
+                                ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+
+          // ── Next button (right-aligned) ─────────────────────────────────
+          OutlinedButton.icon(
+            onPressed: canNext ? () => onPageChanged(currentPage + 1) : null,
+            icon: const Icon(Icons.arrow_forward, size: 16),
+            label: const Text('Next'),
+            iconAlignment: IconAlignment.end,
+            style: OutlinedButton.styleFrom(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+              shape: const RoundedRectangleBorder(
+                  borderRadius: LumaRadius.radiusMd),
+              side: BorderSide(color: cs.outlineVariant),
+            ),
+          ),
+        ],
+      ),
     );
   }
 }

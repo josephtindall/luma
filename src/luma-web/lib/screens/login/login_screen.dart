@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 
 import '../../services/auth_service.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/luma_logo.dart';
 import '../../services/user_service.dart';
 import 'login_email_store.dart';
 
@@ -381,6 +382,8 @@ class _LoginScreenState extends State<LoginScreen> {
       mainAxisSize: MainAxisSize.min,
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
+        const LumaLogo(size: 48),
+        const SizedBox(height: 16),
         Text(
           'Sign in to ${widget.auth.instanceName.isNotEmpty ? widget.auth.instanceName : "Luma"}',
           style: Theme.of(context).textTheme.headlineMedium,

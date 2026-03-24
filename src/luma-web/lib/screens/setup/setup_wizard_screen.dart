@@ -9,6 +9,7 @@ import 'package:http/http.dart' as http;
 import '../../services/auth_service.dart';
 import '../../services/user_service.dart';
 import '../../theme/tokens.dart';
+import '../../widgets/luma_logo.dart';
 
 const _baseUrl = String.fromEnvironment(
   'API_URL',
@@ -313,11 +314,7 @@ class _SetupWizardScreenState extends State<SetupWizardScreen>
               mainAxisSize: MainAxisSize.min,
               children: [
                 // Branded header
-                Icon(
-                  Icons.light_mode_rounded,
-                  size: 40,
-                  color: colors.primary,
-                ),
+                const LumaLogo(size: 40),
                 const SizedBox(height: 8),
                 Text(
                   'Luma',

@@ -11,6 +11,7 @@ import '../../widgets/data_table.dart';
 import '../../widgets/perm_button.dart';
 import '../../widgets/permission_matrix.dart';
 import '../../widgets/slideout_panel.dart';
+import '../../widgets/pagination.dart';
 import '../../widgets/user_avatar.dart';
 
 class AdminUsersScreen extends StatefulWidget {
@@ -30,6 +31,8 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   bool _showInvites = false;
   String? _invFilter; // null = pending only, or 'all','expired','accepted','revoked'
   Set<int> _selected = {};
+  int _currentPage = 0;
+  static const _pageSize = 25;
 
   @override
   void initState() {
@@ -38,7 +41,7 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
   }
 
   Future<void> _load() async {
-    setState(() { _loading = true; _error = null; _selected = {}; });
+    setState(() { _loading = true; _error = null; _selected = {}; _currentPage = 0; });
     try {
       final results = await Future.wait([
         widget.userService.listAdminUsers(),
@@ -169,8 +172,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   Future<void> _bulkLock() async {
     final users = _users!;
+    final pageStart = _currentPage * _pageSize;
     final targets = _selected
-        .map((i) => users[i])
+        .map((i) => users[pageStart + i])
         .where((u) => !u.isLocked && widget.userService.profile?.id != u.id)
         .toList();
     if (targets.isEmpty) return;
@@ -205,8 +209,9 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
 
   Future<void> _bulkUnlock() async {
     final users = _users!;
+    final pageStart = _currentPage * _pageSize;
     final targets = _selected
-        .map((i) => users[i])
+        .map((i) => users[pageStart + i])
         .where((u) => u.isLocked)
         .toList();
     if (targets.isEmpty) return;
@@ -256,6 +261,10 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
     final users = _users ?? [];
     final handles = _computeHandles(users);
     final selfId = widget.userService.profile?.id;
+    final totalPages = (users.length / _pageSize).ceil().clamp(1, 999);
+    final pageStart = _currentPage * _pageSize;
+    final pageUsers = users.sublist(
+      pageStart, (pageStart + _pageSize).clamp(0, users.length));
 
     return Padding(
       padding: const EdgeInsets.all(24),
@@ -308,166 +317,178 @@ class _AdminUsersScreenState extends State<AdminUsersScreen> {
           ),
           const SizedBox(height: 16),
 
-          // Users table
+          // Users table + pagination
           Expanded(
-            child: users.isEmpty
-                ? const Center(child: Text('No users yet'))
-                : LumaDataTable<AdminUserRecord>(
-                    showCheckboxes: widget.userService.canManageUsers,
-                    selected: _selected,
-                    onSelectionChanged: (s) =>
-                        setState(() => _selected = s),
-                    canSelect: (u, _) => selfId != u.id,
-                    onRowTap: widget.userService.canEditUser
-                        ? _showUserSlideout
-                        : null,
-                    bulkActionBar: (sel) => _BulkActionBar(
-                      count: sel.length,
-                      onClear: () => setState(() => _selected = {}),
-                      actions: [
-                        OutlinedButton.icon(
-                          icon: Icon(Icons.lock_outlined,
-                              size: 16, color: cs.error),
-                          label: Text('Lock',
-                              style: TextStyle(color: cs.error)),
-                          onPressed: _bulkLock,
-                        ),
-                        const SizedBox(width: 8),
-                        OutlinedButton.icon(
-                          icon: const Icon(Icons.lock_open_outlined,
-                              size: 16),
-                          label: const Text('Unlock'),
-                          onPressed: _bulkUnlock,
-                        ),
-                      ],
-                    ),
-                    columns: [
-                      LumaColumn<AdminUserRecord>(
-                        label: 'Name',
-                        cellBuilder: (u, _) => Row(
-                          children: [
-                            UserAvatar(
-                              avatarSeed: u.avatarSeed,
-                              displayName: u.displayName,
-                              size: 32,
-                            ),
-                            const SizedBox(width: 10),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment:
-                                    CrossAxisAlignment.start,
-                                mainAxisSize: MainAxisSize.min,
+            child: Column(
+              children: [
+                Expanded(
+                  child: users.isEmpty
+                      ? const Center(child: Text('No users yet'))
+                      : LumaDataTable<AdminUserRecord>(
+                          showCheckboxes: widget.userService.canManageUsers,
+                          selected: _selected,
+                          onSelectionChanged: (s) =>
+                              setState(() => _selected = s),
+                          canSelect: (u, _) => selfId != u.id,
+                          onRowTap: widget.userService.canEditUser
+                              ? _showUserSlideout
+                              : null,
+                          bulkActionBar: (sel) => _BulkActionBar(
+                            count: sel.length,
+                            onClear: () => setState(() => _selected = {}),
+                            actions: [
+                              OutlinedButton.icon(
+                                icon: Icon(Icons.lock_outlined,
+                                    size: 16, color: cs.error),
+                                label: Text('Lock',
+                                    style: TextStyle(color: cs.error)),
+                                onPressed: _bulkLock,
+                              ),
+                              const SizedBox(width: 8),
+                              OutlinedButton.icon(
+                                icon: const Icon(Icons.lock_open_outlined,
+                                    size: 16),
+                                label: const Text('Unlock'),
+                                onPressed: _bulkUnlock,
+                              ),
+                            ],
+                          ),
+                          columns: [
+                            LumaColumn<AdminUserRecord>(
+                              label: 'Name',
+                              cellBuilder: (u, _) => Row(
                                 children: [
-                                  Row(
-                                    children: [
-                                      Flexible(
-                                        child: Text(
-                                          u.displayName,
-                                          style: theme.textTheme.bodyMedium
-                                              ?.copyWith(
-                                                  fontWeight:
-                                                      FontWeight.w600),
-                                          overflow: TextOverflow.ellipsis,
+                                  UserAvatar(
+                                    avatarSeed: u.avatarSeed,
+                                    displayName: u.displayName,
+                                    size: 32,
+                                  ),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Row(
+                                          children: [
+                                            Flexible(
+                                              child: Text(
+                                                u.displayName,
+                                                style: theme.textTheme.bodyMedium
+                                                    ?.copyWith(
+                                                        fontWeight:
+                                                            FontWeight.w600),
+                                                overflow: TextOverflow.ellipsis,
+                                              ),
+                                            ),
+                                            if (selfId == u.id) ...[
+                                              const SizedBox(width: 6),
+                                              Container(
+                                                padding:
+                                                    const EdgeInsets.symmetric(
+                                                        horizontal: 6,
+                                                        vertical: 1),
+                                                decoration: BoxDecoration(
+                                                  color:
+                                                      cs.primaryContainer,
+                                                  borderRadius:
+                                                      LumaRadius.radiusLg,
+                                                ),
+                                                child: Text('You',
+                                                    style: theme
+                                                        .textTheme.labelSmall
+                                                        ?.copyWith(
+                                                            color: cs
+                                                                .onPrimaryContainer)),
+                                              ),
+                                            ],
+                                          ],
                                         ),
-                                      ),
-                                      if (selfId == u.id) ...[
-                                        const SizedBox(width: 6),
-                                        Container(
-                                          padding:
-                                              const EdgeInsets.symmetric(
-                                                  horizontal: 6,
-                                                  vertical: 1),
-                                          decoration: BoxDecoration(
-                                            color:
-                                                cs.primaryContainer,
-                                            borderRadius:
-                                                LumaRadius.radiusLg,
-                                          ),
-                                          child: Text('You',
-                                              style: theme
-                                                  .textTheme.labelSmall
-                                                  ?.copyWith(
-                                                      color: cs
-                                                          .onPrimaryContainer)),
+                                        Text(
+                                          handles[u.id] ?? '',
+                                          style: theme.textTheme.bodySmall
+                                              ?.copyWith(
+                                                  color:
+                                                      cs.onSurfaceVariant),
                                         ),
                                       ],
-                                    ],
-                                  ),
-                                  Text(
-                                    handles[u.id] ?? '',
-                                    style: theme.textTheme.bodySmall
-                                        ?.copyWith(
-                                            color:
-                                                cs.onSurfaceVariant),
+                                    ),
                                   ),
                                 ],
                               ),
                             ),
+                            LumaColumn<AdminUserRecord>(
+                              label: 'Email',
+                              cellBuilder: (u, _) => Text(
+                                u.email,
+                                style: theme.textTheme.bodySmall,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ),
+                            LumaColumn<AdminUserRecord>(
+                              label: 'Status',
+                              width: 200,
+                              cellBuilder: (u, _) {
+                                final badges = <Widget>[];
+                                if (u.isOwner) {
+                                  badges.add(_Badge(
+                                      label: 'Owner',
+                                      color: cs.primaryContainer,
+                                      textColor: cs.onPrimaryContainer));
+                                }
+                                if (u.mfaEnabled) {
+                                  badges.add(_Badge(
+                                      label: 'MFA',
+                                      color: cs.secondaryContainer,
+                                      textColor: cs.onSecondaryContainer));
+                                }
+                                if (u.isLocked) {
+                                  badges.add(_Badge(
+                                      label: 'Locked',
+                                      color: cs.errorContainer,
+                                      textColor: cs.onErrorContainer));
+                                }
+                                if (u.forcePasswordChange) {
+                                  badges.add(_Badge(
+                                      label: 'Pwd change',
+                                      color: cs.tertiaryContainer,
+                                      textColor: cs.onTertiaryContainer));
+                                }
+                                if (badges.isEmpty) {
+                                  badges.add(_Badge(
+                                      label: 'Active',
+                                      color: cs.secondaryContainer,
+                                      textColor: cs.onSecondaryContainer));
+                                }
+                                return Wrap(spacing: 4, children: badges);
+                              },
+                            ),
+                            LumaColumn<AdminUserRecord>(
+                              label: '',
+                              width: 100,
+                              cellBuilder: (u, _) => Align(
+                                alignment: Alignment.centerRight,
+                                child: PermButton(
+                                  label: 'Manage',
+                                  enabled: widget.userService.canEditUser,
+                                  requiredPermission: 'user:edit',
+                                  onPressed: () => _showUserSlideout(u),
+                                ),
+                              ),
+                            ),
                           ],
+                          rows: pageUsers,
                         ),
-                      ),
-                      LumaColumn<AdminUserRecord>(
-                        label: 'Email',
-                        cellBuilder: (u, _) => Text(
-                          u.email,
-                          style: theme.textTheme.bodySmall,
-                          overflow: TextOverflow.ellipsis,
-                        ),
-                      ),
-                      LumaColumn<AdminUserRecord>(
-                        label: 'Status',
-                        width: 200,
-                        cellBuilder: (u, _) {
-                          final badges = <Widget>[];
-                          if (u.isOwner) {
-                            badges.add(_Badge(
-                                label: 'Owner',
-                                color: cs.primaryContainer,
-                                textColor: cs.onPrimaryContainer));
-                          }
-                          if (u.mfaEnabled) {
-                            badges.add(_Badge(
-                                label: 'MFA',
-                                color: cs.secondaryContainer,
-                                textColor: cs.onSecondaryContainer));
-                          }
-                          if (u.isLocked) {
-                            badges.add(_Badge(
-                                label: 'Locked',
-                                color: cs.errorContainer,
-                                textColor: cs.onErrorContainer));
-                          }
-                          if (u.forcePasswordChange) {
-                            badges.add(_Badge(
-                                label: 'Pwd change',
-                                color: cs.tertiaryContainer,
-                                textColor: cs.onTertiaryContainer));
-                          }
-                          if (badges.isEmpty) {
-                            badges.add(_Badge(
-                                label: 'Active',
-                                color: cs.secondaryContainer,
-                                textColor: cs.onSecondaryContainer));
-                          }
-                          return Wrap(spacing: 4, children: badges);
-                        },
-                      ),
-                      LumaColumn<AdminUserRecord>(
-                        label: '',
-                        width: 100,
-                        cellBuilder: (u, _) => Align(
-                          alignment: Alignment.centerRight,
-                          child: PermButton(
-                            label: 'Manage',
-                            enabled: widget.userService.canEditUser,
-                            requiredPermission: 'user:edit',
-                            onPressed: () => _showUserSlideout(u),
-                          ),
-                        ),
-                      ),
-                    ],
-                    rows: users,
-                  ),
+                ),
+                LumaPagination(
+                  currentPage: _currentPage,
+                  totalPages: totalPages,
+                  onPageChanged: (p) =>
+                      setState(() { _currentPage = p; _selected = {}; }),
+                ),
+              ],
+            ),
           ),
 
           // Invitations section (collapsible)

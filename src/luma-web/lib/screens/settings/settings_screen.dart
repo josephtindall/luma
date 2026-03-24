@@ -10,6 +10,7 @@ import '../../models/user.dart';
 import '../../services/user_service.dart';
 import '../../services/webauthn_interop.dart' as webauthn;
 import '../../theme/tokens.dart';
+import '../../widgets/pagination.dart';
 import '../../widgets/user_avatar.dart';
 import '../login/login_email_store.dart';
 
@@ -2156,34 +2157,12 @@ class _AuditSectionState extends State<_AuditSection> {
               ),
 
             // Pagination
-            if (page != null && page.total > _limit) ...[
-              const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Text(
-                    'Page ${page.currentPage + 1} of ${page.totalPages}',
-                    style: theme.textTheme.bodySmall,
-                  ),
-                  Row(
-                    children: [
-                      TextButton(
-                        onPressed: page.offset > 0
-                            ? () => _load(offset: page.offset - _limit)
-                            : null,
-                        child: const Text('← Prev'),
-                      ),
-                      TextButton(
-                        onPressed: page.hasMore
-                            ? () => _load(offset: page.offset + _limit)
-                            : null,
-                        child: const Text('Next →'),
-                      ),
-                    ],
-                  ),
-                ],
+            if (page != null && page.total > _limit)
+              LumaPagination(
+                currentPage: page.currentPage,
+                totalPages: page.totalPages,
+                onPageChanged: (p) => _load(offset: p * _limit),
               ),
-            ],
           ],
         ),
       ),

@@ -311,6 +311,7 @@ func run() error {
 		r.Delete("/api/auth/passkeys/{id}", mfaHandler.RevokePasskey)
 
 		r.Get("/api/auth/audit/me", auditHTTPHandler.Me)
+		r.Post("/api/auth/audit/write", auditHTTPHandler.Write)
 		r.Get("/api/auth/audit", auditHTTPHandler.All)
 
 		r.Post("/api/auth/authz/check", authzHandler.Check)

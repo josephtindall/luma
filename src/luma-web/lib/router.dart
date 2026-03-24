@@ -184,7 +184,9 @@ GoRouter buildRouter(
             routes: [
               GoRoute(
                 path: '/admin/users',
-                builder: (_, __) => AdminUsersScreen(userService: userService),
+                pageBuilder: (_, __) => NoTransitionPage(
+                  child: AdminUsersScreen(userService: userService),
+                ),
               ),
               GoRoute(
                 path: '/admin/invites',
@@ -192,34 +194,32 @@ GoRouter buildRouter(
               ),
               GoRoute(
                 path: '/admin/groups',
-                builder: (_, __) => AdminGroupsScreen(userService: userService),
+                pageBuilder: (_, __) => NoTransitionPage(
+                  child: AdminGroupsScreen(userService: userService),
+                ),
               ),
               GoRoute(
                 path: '/admin/roles',
-                builder: (_, __) => AdminRolesScreen(userService: userService),
+                pageBuilder: (_, __) => NoTransitionPage(
+                  child: AdminRolesScreen(userService: userService),
+                ),
               ),
               GoRoute(
                 path: '/admin/settings',
-                builder: (_, __) =>
-                    AdminSettingsScreen(userService: userService),
+                pageBuilder: (_, __) => NoTransitionPage(
+                  child: AdminSettingsScreen(userService: userService),
+                ),
               ),
               GoRoute(
                 path: '/admin/events',
-                builder: (_, __) =>
-                    AdminEventsScreen(userService: userService),
+                pageBuilder: (_, __) => NoTransitionPage(
+                  child: AdminEventsScreen(userService: userService),
+                ),
               ),
               GoRoute(
                 path: '/admin/vaults',
-                builder: (_, __) =>
-                    AdminVaultsScreen(userService: userService),
-              ),
-              GoRoute(
-                path: '/admin/vaults/:id/settings',
-                builder: (_, state) => VaultSettingsScreen(
-                  vaultId: state.pathParameters['id']!,
-                  pageService: pageService,
-                  userService: userService,
-                  adminMode: true,
+                pageBuilder: (_, __) => NoTransitionPage(
+                  child: AdminVaultsScreen(userService: userService),
                 ),
               ),
             ],

@@ -61,11 +61,11 @@ void main() async {
 
 // ── Untitled UI color palette ────────────────────────────────────────────────
 
-// Light palette — Untitled UI with Blue primary
-const _lightPrimary            = Color(0xFF1570EF); // Blue 600
+// Light palette — Monochrome primary (black buttons, white text)
+const _lightPrimary            = Color(0xFF101828); // Near-black
 const _lightOnPrimary          = Color(0xFFFFFFFF);
-const _lightPrimaryContainer   = Color(0xFFD1E9FF); // Blue 100
-const _lightOnPrimaryContainer = Color(0xFF1849A9); // Blue 800
+const _lightPrimaryContainer   = Color(0xFFEAECF0); // Gray 200
+const _lightOnPrimaryContainer = Color(0xFF101828); // Near-black
 const _lightSecondary          = Color(0xFF475467); // Gray 600
 const _lightOnSecondary        = Color(0xFFFFFFFF);
 const _lightSecondaryContainer = Color(0xFFF2F4F7); // Gray 100
@@ -89,11 +89,11 @@ const _lightOnSurfaceVariant   = Color(0xFF475467); // Gray 600
 const _lightOutline            = Color(0xFF98A2B3); // Gray 400
 const _lightOutlineVariant     = Color(0xFFEAECF0); // Gray 200
 
-// Dark palette — Pure neutral gray (no blue/warm tint)
-const _darkPrimary             = Color(0xFF84CAFF); // Blue 300 — accent only
-const _darkOnPrimary           = Color(0xFF194185); // Blue 900
-const _darkPrimaryContainer    = Color(0xFF1849A9); // Blue 800
-const _darkOnPrimaryContainer  = Color(0xFFB2DDFF); // Blue 200
+// Dark palette — Monochrome primary (white buttons, black text)
+const _darkPrimary             = Color(0xFFE0E0E0); // Near-white
+const _darkOnPrimary           = Color(0xFF111111); // Near-black
+const _darkPrimaryContainer    = Color(0xFF2E2E2E); // Dark gray
+const _darkOnPrimaryContainer  = Color(0xFFE0E0E0); // Light gray
 const _darkSecondary           = Color(0xFF909090); // Pure neutral gray
 const _darkOnSecondary         = Color(0xFF111111);
 const _darkSecondaryContainer  = Color(0xFF272727); // Pure gray

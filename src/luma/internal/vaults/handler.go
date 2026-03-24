@@ -18,16 +18,27 @@ type vaultAuthClient interface {
 	GetGroup(ctx context.Context, groupID string) (*auth.Group, error)
 }
 
+// auditWriter is an optional interface for writing audit events via luma-auth.
+type auditWriter interface {
+	WriteAudit(ctx context.Context, e auth.AuditEvent)
+}
+
 // Handler handles HTTP requests for vaults.
 type Handler struct {
 	service    *Service
 	authz      *authz.Authorizer
 	authClient vaultAuthClient
+	audit      auditWriter // optional; may be nil
 }
 
 // NewHandler creates a new vault handler.
 func NewHandler(service *Service, authorizer *authz.Authorizer, client vaultAuthClient) *Handler {
 	return &Handler{service: service, authz: authorizer, authClient: client}
+}
+
+// SetAuditWriter wires an optional audit writer after construction.
+func (h *Handler) SetAuditWriter(w auditWriter) {
+	h.audit = w
 }
 
 // Routes returns a chi router with all vault routes.
@@ -209,9 +220,26 @@ func (h *Handler) archiveVault(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve vault name before archiving (for the audit event).
+	var vaultName string
+	if v, err := h.service.GetVault(r.Context(), id); err == nil {
+		vaultName = v.Name
+	}
+
 	if err := h.service.ArchiveVault(r.Context(), id, identity.UserID); err != nil {
 		writeError(r.Context(), w, err)
 		return
+	}
+
+	if h.audit != nil {
+		h.audit.WriteAudit(r.Context(), auth.AuditEvent{
+			Event:  "vault_archived",
+			UserID: identity.UserID,
+			Metadata: map[string]any{
+				"vault_id":   id,
+				"vault_name": vaultName,
+			},
+		})
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -358,9 +386,27 @@ func (h *Handler) adminArchiveVault(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Resolve vault name before archiving (for the audit event).
+	var vaultName string
+	if v, err := h.service.GetVault(r.Context(), id); err == nil {
+		vaultName = v.Name
+	}
+
 	if err := h.service.ArchiveVault(r.Context(), id, identity.UserID); err != nil {
 		writeError(r.Context(), w, err)
 		return
+	}
+
+	if h.audit != nil {
+		h.audit.WriteAudit(r.Context(), auth.AuditEvent{
+			Event:  "vault_archived",
+			UserID: identity.UserID,
+			Metadata: map[string]any{
+				"vault_id":   id,
+				"vault_name": vaultName,
+				"admin_mode": true,
+			},
+		})
 	}
 
 	w.WriteHeader(http.StatusNoContent)

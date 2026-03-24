@@ -906,6 +906,18 @@ class UserService extends ChangeNotifier {
     }
   }
 
+  Future<AdminVaultRecord> createVault(String name, {bool isPrivate = true}) async {
+    final resp = await _api.post('/api/luma/vaults', {
+      'name': name,
+      'is_private': isPrivate,
+    });
+    if (resp.statusCode != 201) {
+      throw Exception('Failed to create vault');
+    }
+    return AdminVaultRecord.fromJson(
+        json.decode(resp.body) as Map<String, dynamic>);
+  }
+
   Future<void> adminArchiveVault(String vaultId) async {
     final resp = await _api.delete('/api/luma/admin/vaults/$vaultId');
     if (resp.statusCode != 204) {

@@ -306,6 +306,37 @@ func (c *Client) GetGroup(ctx context.Context, groupID string) (*Group, error) {
 	return &group, nil
 }
 
+// AuditEvent is the payload for writing an audit event via the auth service.
+type AuditEvent struct {
+	Event     string         `json:"event"`
+	UserID    string         `json:"user_id,omitempty"`
+	Metadata  map[string]any `json:"metadata,omitempty"`
+	IPAddress string         `json:"ip_address,omitempty"`
+	UserAgent string         `json:"user_agent,omitempty"`
+}
+
+// WriteAudit calls POST /api/auth/audit/write to record an audit event.
+// Errors are logged but not returned — audit should not block operations.
+func (c *Client) WriteAudit(ctx context.Context, e AuditEvent) {
+	body, err := json.Marshal(e)
+	if err != nil {
+		return
+	}
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, c.baseURL+"/api/auth/audit/write", bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Content-Type", "application/json")
+	if token := tokenFromContext(ctx); token != "" {
+		req.Header.Set("Authorization", "Bearer "+token)
+	}
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return
+	}
+	resp.Body.Close()
+}
+
 // ListGroups calls GET /api/auth/admin/groups with an optional search query.
 // Returns an empty slice (no error) when the response is non-200 so callers
 // can degrade gracefully without surfacing auth errors to end-users.

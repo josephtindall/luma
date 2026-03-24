@@ -85,6 +85,8 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
     ('role_unassigned_from_user', 'Role unassigned from user'),
     // Admin: instance
     ('instance_settings_updated', 'Instance settings updated'),
+    // Vaults
+    ('vault_archived', 'Vault archived'),
   ];
 
   @override
@@ -323,8 +325,8 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
           ),
         ),
 
-        // ── Pagination bar ────────────────────────────────────────────
-        if (page != null)
+        // ── Stats + Pagination ────────────────────────────────────────
+        if (page != null && page.totalPages > 1)
           Padding(
             padding: const EdgeInsets.fromLTRB(24, 8, 24, 0),
             child: Row(
@@ -346,16 +348,9 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
                       child: CircularProgressIndicator(strokeWidth: 2),
                     ),
                   ),
-                const Spacer(),
-                LumaPagination(
-                  currentPage: page.currentPage,
-                  totalPages: page.totalPages,
-                  onPageChanged: (p) => _load(offset: p * _limit),
-                ),
               ],
             ),
           ),
-
         // Thin separator between controls and list
         const Divider(height: 1),
 
@@ -382,6 +377,13 @@ class _AdminEventsScreenState extends State<AdminEventsScreen> {
                           _EventRow(event: page.events[i]),
                     ),
         ),
+
+        if (page != null)
+          LumaPagination(
+            currentPage: page.currentPage,
+            totalPages: page.totalPages,
+            onPageChanged: (p) => _load(offset: p * _limit),
+          ),
       ],
     );
   }
